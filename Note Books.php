@@ -2,6 +2,35 @@
 session_start();
 include 'db_connect.php';
 $category = 'Note Books';
+
+// Initialize guest cart if not set
+if (!isset($_SESSION['guest_cart'])) {
+    $_SESSION['guest_cart'] = [];
+}
+
+// Handle add to cart
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
+    $product_id = $conn->real_escape_string($_POST['product_id']);
+    $quantity = isset($_POST['quantity']) ? max(1, (int)$_POST['quantity']) : 1; // Ensure quantity is at least 1
+    
+    if (isset($_SESSION['user_id'])) {
+        // Logged-in user: Add to database cart
+        $user_id = $_SESSION['user_id'];
+        $sql = "INSERT INTO cart (user_id, product_id, quantity) VALUES ('$user_id', '$product_id', '$quantity') ON DUPLICATE KEY UPDATE quantity = quantity + $quantity";
+        $conn->query($sql);
+    } else {
+        // Guest user: Add to session cart
+        if (!isset($_SESSION['guest_cart'][$product_id])) {
+            $_SESSION['guest_cart'][$product_id] = $quantity;
+        } else {
+            $_SESSION['guest_cart'][$product_id] += $quantity;
+        }
+    }
+    
+    // Redirect to prevent form resubmission
+    header("Location: Note Books.php");
+    exit();
+}
 ?>
 
 <!DOCTYPE html>
@@ -9,7 +38,7 @@ $category = 'Note Books';
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bugema CampusShop.ug - Food & Drinks</title>
+    <title>Bugema CampusShop.ug - Note Books</title>
     <link rel="stylesheet" href="styles.css">
     <style>
         * {
@@ -263,7 +292,7 @@ $category = 'Note Books';
 
         .product-grid {
             display: grid;
-            grid-template-columns: repeat(4, 1fr); /* Four columns of equal width */
+            grid-template-columns: repeat(4, 1fr);
             gap: 1rem;
             margin-top: 2rem;
         }
@@ -328,6 +357,16 @@ $category = 'Note Books';
             text-decoration: underline;
         }
 
+        .quantity-input {
+            width: 60px;
+            padding: 5px;
+            margin: 0.5rem 0;
+            border: 1px solid var(--text-gray);
+            border-radius: 4px;
+            font-size: 0.9rem;
+            text-align: center;
+        }
+
         footer {
             background: var(--dark-gray);
             color: var(--white);
@@ -359,25 +398,6 @@ $category = 'Note Books';
             color: var(--text-gray);
             text-decoration: none;
             font-size: 0.9rem;
-        }
-        .product-card button, .product-card .login-link {
-            background: var(--accent-yellow);
-            color: var(--dark-gray);
-            border: none;
-            padding: 8px 15px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            margin-top: 0.5rem;
-            text-decoration: none;
-            display: inline-block;
-            font-weight: 500;
-            transition: background 0.3s ease, color 0.3s ease;
-        }
-
-        .product-card button:hover, .product-card .login-link:hover {
-            background: var(--secondary-green);
-            color: var(--white);
         }
 
         .footer-section ul li a:hover {
@@ -510,22 +530,25 @@ $category = 'Note Books';
                             <span class="cart-count">
                                 <?php
                                 $user_id = $_SESSION['user_id'] ?? 0;
-                                $sql = "SELECT COUNT(*) as count FROM cart WHERE user_id = '$user_id'";
+                                $sql = "SELECT SUM(quantity) as count FROM cart WHERE user_id = '$user_id'";
                                 $result = $conn->query($sql);
-                                echo $result->fetch_assoc()['count'];
+                                echo $result->fetch_assoc()['count'] ?? array_sum($_SESSION['guest_cart']);
                                 ?>
                             </span>
                         </a>
                     <?php else: ?>
                         <a href="login.php" class="header-btn">Login</a>
-                        <a href="cart.php" class="header-btn cart-btn">🛒 Cart <span class="cart-count">0</span></a>
+                        <a href="cart.php" class="header-btn cart-btn">
+                            🛒 Cart
+                            <span class="cart-count"><?php echo array_sum($_SESSION['guest_cart']); ?></span>
+                        </a>
                     <?php endif; ?>
                 </div>
             </div>
             
             <nav>
                 <ul class="nav-links">
-                    <li><a href="index.php" class="active">Home</a></li>
+                    <li><a href="index.php">Home</a></li>
                     <li><a href="textbooks.php">Textbooks</a></li>
                     <li><a href="Branded Jumpers.php">Branded Jumpers</a></li>
                     <li><a href="Pens.php">Pens</a></li>
@@ -554,14 +577,11 @@ $category = 'Note Books';
                         echo "<h4>" . htmlspecialchars($row['name']) . "</h4>";
                         echo "<p class='caption'>" . htmlspecialchars($row['caption'] ?? 'No description available') . "</p>";
                         echo "<p>Price: UGX " . number_format($row['price']) . "</p>";
-                        if (isset($_SESSION['user_id'])) {
-                            echo "<form method='POST' action='cart.php'>";
-                            echo "<input type='hidden' name='product_id' value='" . $row['id'] . "'>";
-                            echo "<button type='submit' name='add_to_cart'>Add to Cart</button>";
-                            echo "</form>";
-                        } else {
-                            echo "<p><a href='login.php' class='login-link'>Login to add to cart</a></p>";
-                        }
+                        echo "<form method='POST' action='Note Books.php'>";
+                        echo "<input type='hidden' name='product_id' value='" . $row['id'] . "'>";
+                        echo "<input type='number' name='quantity' class='quantity-input' value='1' min='1'>";
+                        echo "<button type='submit' name='add_to_cart'>Add to Cart</button>";
+                        echo "</form>";
                         echo "</div>";
                     }
                 } else {
@@ -584,7 +604,7 @@ $category = 'Note Books';
                     <ul>
                         <li><a href="#">Contact</a></li>
                         <li><a href="#">FAQs</a></li>
-                        <li><a href="#">Student Bottles</a></li>
+                        <li><a href="Bottles.php">Student Bottles</a></li>
                     </ul>
                 </div>
                 <div class="footer-section">

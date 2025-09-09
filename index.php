@@ -1,6 +1,35 @@
 <?php
 session_start();
 include 'db_connect.php';
+
+// Initialize guest cart if not set
+if (!isset($_SESSION['guest_cart'])) {
+    $_SESSION['guest_cart'] = [];
+}
+
+// Handle add to cart
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
+    $product_id = $conn->real_escape_string($_POST['product_id']);
+    $quantity = isset($_POST['quantity']) ? max(1, (int)$_POST['quantity']) : 1; // Ensure quantity is at least 1
+    
+    if (isset($_SESSION['user_id'])) {
+        // Logged-in user: Add to database cart
+        $user_id = $_SESSION['user_id'];
+        $sql = "INSERT INTO cart (user_id, product_id, quantity) VALUES ('$user_id', '$product_id', '$quantity') ON DUPLICATE KEY UPDATE quantity = quantity + $quantity";
+        $conn->query($sql);
+    } else {
+        // Guest user: Add to session cart
+        if (!isset($_SESSION['guest_cart'][$product_id])) {
+            $_SESSION['guest_cart'][$product_id] = $quantity;
+        } else {
+            $_SESSION['guest_cart'][$product_id] += $quantity;
+        }
+    }
+    
+    // Redirect to prevent form resubmission
+    header("Location: index.php");
+    exit();
+}
 ?>
 
 <!DOCTYPE html>
@@ -477,6 +506,16 @@ include 'db_connect.php';
             text-decoration: underline;
         }
 
+        .quantity-input {
+            width: 60px;
+            padding: 5px;
+            margin: 0.5rem 0;
+            border: 1px solid var(--text-gray);
+            border-radius: 4px;
+            font-size: 0.9rem;
+            text-align: center;
+        }
+
         footer {
             background: var(--dark-gray);
             color: var(--white);
@@ -583,25 +622,6 @@ include 'db_connect.php';
             color: var(--success-green);
             font-size: 0.9rem;
             margin-bottom: 1rem;
-        }
-        .product-card button, .product-card .login-link {
-            background: var(--accent-yellow);
-            color: var(--dark-gray);
-            border: none;
-            padding: 8px 15px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            margin-top: 0.5rem;
-            text-decoration: none;
-            display: inline-block;
-            font-weight: 500;
-            transition: background 0.3s ease, color 0.3s ease;
-        }
-
-        .product-card button:hover, .product-card .login-link:hover {
-            background: var(--secondary-green);
-            color: var(--white);
         }
 
         .checkout-btn {
@@ -726,12 +746,12 @@ include 'db_connect.php';
         <div class="container">
             <div class="header-top">
                 <div class="logo">
-                    <div class="logo-icon"> <img style="height: 50px; width: 50px; border-radius:25px;" src="images/download.png" alt=""></div>
+                    <div class="logo-icon"><img style="height: 50px; width: 50px; border-radius:25px;" src="images/download.png" alt=""></div>
                     <span>Bugema CampusShop.ug</span>
                 </div>
                 
                 <div class="search-bar">
-                    <input type="text" class="search-input" placeholder="Search for textbooks, Branded Jumpers, Pens...">
+                    <input type="text" class="search-input" placeholder="Search for Textbooks, Branded Jumpers, Pens...">
                     <button class="search-btn">🔍</button>
                     <div class="search-results"></div>
                 </div>
@@ -745,15 +765,18 @@ include 'db_connect.php';
                             <span class="cart-count">
                                 <?php
                                 $user_id = $_SESSION['user_id'] ?? 0;
-                                $sql = "SELECT COUNT(*) as count FROM cart WHERE user_id = '$user_id'";
+                                $sql = "SELECT SUM(quantity) as count FROM cart WHERE user_id = '$user_id'";
                                 $result = $conn->query($sql);
-                                echo $result->fetch_assoc()['count'];
+                                echo $result->fetch_assoc()['count'] ?? array_sum($_SESSION['guest_cart']);
                                 ?>
                             </span>
                         </a>
                     <?php else: ?>
                         <a href="login.php" class="header-btn">Login</a>
-                        <a href="cart.php" class="header-btn cart-btn">🛒 Cart <span class="cart-count">0</span></a>
+                        <a href="cart.php" class="header-btn cart-btn">
+                            🛒 Cart
+                            <span class="cart-count"><?php echo array_sum($_SESSION['guest_cart']); ?></span>
+                        </a>
                     <?php endif; ?>
                 </div>
             </div>
@@ -765,7 +788,7 @@ include 'db_connect.php';
                     <li><a href="Branded Jumpers.php">Branded Jumpers</a></li>
                     <li><a href="Pens.php">Pens</a></li>
                     <li><a href="Wall Clocks.php">Wall Clocks</a></li>
-                    <li><a href="Note Books.php">Food & Drinks</a></li>
+                    <li><a href="Note Books.php">Note Books</a></li>
                     <li><a href="T-Shirts.php">T-Shirts</a></li>
                     <li><a href="Bottles.php">Bottles</a></li>
                 </ul>
@@ -779,7 +802,7 @@ include 'db_connect.php';
                 <h1>Your Campus, Your Store</h1>
                 <p>Everything you need for academic success and campus life at Bugema University</p>
                 <div class="cta-buttons">
-                    <a href="login.php" class="cta-btn cta-primary">Shop Now</a>
+                    <a href="cart.php" class="cta-btn cta-primary">Shop Now</a>
                     <a href="textbooks.php" class="cta-btn cta-secondary">Browse Categories</a>
                 </div>
             </div>
@@ -821,6 +844,7 @@ include 'db_connect.php';
                 <?php
                 $categories = ['Textbooks', 'Bottles', 'Branded Jumpers', 'Wall Clocks', 'Note Books', 'T-Shirts', 'Pens'];
                 foreach ($categories as $category) {
+                    $category = $conn->real_escape_string($category);
                     $sql = "SELECT * FROM products WHERE category = '$category' LIMIT 3";
                     $result = $conn->query($sql);
                     if ($result->num_rows > 0) {
@@ -832,15 +856,13 @@ include 'db_connect.php';
                             echo "<div class='product-card'>";
                             echo "<img src='$image_path' alt='" . htmlspecialchars($row['name']) . "'>";
                             echo "<h4>" . htmlspecialchars($row['name']) . "</h4>";
+                            echo "<p class='caption'>" . htmlspecialchars($row['caption'] ?? 'No description available') . "</p>";
                             echo "<p>Price: UGX " . number_format($row['price']) . "</p>";
-                            if (isset($_SESSION['user_id'])) {
-                                echo "<form method='POST' action='cart.php'>";
-                                echo "<input type='hidden' name='product_id' value='" . $row['id'] . "'>";
-                                echo "<button type='submit' name='add_to_cart'>Add to Cart</button>";
-                                echo "</form>";
-                            } else {
-                                echo "<p><a href='login.php' class='login-link'>Login to add to cart</a></p>";
-                            }
+                            echo "<form method='POST' action='index.php'>";
+                            echo "<input type='hidden' name='product_id' value='" . $row['id'] . "'>";
+                            echo "<input type='number' name='quantity' class='quantity-input' value='1' min='1'>";
+                            echo "<button type='submit' name='add_to_cart'>Add to Cart</button>";
+                            echo "</form>";
                             echo "</div>";
                         }
                         echo "</div>";
@@ -976,8 +998,6 @@ include 'db_connect.php';
                 });
                 if (selectedIndex >= 0) {
                     searchInput.value = suggestions[selectedIndex].textContent;
-                } else {
-                    searchInput.value = searchInput.value;
                 }
             }
 

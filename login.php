@@ -14,12 +14,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['username'] = $user['username'];
             $_SESSION['role'] = $user['role'];
-            
+
+            // Transfer guest cart to logged-in user's cart
+            if (isset($_SESSION['guest_cart']) && !empty($_SESSION['guest_cart']) && isset($_SESSION['user_id'])) {
+                $user_id = $_SESSION['user_id'];
+                $stmt = $conn->prepare("INSERT INTO cart (user_id, product_id, quantity) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE quantity = quantity + ?");
+                foreach ($_SESSION['guest_cart'] as $product_id => $quantity) {
+                    $stmt->bind_param("iiii", $user_id, $product_id, $quantity, $quantity);
+                    $stmt->execute();
+                }
+                $stmt->close();
+                $_SESSION['guest_cart'] = []; // Clear guest cart after transfer
+            }
+
             // Redirect based on role
             if ($user['role'] === 'admin') {
                 header("Location: admin_dashboard.php");
             } else {
-                header("Location: index.php");
+                header("Location: cart.php"); // Redirect to cart.php to show transferred items
             }
             exit;
         } else {

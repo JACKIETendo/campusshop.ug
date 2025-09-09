@@ -4,33 +4,51 @@ include 'db_connect.php';
 
 // Redirect if not logged in
 if (!isset($_SESSION['user_id']) || !isset($_SESSION['username'])) {
-    header("Location: login.php");
+    header("Location: login.php?redirect=payment.php&cart_id=" . urlencode($_GET['cart_id'] ?? ''));
     exit();
 }
 
-// Check if cart_id is provided
-if (!isset($_GET['cart_id']) || !is_numeric($_GET['cart_id'])) {
-    header("Location: cart.php");
-    exit();
-}
-
-$cart_id = $conn->real_escape_string($_GET['cart_id']);
 $user_id = intval($_SESSION['user_id']);
+$cart_items = [];
+$total = 0;
+$is_single_item = isset($_GET['cart_id']) && is_numeric($_GET['cart_id']);
 
-// Fetch the specific cart item
-$sql = "SELECT c.id, p.name, p.price, p.image_path 
-        FROM cart c 
-        JOIN products p ON c.product_id = p.id 
-        WHERE c.id = '$cart_id' AND c.user_id = '$user_id'";
-$result = $conn->query($sql);
-
-if ($result->num_rows == 0) {
-    header("Location: cart.php");
-    exit();
+if ($is_single_item) {
+    // Fetch specific cart item
+    $cart_id = (int)$_GET['cart_id'];
+    $stmt = $conn->prepare("SELECT c.id AS cart_id, p.name, p.price, p.image_path, c.quantity 
+                            FROM cart c 
+                            JOIN products p ON c.product_id = p.id 
+                            WHERE c.id = ? AND c.user_id = ?");
+    $stmt->bind_param("ii", $cart_id, $user_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    if ($result->num_rows == 0) {
+        header("Location: cart.php");
+        exit();
+    }
+    $cart_items[] = $result->fetch_assoc();
+    $total = $cart_items[0]['price'] * $cart_items[0]['quantity'];
+    $stmt->close();
+} else {
+    // Fetch all cart items for the user
+    $stmt = $conn->prepare("SELECT c.id AS cart_id, p.name, p.price, p.image_path, c.quantity 
+                            FROM cart c 
+                            JOIN products p ON c.product_id = p.id 
+                            WHERE c.user_id = ?");
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    if ($result->num_rows == 0) {
+        header("Location: cart.php");
+        exit();
+    }
+    while ($row = $result->fetch_assoc()) {
+        $cart_items[] = $row;
+        $total += $row['price'] * $row['quantity'];
+    }
+    $stmt->close();
 }
-
-$cart_item = $result->fetch_assoc();
-$image_path = !empty($cart_item['image_path']) ? htmlspecialchars($cart_item['image_path']) : 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+A8AAQAB3gB4cAAAAABJRU5ErkJggg==';
 
 // Process payment form submission
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
@@ -49,21 +67,32 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     } else {
         $amount = $payment_method === 'Mobile Money' ? floatval($_POST['amount']) : NULL;
 
-        // Insert into pending_deliveries with cart_id and location
-        $sql = "INSERT INTO pending_deliveries (user_id, username, phone, payment_method, amount, cart_id, location, status) 
-                VALUES ('$user_id', '$username', '$phone', '$payment_method', " . ($amount ? "'$amount'" : 'NULL') . ", '$cart_id', '$location', 'Pending')";
-        if ($conn->query($sql) === false) {
-            $message = "Failed to save delivery details: " . $conn->error;
-            error_log("Failed to save delivery: " . $conn->error);
-        } else {
-            // Remove the item from cart after successful payment initiation
-            $sql = "DELETE FROM cart WHERE id = '$cart_id' AND user_id = '$user_id'";
-            $conn->query($sql);
+        // Insert into pending_deliveries for each cart item
+        foreach ($cart_items as $item) {
+            $cart_id = $item['cart_id'];
+            $stmt = $conn->prepare("INSERT INTO pending_deliveries (user_id, username, phone, payment_method, amount, cart_id, location, status) 
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending')");
+            $stmt->bind_param("isssdiss", $user_id, $username, $phone, $payment_method, $amount, $cart_id, $location);
+            if ($stmt->execute() === false) {
+                $message = "Failed to save delivery details: " . $stmt->error;
+                error_log("Failed to save delivery: " . $stmt->error);
+                $stmt->close();
+                break;
+            }
+            $stmt->close();
 
+            // Remove the item from cart
+            $stmt = $conn->prepare("DELETE FROM cart WHERE id = ? AND user_id = ?");
+            $stmt->bind_param("ii", $cart_id, $user_id);
+            $stmt->execute();
+            $stmt->close();
+        }
+
+        if (!isset($message)) {
             if ($payment_method === 'Mobile Money') {
-                $message = "Payment of UGX " . number_format($amount) . " initiated via Mobile Money to " . htmlspecialchars($phone) . " for " . htmlspecialchars($cart_item['name']) . ". Please confirm on your phone.";
+                $message = "Payment of UGX " . number_format($amount) . " initiated via Mobile Money to " . htmlspecialchars($phone) . ". Please confirm on your phone.";
             } else {
-                $message = "Pay on Delivery requested for " . htmlspecialchars($cart_item['name']) . " to " . htmlspecialchars($phone) . " at " . htmlspecialchars($location) . ". We will contact you to confirm delivery details.";
+                $message = "Pay on Delivery requested to " . htmlspecialchars($phone) . " at " . htmlspecialchars($location) . ". We will contact you to confirm delivery details.";
             }
         }
     }
@@ -215,6 +244,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             gap: 1rem;
             margin-bottom: 1.5rem;
             text-align: left;
+            flex-wrap: wrap;
         }
 
         .product-details img {
@@ -227,6 +257,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         .product-details .info {
             flex: 1;
+            min-width: 200px;
         }
 
         .product-details h3 {
@@ -343,16 +374,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 font-size: 1.5rem;
             }
 
-            .payment-container input,
-            .payment-container button {
-                font-size: 0.8rem;
-            }
-
-            .username {
-                font-size: 0.9rem;
-                padding: 8px 15px;
-            }
-
             .product-details h3 {
                 font-size: 1rem;
             }
@@ -364,6 +385,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             .product-details img {
                 width: 60px;
                 height: 60px;
+            }
+
+            .payment-container input,
+            .payment-container button {
+                font-size: 0.8rem;
+            }
+
+            .username {
+                font-size: 0.9rem;
+                padding: 8px 15px;
             }
         }
 
@@ -388,26 +419,26 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     <span>Bugema CampusShop.ug</span>
                 </div>
                 <div class="header-actions">
-                    <?php if (isset($_SESSION['username'])): ?>
-                        <span class="username">Hi, <?php echo htmlspecialchars($_SESSION['username']); ?></span>
-                        <a href="index.php" class="header-btn">Home</a>
-                        <a href="cart.php" class="header-btn">Cart</a>
-                        <a href="logout.php" class="header-btn">Logout</a>
-                    <?php endif; ?>
+                    <span class="username">Hi, <?php echo htmlspecialchars($_SESSION['username']); ?></span>
+                    <a href="index.php" class="header-btn">Home</a>
+                    <a href="cart.php" class="header-btn">Cart</a>
+                    <a href="logout.php" class="header-btn">Logout</a>
                 </div>
             </div>
         </div>
     </header>
     <div class="container">
         <div class="payment-container">
-            <h2>Payment for <?php echo htmlspecialchars($cart_item['name']); ?></h2>
-            <div class="product-details">
-                <img src="<?php echo $image_path; ?>" alt="<?php echo htmlspecialchars($cart_item['name']); ?>">
-                <div class="info">
-                    <h3><?php echo htmlspecialchars($cart_item['name']); ?></h3>
-                    <p>Price: UGX <?php echo number_format($cart_item['price']); ?></p>
+            <h2>Payment for <?php echo $is_single_item ? htmlspecialchars($cart_items[0]['name']) : 'All Cart Items'; ?></h2>
+            <?php foreach ($cart_items as $item): ?>
+                <div class="product-details">
+                    <img src="<?php echo !empty($item['image_path']) ? htmlspecialchars($item['image_path']) : 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+A8AAQAB3gB4cAAAAABJRU5ErkJggg=='; ?>" alt="<?php echo htmlspecialchars($item['name']); ?>">
+                    <div class="info">
+                        <h3><?php echo htmlspecialchars($item['name']); ?></h3>
+                        <p>Price: UGX <?php echo number_format($item['price']); ?> x <?php echo $item['quantity']; ?> = UGX <?php echo number_format($item['price'] * $item['quantity']); ?></p>
+                    </div>
                 </div>
-            </div>
+            <?php endforeach; ?>
             <?php if (isset($message)): ?>
                 <p class="message <?php echo strpos($message, 'Failed') !== false || strpos($message, 'Invalid') !== false ? 'error' : ''; ?>">
                     <?php echo htmlspecialchars($message); ?>
@@ -415,18 +446,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             <?php endif; ?>
             <form method="POST">
                 <input type="hidden" name="payment_method" value="Mobile Money">
-                <input type="hidden" name="cart_id" value="<?php echo $cart_id; ?>">
                 <label for="phone">Mobile Money Number</label>
-                <input type="text" id="phone" name="phone" placeholder="e.g., MTN Mobile Money or Airtel Mobile Money" required>
+                <input type="text" id="phone" name="phone" placeholder="e.g., 0771234567 or +256771234567" required>
                 <label for="location">Delivery Location</label>
                 <input type="text" id="location" name="location" placeholder="e.g., Room 12, Hostel A, Bugema University" required>
-                <label for="amount">Amount (UGX)</label>
-                <input type="number" id="amount" name="amount" value="<?php echo htmlspecialchars($cart_item['price']); ?>" readonly>
+                <label for="amount">Total Amount (UGX)</label>
+                <input type="number" id="amount" name="amount" value="<?php echo number_format($total, 0, '', ''); ?>" readonly>
                 <button type="submit">Pay with Mobile Money</button>
             </form>
             <form method="POST">
                 <input type="hidden" name="payment_method" value="Pay on Delivery">
-                <input type="hidden" name="cart_id" value="<?php echo $cart_id; ?>">
                 <label for="phone_cod">Phone Number for Delivery</label>
                 <input type="text" id="phone_cod" name="phone" placeholder="e.g., 0771234567 or +256771234567" required>
                 <label for="location_cod">Delivery Location</label>

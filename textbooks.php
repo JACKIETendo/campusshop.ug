@@ -2,6 +2,35 @@
 session_start();
 include 'db_connect.php';
 $category = 'Textbooks';
+
+// Initialize guest cart if it doesn't exist
+if (!isset($_SESSION['guest_cart'])) {
+    $_SESSION['guest_cart'] = [];
+}
+
+// Handle adding to cart for both logged-in and guest users
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
+    $product_id = $conn->real_escape_string($_POST['product_id']);
+    $quantity = isset($_POST['quantity']) ? max(1, (int)$_POST['quantity']) : 1; // Ensure quantity is at least 1
+    
+    if (isset($_SESSION['user_id'])) {
+        // Logged-in user: Add to database
+        $user_id = $_SESSION['user_id'];
+        $sql = "INSERT INTO cart (user_id, product_id, quantity) VALUES ('$user_id', '$product_id', '$quantity') ON DUPLICATE KEY UPDATE quantity = quantity + $quantity";
+        $conn->query($sql);
+    } else {
+        // Guest user: Add to session
+        if (!isset($_SESSION['guest_cart'][$product_id])) {
+            $_SESSION['guest_cart'][$product_id] = $quantity;
+        } else {
+            $_SESSION['guest_cart'][$product_id] += $quantity;
+        }
+    }
+    
+    // Redirect to prevent form resubmission
+    header("Location: textbooks.php");
+    exit();
+}
 ?>
 
 <!DOCTYPE html>
@@ -330,6 +359,16 @@ $category = 'Textbooks';
             color: var(--white);
         }
 
+        .quantity-input {
+            width: 60px;
+            padding: 5px;
+            margin: 0.5rem 0;
+            border: 1px solid var(--text-gray);
+            border-radius: 4px;
+            font-size: 0.9rem;
+            text-align: center;
+        }
+
         footer {
             background: var(--dark-gray);
             color: var(--white);
@@ -505,15 +544,22 @@ $category = 'Textbooks';
                             <span class="cart-count">
                                 <?php
                                 $user_id = $_SESSION['user_id'] ?? 0;
-                                $sql = "SELECT COUNT(*) as count FROM cart WHERE user_id = '$user_id'";
+                                $sql = "SELECT SUM(quantity) as count FROM cart WHERE user_id = '$user_id'";
                                 $result = $conn->query($sql);
-                                echo $result->fetch_assoc()['count'];
+                                echo $result->fetch_assoc()['count'] ?? 0;
                                 ?>
                             </span>
                         </a>
                     <?php else: ?>
                         <a href="login.php" class="header-btn">Login</a>
-                        <a href="cart.php" class="header-btn cart-btn">🛒 Cart <span class="cart-count">0</span></a>
+                        <a href="cart.php" class="header-btn cart-btn">
+                            🛒 Cart
+                            <span class="cart-count">
+                                <?php
+                                echo array_sum($_SESSION['guest_cart']);
+                                ?>
+                            </span>
+                        </a>
                     <?php endif; ?>
                 </div>
             </div>
@@ -538,6 +584,7 @@ $category = 'Textbooks';
             <h2><?php echo htmlspecialchars($category); ?></h2>
             <div class="product-grid">
                 <?php
+                $category = $conn->real_escape_string($category);
                 $sql = "SELECT * FROM products WHERE category = '$category'";
                 $result = $conn->query($sql);
                 if ($result->num_rows > 0) {
@@ -548,14 +595,11 @@ $category = 'Textbooks';
                         echo "<h4>" . htmlspecialchars($row['name']) . "</h4>";
                         echo "<p class='caption'>" . htmlspecialchars($row['caption'] ?? 'No description available') . "</p>";
                         echo "<p class='price'>Price: UGX " . number_format($row['price']) . "</p>";
-                        if (isset($_SESSION['user_id'])) {
-                            echo "<form method='POST' action='cart.php'>";
-                            echo "<input type='hidden' name='product_id' value='" . $row['id'] . "'>";
-                            echo "<button type='submit' name='add_to_cart'>Add to Cart</button>";
-                            echo "</form>";
-                        } else {
-                            echo "<a href='login.php' class='login-link'>Login to add to cart</a>";
-                        }
+                        echo "<form method='POST' action='textbooks.php'>";
+                        echo "<input type='hidden' name='product_id' value='" . $row['id'] . "'>";
+                        echo "<input type='number' name='quantity' class='quantity-input' value='1' min='1'>";
+                        echo "<button type='submit' name='add_to_cart'>Add to Cart</button>";
+                        echo "</form>";
                         echo "</div>";
                     }
                 } else {
