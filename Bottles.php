@@ -323,8 +323,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
 
         .product-card h4 {
             font-size: 1rem;
-            font-weight: 500;
+            font-weight: bold;
             margin-bottom: 0.5rem;
+            color: black;
+
         }
 
         .product-card p {
@@ -361,10 +363,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
             width: 60px;
             padding: 5px;
             margin: 0.5rem 0;
-            border: 1px solid var(--text-gray);
+            border: none;
             border-radius: 4px;
             font-size: 0.9rem;
             text-align: center;
+            margin-right: 1rem;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
         }
 
         footer {

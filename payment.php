@@ -72,7 +72,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $cart_id = $item['cart_id'];
             $stmt = $conn->prepare("INSERT INTO pending_deliveries (user_id, username, phone, payment_method, amount, cart_id, location, status) 
                                     VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending')");
-            $stmt->bind_param("isssdiss", $user_id, $username, $phone, $payment_method, $amount, $cart_id, $location);
+            $stmt->bind_param("isssdis", $user_id, $username, $phone, $payment_method, $amount, $cart_id, $location);
             if ($stmt->execute() === false) {
                 $message = "Failed to save delivery details: " . $stmt->error;
                 error_log("Failed to save delivery: " . $stmt->error);

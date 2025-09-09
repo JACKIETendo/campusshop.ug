@@ -391,7 +391,7 @@ if (isset($_POST['update_quantity'])) {
             font-weight: 600;
             text-decoration: none;
             transition: background 0.3s ease, transform 0.3s ease;
-            width: 100%;
+            width: 50%;
         }
 
         .main-checkout-btn:hover {

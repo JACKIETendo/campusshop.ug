@@ -323,8 +323,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
 
         .product-card h4 {
             font-size: 1rem;
-            font-weight: 500;
+            font-weight: bold;
             margin-bottom: 0.5rem;
+            color: black;
+
         }
 
         .product-card .price {
@@ -363,10 +365,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
             width: 60px;
             padding: 5px;
             margin: 0.5rem 0;
-            border: 1px solid var(--text-gray);
+            border: none;
             border-radius: 4px;
             font-size: 0.9rem;
             text-align: center;
+            margin-right: 1rem;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
         }
 
         footer {
@@ -571,7 +575,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
                     <li><a href="Branded Jumpers.php">Branded Jumpers</a></li>
                     <li><a href="Pens.php">Pens</a></li>
                     <li><a href="Wall Clocks.php">Wall Clocks</a></li>
-                    <li><a href="Note Books.php">Food & Drinks</a></li>
+                    <li><a href="Note Books.php">Note Books</a></li>
                     <li><a href="T-Shirts.php">T-Shirts</a></li>
                     <li><a href="Bottles.php">Bottles</a></li>
                 </ul>
