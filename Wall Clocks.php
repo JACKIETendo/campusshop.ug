@@ -574,6 +574,7 @@ $user_email = '';
             height: 40px;
             transition: background 0.3s ease, color 0.3s ease;
             position: relative;
+            border: none;
         }
 
         .bottom-bar-actions a:hover, .bottom-bar-actions button:hover {
@@ -1048,6 +1049,7 @@ $user_email = '';
                     <a href="T-Shirts.php">T-Shirts</a>
                     <a href="Bottles.php">Bottles</a>
                     <a href="favorites.php">Favorites</a>
+                    <a href="logout.php">logout</a>
                 </div>
             </div>
         </div>
@@ -1056,7 +1058,6 @@ $user_email = '';
     <div class="bottom-bar">
         <div class="bottom-bar-actions">
             <?php if (isset($_SESSION['username'])): ?>
-                <a href="logout.php" data-tooltip="Logout">🚪</a>
                 <a href="favorites.php" data-tooltip="Favorites">❤️ <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
                 <a href="cart.php" data-tooltip="Cart">🛒 <span class="cart-count">
                     <?php

@@ -574,6 +574,7 @@ $user_email = '';
             height: 40px;
             transition: background 0.3s ease, color 0.3s ease;
             position: relative;
+            border: none;
         }
 
         .bottom-bar-actions a:hover, .bottom-bar-actions button:hover {
@@ -1047,6 +1048,7 @@ $user_email = '';
                     <a href="T-Shirts.php">T-Shirts</a>
                     <a href="Bottles.php">Bottles</a>
                     <a href="favorites.php">Favorites</a>
+                    <a href="logout.php">logout</a>
                 </div>
             </div>
         </div>
