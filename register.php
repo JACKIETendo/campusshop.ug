@@ -59,33 +59,100 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         body {
             font-family: 'Poppins', sans-serif;
-            background: linear-gradient(135deg, var(--primary-green) 0%, var(--secondary-green) 100%);
             color: var(--dark-gray);
             line-height: 1.6;
             display: flex;
             justify-content: center;
             align-items: center;
-            min-height: 100vh; 
+            min-height: 100vh;
+            overflow: hidden;
         }
 
-        .container {
-            max-width: 400px;
+        .login-wrapper {
+            display: flex;
             width: 100%;
+            max-width: 1200px;
+            height: 80vh;
             background: var(--white);
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+        }
+
+        .login-side {
+            flex: 1;
             padding: 2rem;
-            border-radius: 8px;
-            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            background: var(--white);
+            text-align: center;
+        }
+
+        .image-side {
+            flex: 1;
+            background: url('images/side.jpg') no-repeat center center/cover;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .image-side::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            z-index: 1;
+        }
+
+        .image-side .caption {
+            position: relative;
+            z-index: 2;
+            color: var(--white);
+            text-align: center;
+            padding: 1.5rem;
+            background: rgba(9, 27, 190, 0.7);
+            border-radius: 10px;
+            font-size: 1.5rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 2rem;
+        }
+
+        .logo img {
+            height: 60px;
+            width: 60px;
+            border-radius: 50%;
+            object-fit: cover;;
+            padding: 5px;
+        }
+
+        .logo span {
+            font-size: 1.8rem;
+            font-weight: 600;
+            color: var(--primary-green);
+            margin-left: 1rem;
         }
 
         h2 {
             color: var(--primary-green);
             text-align: center;
-            margin-bottom: 1.5rem;
-            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            font-size: 1.8rem;
         }
 
         .form-group {
-            margin-bottom: 1rem;
+            margin-bottom: 1.5rem;
         }
 
         label {
@@ -93,31 +160,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             font-weight: 500;
             margin-bottom: 0.5rem;
             color: var(--text-gray);
+            text-align: left;
+            padding-left: 60px;
         }
 
         input, select {
-            width: 100%;
-            padding: 10px;
+            width: 80%;
+            padding: 12px;
             border: 1px solid var(--text-gray);
             border-radius: 8px;
-            font-size: 0.9rem;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        input:focus, select:focus {
+            border-color: var(--primary-green);
+            outline: none;
+            box-shadow: 0 0 5px rgba(9, 27, 190, 0.3);
         }
 
         button {
-            width: 100%;
-            padding: 10px;
+             width: 80%;
+            padding: 12px;
             background: var(--accent-yellow);
             color: var(--dark-gray);
             border: none;
             border-radius: 8px;
-            font-size: 0.9rem;
+            font-size: 1rem;
+            font-weight: 600;
             cursor: pointer;
-            transition: background 0.3s ease;
+            transition: background 0.3s ease, transform 0.2s ease;
         }
 
         button:hover {
             background: var(--secondary-green);
             color: var(--white);
+            transform: translateY(-2px);
         }
 
         .error {
@@ -125,6 +203,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             text-align: center;
             margin-bottom: 1rem;
             font-size: 0.9rem;
+            padding: 0.5rem;
+            background: rgba(220, 38, 38, 0.1);
+            border-radius: 4px;
         }
 
         .login-link {
@@ -134,17 +215,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         .login-link a {
-            color: var(--primary-green);
+            color: red;
             text-decoration: none;
+            font-weight: 500;
         }
 
         .login-link a:hover {
             text-decoration: underline;
         }
 
+        @media (max-width: 768px) {
+            .login-wrapper {
+                flex-direction: column;
+                height: auto;
+                max-width: 100%;
+                margin: 1rem;
+            }
+
+            .login-side, .image-side {
+                flex: 1 1 100%;
+                height: 400px;
+            }
+
+            .logo img {
+                height: 50px;
+                width: 50px;
+            }
+
+            .logo span {
+                font-size: 1.5rem;
+            }
+
+            h2 {
+                font-size: 1.5rem;
+            }
+
+            input, select, button {
+                font-size: 0.9rem;
+            }
+
+            .image-side .caption {
+                font-size: 1.2rem;
+            }
+        }
+
         @media (max-width: 480px) {
-            .container {
-                padding: 1.5rem;
+            .login-wrapper {
+                margin: 0.5rem;
+            }
+
+            .login-side, .image-side {
+                height: 300px;
+            }
+
+            .logo img {
+                height: 40px;
+                width: 40px;
+            }
+
+            .logo span {
+                font-size: 1.2rem;
             }
 
             h2 {
@@ -154,36 +284,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             input, select, button {
                 font-size: 0.8rem;
             }
+
+            .image-side .caption {
+                font-size: 1rem;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2>Register for Bugema CampusShop</h2>
-        <?php if (isset($error)): ?>
-            <p class="error"><?php echo htmlspecialchars($error); ?></p>
-        <?php endif; ?>
-        <form method="POST" action="register.php">
-            <div class="form-group">
-                <label for="username">Username</label>
-                <input type="text" name="username" required>
+    <div class="login-wrapper">
+        <div class="login-side">
+            <div class="logo">
+                <img src="images/download.png" alt="Bugema CampusShop Logo">
+                <span>Bugema CampusShop</span>
             </div>
-            <div class="form-group">
-                <label for="password">Password</label>
-                <input type="password" name="password" required>
+            <h2>Register</h2>
+            <?php if (isset($error)): ?>
+                <p class="error"><?php echo htmlspecialchars($error); ?></p>
+            <?php endif; ?>
+            <form method="POST" action="register.php">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" name="username" id="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" name="password" id="password" required>
+                </div>
+                <div class="form-group">
+                    <label for="role">Role</label>
+                    <select name="role" id="role" required>
+                        <option value="student">Student</option>
+                        <option value="lecturer">Lecturer</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                </div>
+                <button type="submit">Register</button>
+            </form>
+            <div class="login-link">
+                <p>Already have an account? <a href="login.php">Login here</a></p>
             </div>
-            <div class="form-group">
-                <label for="role">Role</label>
-                <select name="role" required>
-                    <option value="student">Student</option>
-                    <option value="lecturer">Lecturer</option>
-                    <option value="admin">Admin</option>
-                </select>
-            </div>
-            <button type="submit">Register</button>
-        </form>
-        <div class="login-link">
-            <p>Already have an account? <a href="login.php">Login here</a></p>
+        </div>
+        <div class="image-side">
+            <div class="caption">Explore Campus Shopping!</div>
         </div>
     </div>
 </body>
