@@ -917,33 +917,39 @@ $user_email = '';
             }
         });
 
-        feedbackForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            const formData = new FormData(feedbackForm);
-            fetch('payment.php', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                feedbackMessage.style.display = 'block';
-                feedbackMessage.className = `feedback-message ${data.success ? 'success' : 'error'}`;
-                feedbackMessage.textContent = data.message;
-                if (data.success) {
-                    feedbackForm.reset();
-                    setTimeout(() => {
-                        feedbackModal.style.display = 'none';
-                        feedbackMessage.style.display = 'none';
-                    }, 2000);
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                feedbackMessage.style.display = 'block';
-                feedbackMessage.className = 'feedback-message error';
-                feedbackMessage.textContent = 'An error occurred. Please try again.';
+       feedbackForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const formData = new FormData(feedbackForm);
+                formData.append('submit_feedback', 'true'); // Ensure submit_feedback is sent
+                fetch('index.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok: ' + response.statusText);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    feedbackMessage.style.display = 'block';
+                    feedbackMessage.className = `feedback-message ${data.success ? 'success' : 'error'}`;
+                    feedbackMessage.textContent = data.message;
+                    if (data.success) {
+                        feedbackForm.reset();
+                        setTimeout(() => {
+                            feedbackModal.style.display = 'none';
+                            feedbackMessage.style.display = 'none';
+                        }, 2000);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error details:', error);
+                    feedbackMessage.style.display = 'block';
+                    feedbackMessage.className = 'feedback-message error';
+                    feedbackMessage.textContent = 'An error occurred: ' + error.message;
+                });
             });
-        });
     });
     </script>
 </body>

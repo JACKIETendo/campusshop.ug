@@ -89,6 +89,14 @@ if (isset($_POST['update_quantity'])) {
 
 // Handle feedback submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
+    // Ensure database connection is valid
+    if (!$conn || $conn->connect_error) {
+        $response = ['success' => false, 'message' => 'Database connection failed.'];
+        header('Content-Type: application/json');
+        echo json_encode($response);
+        exit();
+    }
+
     $name = trim($_POST['feedback_name']);
     $email = trim($_POST['feedback_email']);
     $message = trim($_POST['feedback_message']);
@@ -99,16 +107,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
         $response = ['success' => false, 'message' => 'All fields are required.'];
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $response = ['success' => false, 'message' => 'Invalid email format.'];
+    } elseif (strlen($name) > 255 || strlen($email) > 255) {
+        $response = ['success' => false, 'message' => 'Name or email exceeds maximum length.'];
     } else {
-        $stmt = $conn->prepare("INSERT INTO feedback (user_id, name, email, message) VALUES (?, ?, ?, ?)");
-        $stmt->bind_param("isss", $user_id, $name, $email, $message);
-        if ($stmt->execute()) {
-            $response = ['success' => true, 'message' => 'Feedback submitted successfully!'];
+        $stmt = $conn->prepare("INSERT INTO feedback (user_id, name, email, message, created_at) VALUES (?, ?, ?, ?, NOW())");
+        if (!$stmt) {
+            $response = ['success' => false, 'message' => 'Failed to prepare query: ' . $conn->error];
+            error_log("Prepare failed: " . $conn->error);
         } else {
-            $response = ['success' => false, 'message' => 'Failed to submit feedback. Please try again.'];
-            error_log("Failed to submit feedback: " . $stmt->error);
+            $stmt->bind_param("isss", $user_id, $name, $email, $message);
+            if ($stmt->execute()) {
+                $response = ['success' => true, 'message' => 'Feedback submitted successfully!'];
+            } else {
+                $response = ['success' => false, 'message' => 'Failed to submit feedback: ' . $stmt->error];
+                error_log("Failed to submit feedback: " . $stmt->error);
+            }
+            $stmt->close();
         }
-        $stmt->close();
     }
     
     // Return JSON response for AJAX
@@ -1175,32 +1190,38 @@ $user_email = '';
         });
 
         feedbackForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            const formData = new FormData(feedbackForm);
-            fetch('cart.php', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                feedbackMessage.style.display = 'block';
-                feedbackMessage.className = `feedback-message ${data.success ? 'success' : 'error'}`;
-                feedbackMessage.textContent = data.message;
-                if (data.success) {
-                    feedbackForm.reset();
-                    setTimeout(() => {
-                        feedbackModal.style.display = 'none';
-                        feedbackMessage.style.display = 'none';
-                    }, 2000);
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                feedbackMessage.style.display = 'block';
-                feedbackMessage.className = 'feedback-message error';
-                feedbackMessage.textContent = 'An error occurred. Please try again.';
+                e.preventDefault();
+                const formData = new FormData(feedbackForm);
+                formData.append('submit_feedback', 'true'); // Ensure submit_feedback is sent
+                fetch('index.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok: ' + response.statusText);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    feedbackMessage.style.display = 'block';
+                    feedbackMessage.className = `feedback-message ${data.success ? 'success' : 'error'}`;
+                    feedbackMessage.textContent = data.message;
+                    if (data.success) {
+                        feedbackForm.reset();
+                        setTimeout(() => {
+                            feedbackModal.style.display = 'none';
+                            feedbackMessage.style.display = 'none';
+                        }, 2000);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error details:', error);
+                    feedbackMessage.style.display = 'block';
+                    feedbackMessage.className = 'feedback-message error';
+                    feedbackMessage.textContent = 'An error occurred: ' + error.message;
+                });
             });
-        });
 
         // Auto-submit quantity form on blur if valid
         document.querySelectorAll('.quantity-control input[type="text"]').forEach(input => {
