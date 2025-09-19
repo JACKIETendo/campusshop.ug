@@ -1,7 +1,6 @@
 <?php
 session_start();
 include 'db_connect.php';
-$category = 'Note Books';
 
 // Initialize guest cart and favorites if not set
 if (!isset($_SESSION['guest_cart'])) {
@@ -11,7 +10,7 @@ if (!isset($_SESSION['guest_favorites'])) {
     $_SESSION['guest_favorites'] = [];
 }
 
-// Handle adding to cart
+// Handle add to cart from favorites
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
     $product_id = $conn->real_escape_string($_POST['product_id']);
     $quantity = isset($_POST['quantity']) ? max(1, (int)$_POST['quantity']) : 1;
@@ -28,35 +27,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
         }
     }
     
-    header("Location: Note Books.php");
+    header("Location: favorites.php");
     exit();
 }
 
-// Handle add/remove from favorites
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_favorite'])) {
+// Handle remove from favorites
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['remove_favorite'])) {
     $product_id = $conn->real_escape_string($_POST['product_id']);
     
     if (isset($_SESSION['user_id'])) {
         $user_id = $_SESSION['user_id'];
-        $sql = "SELECT * FROM favorites WHERE user_id = '$user_id' AND product_id = '$product_id'";
-        $result = $conn->query($sql);
-        
-        if ($result->num_rows > 0) {
-            $sql = "DELETE FROM favorites WHERE user_id = '$user_id' AND product_id = '$product_id'";
-        } else {
-            $sql = "INSERT INTO favorites (user_id, product_id) VALUES ('$user_id', '$product_id')";
-        }
+        $sql = "DELETE FROM favorites WHERE user_id = '$user_id' AND product_id = '$product_id'";
         $conn->query($sql);
     } else {
-        if (in_array($product_id, $_SESSION['guest_favorites'])) {
-            $_SESSION['guest_favorites'] = array_diff($_SESSION['guest_favorites'], [$product_id]);
-        } else {
-            $_SESSION['guest_favorites'][] = $product_id;
-        }
+        $_SESSION['guest_favorites'] = array_diff($_SESSION['guest_favorites'], [$product_id]);
         $_SESSION['guest_favorites'] = array_values($_SESSION['guest_favorites']);
     }
     
-    header("Location: Note Books.php");
+    header("Location: favorites.php");
     exit();
 }
 
@@ -70,6 +58,26 @@ if (isset($_SESSION['user_id'])) {
 } else {
     $favorites_count = count($_SESSION['guest_favorites']);
 }
+
+// Fetch favorited products
+$products = [];
+if (isset($_SESSION['user_id'])) {
+    $user_id = $_SESSION['user_id'];
+    $sql = "SELECT p.* FROM products p JOIN favorites f ON p.id = f.product_id WHERE f.user_id = '$user_id'";
+    $result = $conn->query($sql);
+    while ($row = $result->fetch_assoc()) {
+        $products[] = $row;
+    }
+} else {
+    if (!empty($_SESSION['guest_favorites'])) {
+        $product_ids = implode(',', array_map('intval', $_SESSION['guest_favorites']));
+        $sql = "SELECT * FROM products WHERE id IN ($product_ids)";
+        $result = $conn->query($sql);
+        while ($row = $result->fetch_assoc()) {
+            $products[] = $row;
+        }
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -77,7 +85,7 @@ if (isset($_SESSION['user_id'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bugema CampusShop - Note Books</title>
+    <title>Your Favorites - Bugema CampusShop</title>
     <link rel="stylesheet" href="styles.css">
     <style>
         * {
@@ -359,25 +367,6 @@ if (isset($_SESSION['user_id'])) {
             font-weight: 600;
         }
 
-        .favorite-btn {
-            background: none;
-            border: none;
-            color: var(--accent-yellow);
-            font-size: 1.2rem;
-            cursor: pointer;
-            margin-top: 0.5rem;
-            transition: color 0.3s ease, transform 0.2s ease;
-        }
-
-        .favorite-btn:hover {
-            color: var(--secondary-green);
-            transform: scale(1.2);
-        }
-
-        .favorite-btn.favorited {
-            color: var(--error-red);
-        }
-
         nav {
             margin-top: 0.5rem;
             background: var(--secondary-green);
@@ -445,12 +434,12 @@ if (isset($_SESSION['user_id'])) {
             color: var(--white);
         }
 
-        .category-section {
+        .favorites-section {
             padding: 3rem 0;
             background: var(--light-gray);
         }
 
-        .category-section h2 {
+        .favorites-section h2 {
             text-align: center;
             font-size: 2rem;
             font-weight: 600;
@@ -462,7 +451,6 @@ if (isset($_SESSION['user_id'])) {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
             gap: 1rem;
-            margin-top: 2rem;
         }
 
         .product-card {
@@ -509,7 +497,7 @@ if (isset($_SESSION['user_id'])) {
             margin-bottom: 0.5rem;
         }
 
-        .product-card button, .product-card .login-link {
+        .product-card button {
             background: var(--accent-yellow);
             color: var(--dark-gray);
             border: none;
@@ -518,15 +506,27 @@ if (isset($_SESSION['user_id'])) {
             cursor: pointer;
             font-size: 0.9rem;
             margin-top: 0.5rem;
-            text-decoration: none;
-            display: inline-block;
-            font-weight: 500;
             transition: background 0.3s ease, color 0.3s ease;
         }
 
-        .product-card button:hover, .product-card .login-link:hover {
+        .product-card button:hover {
             background: var(--secondary-green);
             color: var(--white);
+        }
+
+        .remove-btn {
+            background: none;
+            color: var(--error-red);
+            border: none;
+            font-size: 1.2rem;
+            cursor: pointer;
+            margin-top: 0.5rem;
+            transition: color 0.3s ease, transform 0.2s ease;
+        }
+
+        .remove-btn:hover {
+            color: var(--secondary-green);
+            transform: scale(1.2);
         }
 
         .quantity-input {
@@ -541,11 +541,11 @@ if (isset($_SESSION['user_id'])) {
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
         }
 
-        .no-results {
+        .no-favorites {
             text-align: center;
-            font-size: 1rem;
+            font-size: 1.1rem;
             color: var(--text-gray);
-            padding: 1rem;
+            padding: 2rem;
         }
 
         footer {
@@ -751,10 +751,10 @@ if (isset($_SESSION['user_id'])) {
                     <li><a href="Branded Jumpers.php">Branded Jumpers</a></li>
                     <li><a href="Pens.php">Pens</a></li>
                     <li><a href="Wall Clocks.php">Wall Clocks</a></li>
-                    <li><a href="Note Books.php" class="active">Note Books</a></li>
+                    <li><a href="Note Books.php">Note Books</a></li>
                     <li><a href="T-Shirts.php">T-Shirts</a></li>
                     <li><a href="Bottles.php">Bottles</a></li>
-                    <li><a href="favorites.php">Favorites</a></li>
+                    <li><a href="favorites.php" class="active">Favorites</a></li>
                 </ul>
             </nav>
             <div class="mobile-menu">
@@ -773,10 +773,10 @@ if (isset($_SESSION['user_id'])) {
                     <a href="Branded Jumpers.php">Branded Jumpers</a>
                     <a href="Pens.php">Pens</a>
                     <a href="Wall Clocks.php">Wall Clocks</a>
-                    <a href="Note Books.php" class="active">Note Books</a>
+                    <a href="Note Books.php">Note Books</a>
                     <a href="T-Shirts.php">T-Shirts</a>
                     <a href="Bottles.php">Bottles</a>
-                    <a href="favorites.php">Favorites</a>
+                    <a href="favorites.php" class="active">Favorites</a>
                 </div>
             </div>
         </div>
@@ -803,48 +803,35 @@ if (isset($_SESSION['user_id'])) {
         </div>
     </div>
 
-    <section class="category-section">
+    <section class="favorites-section">
         <div class="container">
-            <h2><?php echo htmlspecialchars($category); ?></h2>
-            <div class="product-grid">
-                <?php
-                $category = $conn->real_escape_string($category);
-                $sql = "SELECT * FROM products WHERE category = '$category'";
-                $result = $conn->query($sql);
-                if ($result->num_rows > 0) {
-                    while ($row = $result->fetch_assoc()) {
-                        $product_id = $row['id'];
-                        $is_favorited = false;
-                        if (isset($_SESSION['user_id'])) {
-                            $user_id = $_SESSION['user_id'];
-                            $fav_sql = "SELECT * FROM favorites WHERE user_id = '$user_id' AND product_id = '$product_id'";
-                            $fav_result = $conn->query($fav_sql);
-                            $is_favorited = $fav_result->num_rows > 0;
-                        } else {
-                            $is_favorited = in_array($product_id, $_SESSION['guest_favorites']);
-                        }
-                        $image_path = !empty($row['image_path']) ? htmlspecialchars($row['image_path']) : 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+A8AAQAB3gB4cAAAAABJRU5ErkJggg==';
-                        echo "<div class='product-card'>";
-                        echo "<img src='$image_path' alt='" . htmlspecialchars($row['name']) . "'>";
-                        echo "<h4>" . htmlspecialchars($row['name']) . "</h4>";
-                        echo "<p class='caption'>" . htmlspecialchars($row['caption'] ?? 'No description available') . "</p>";
-                        echo "<p class='price'>Price: UGX " . number_format($row['price']) . "</p>";
-                        echo "<form method='POST' action='Note Books.php'>";
-                        echo "<input type='hidden' name='product_id' value='$product_id'>";
-                        echo "<input type='number' name='quantity' class='quantity-input' value='1' min='1'>";
-                        echo "<button type='submit' name='add_to_cart'>🛒</button>";
-                        echo "</form>";
-                        echo "<form method='POST' action='Note Books.php'>";
-                        echo "<input type='hidden' name='product_id' value='$product_id'>";
-                        echo "<button type='submit' name='toggle_favorite' class='favorite-btn " . ($is_favorited ? 'favorited' : '') . "'>❤️</button>";
-                        echo "</form>";
-                        echo "</div>";
-                    }
-                } else {
-                    echo "<div class='no-results'>No products found in this category</div>";
-                }
-                ?>
-            </div>
+            <h2>Your Favorites</h2>
+            <?php if (empty($products)): ?>
+                <p class="no-favorites">No favorites added yet. Start adding products to your favorites! ❤️</p>
+            <?php else: ?>
+                <div class="product-grid">
+                    <?php foreach ($products as $row): ?>
+                        <div class="product-card">
+                            <?php
+                            $image_path = !empty($row['image_path']) ? htmlspecialchars($row['image_path']) : 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+A8AAQAB3gB4cAAAAABJRU5ErkJggg==';
+                            ?>
+                            <img src="<?php echo $image_path; ?>" alt="<?php echo htmlspecialchars($row['name']); ?>">
+                            <h4><?php echo htmlspecialchars($row['name']); ?></h4>
+                            <p class="caption"><?php echo htmlspecialchars($row['caption'] ?? 'No description available'); ?></p>
+                            <p class="price">Price: UGX <?php echo number_format($row['price']); ?></p>
+                            <form method="POST" action="favorites.php">
+                                <input type="hidden" name="product_id" value="<?php echo $row['id']; ?>">
+                                <input type="number" name="quantity" class="quantity-input" value="1" min="1">
+                                <button type="submit" name="add_to_cart">🛒</button>
+                            </form>
+                            <form method="POST" action="favorites.php">
+                                <input type="hidden" name="product_id" value="<?php echo $row['id']; ?>">
+                                <button type="submit" name="remove_favorite" class="remove-btn">🗑️</button>
+                            </form>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
         </div>
     </section>
 

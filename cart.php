@@ -93,7 +93,7 @@ if (isset($_POST['update_quantity'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cart - Bugema CampusShop.ug</title>
+    <title>Cart - Bugema CampusShop</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <style>
@@ -153,6 +153,13 @@ if (isset($_POST['update_quantity'])) {
             align-items: center;
             justify-content: space-between;
             flex-wrap: wrap;
+        }
+        .header-top .logo span {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            padding-left: 10px;
         }
 
         .logo {
@@ -327,11 +334,11 @@ if (isset($_POST['update_quantity'])) {
         .action-buttons {
             display: flex;
             flex-direction: column;
-            gap: 0.5rem;
+            gap: 1rem;
         }
 
         .action-buttons button, .action-buttons a {
-            width: 100%;
+            width: 50%;
             padding: 8px;
             border: none;
             border-radius: 8px;
@@ -346,6 +353,7 @@ if (isset($_POST['update_quantity'])) {
         .remove-btn {
             background: var(--error-red);
             color: var(--white);
+            margin-right: 3.5px;
         }
 
         .remove-btn:hover {
@@ -522,8 +530,8 @@ if (isset($_POST['update_quantity'])) {
         <div class="container">
             <div class="header-top">
                 <div class="logo">
-                    <div class="logo-icon">🎓</div>
-                    <span>Bugema CampusShop.ug</span>
+                    <div class="logo-icon"><img style="height: 50px; width: 50px; border-radius:25px;" src="images/download.png" alt=""></div>
+                    <span>Bugema CampusShop</span>
                 </div>
                 <div class="header-actions">
                     <?php if (isset($_SESSION['username'])): ?>
@@ -595,8 +603,8 @@ if (isset($_POST['update_quantity'])) {
                         echo "<form method='POST'>";
                         echo "<input type='hidden' name='product_id' value='" . $row['id'] . "'>";
                         echo "<button type='submit' name='remove_from_cart' class='remove-btn' aria-label='Remove item'>Remove</button>";
-                        echo "</form>";
                         echo "<a href='payment.php?cart_id=" . $row['cart_id'] . "' class='checkout-btn' aria-label='Checkout this item'>Checkout</a>";
+                        echo "</form>";
                         echo "</div>";
                         echo "</div>";
                     }

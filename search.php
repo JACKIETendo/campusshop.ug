@@ -33,7 +33,7 @@ if (isset($_GET['query'])) {
                 if (isset($_SESSION['user_id'])) {
                     echo "<form method='POST' action='cart.php'>";
                     echo "<input type='hidden' name='product_id' value='" . $row['id'] . "'>";
-                    echo "<button type='submit' name='add_to_cart'>Add to Cart</button>";
+                    echo "<button type='submit' name='add_to_cart'>🛒</button>";
                     echo "</form>";
                 } else {
                     echo "<p><a href='login.php' class='login-link'>Login to add to cart</a></p>";

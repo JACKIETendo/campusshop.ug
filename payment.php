@@ -104,7 +104,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Payment - Bugema CampusShop.ug</title>
+    <title>Payment - Bugema CampusShop</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -163,6 +163,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             align-items: center;
             justify-content: space-between;
             flex-wrap: wrap;
+        }
+        .header-top .logo span {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            padding-left: 10px;
         }
 
         .logo {
@@ -415,8 +422,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         <div class="container">
             <div class="header-top">
                 <div class="logo">
-                    <div class="logo-icon">🎓</div>
-                    <span>Bugema CampusShop.ug</span>
+                    <div class="logo-icon"><img style="height: 50px; width: 50px; border-radius:25px;" src="images/download.png" alt=""></div>
+                    <span>Bugema CampusShop</span>
                 </div>
                 <div class="header-actions">
                     <span class="username">Hi, <?php echo htmlspecialchars($_SESSION['username']); ?></span>

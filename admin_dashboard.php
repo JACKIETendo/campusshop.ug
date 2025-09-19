@@ -114,7 +114,7 @@ if (isset($_GET['complete_delivery'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard - Bugema CampusShop.ug</title>
+    <title>Admin Dashboard - Bugema CampusShop</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         * {
@@ -386,7 +386,7 @@ if (isset($_GET['complete_delivery'])) {
 <body>
     <header>
         <div class="container">
-            <h1>Admin Dashboard - Bugema CampusShop.ug</h1>
+            <h1>Admin Dashboard - Bugema CampusShop</h1>
             <div class="header-actions">
                 <a href="index.php" class="header-btn">Back to Shop</a>
                 <a href="logout.php" class="header-btn">Logout</a>

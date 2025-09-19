@@ -45,7 +45,13 @@ header {
     justify-content: space-between;
     flex-wrap: wrap;
 }
-
+.header-top .logo span {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            padding-left: 10px;
+        }
 .logo {
     display: flex;
     align-items: center;
