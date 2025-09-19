@@ -132,20 +132,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
     exit();
 }
 
-// Get user email for pre-filling feedback form
-$user_email = '';
-if (isset($_SESSION['user_id'])) {
-    $user_id = $_SESSION['user_id'];
-    $stmt = $conn->prepare("SELECT email FROM users WHERE id = ?");
-    $stmt->bind_param("i", $user_id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    if ($row = $result->fetch_assoc()) {
-        $user_email = htmlspecialchars($row['email']);
-    }
-    $stmt->close();
-}
-
 // Get favorites count
 $favorites_count = 0;
 if (isset($_SESSION['user_id'])) {
@@ -159,6 +145,9 @@ if (isset($_SESSION['user_id'])) {
 } else {
     $favorites_count = count($_SESSION['guest_favorites']);
 }
+
+// Set user_email to empty string (no email column in users table)
+$user_email = '';
 ?>
 
 <!DOCTYPE html>
@@ -428,7 +417,7 @@ if (isset($_SESSION['user_id'])) {
             text-decoration: underline;
         }
 
-        .cart-btn, .favorites-btn, .feedback-btn, .whatsapp-btn {
+        .cart-btn, .favorites-btn {
             position: relative;
         }
 
@@ -446,6 +435,60 @@ if (isset($_SESSION['user_id'])) {
             align-items: center;
             justify-content: center;
             font-weight: 600;
+        }
+
+        .floating-buttons {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 1000;
+        }
+
+        .floating-btn {
+            background: var(--accent-yellow);
+            color: var(--dark-gray);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            border: none;
+            cursor: pointer;
+            transition: background 0.3s ease, transform 0.2s ease;
+            position: relative;
+        }
+
+        .floating-btn:hover {
+            background: var(--secondary-green);
+            color: var(--white);
+            transform: scale(1.1);
+        }
+
+        .floating-btn::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            right: 50px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: var(--dark-gray);
+            color: var(--white);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            white-space: nowrap;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s ease, visibility 0.2s ease;
+        }
+
+        .floating-btn:hover::after {
+            opacity: 1;
+            visibility: visible;
         }
 
         .favorite-btn {
@@ -472,6 +515,7 @@ if (isset($_SESSION['user_id'])) {
             background: var(--secondary-green);
             border-radius: 8px;
             padding: 0.5rem;
+            padding-left: 6.5rem;
         }
 
         .nav-links {
@@ -514,23 +558,48 @@ if (isset($_SESSION['user_id'])) {
             align-items: center;
         }
 
-        .bottom-bar-actions a {
+        .bottom-bar-actions a, .bottom-bar-actions button {
             background: var(--accent-yellow);
             color: var(--dark-gray);
-            padding: 8px 15px;
-            border-radius: 8px;
+            padding: 8px;
+            border-radius: 50%;
             text-decoration: none;
             font-weight: 500;
-            position: relative;
-            font-size: 0.8rem;
+            font-size: 1rem;
             display: flex;
             align-items: center;
-            gap: 5px;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            transition: background 0.3s ease, color 0.3s ease;
+            position: relative;
         }
 
-        .bottom-bar-actions a:hover {
+        .bottom-bar-actions a:hover, .bottom-bar-actions button:hover {
             background: var(--secondary-green);
             color: var(--white);
+        }
+
+        .bottom-bar-actions a::after, .bottom-bar-actions button::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--dark-gray);
+            color: var(--white);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            white-space: nowrap;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s ease, visibility 0.2s ease;
+        }
+
+        .bottom-bar-actions a:hover::after, .bottom-bar-actions button:hover::after {
+            opacity: 1;
+            visibility: visible;
         }
 
         .feedback-form {
@@ -565,7 +634,7 @@ if (isset($_SESSION['user_id'])) {
             color: var(--dark-gray);
             padding: 10px;
             border: none;
-            border-radius: 8px;
+            
             font-size: 0.9rem;
             font-weight: 600;
             cursor: pointer;
@@ -805,8 +874,6 @@ if (isset($_SESSION['user_id'])) {
         }
 
         .product-card button, .product-card .login-link {
-            background: var(--accent-yellow);
-            color: var(--dark-gray);
             border: none;
             padding: 8px 15px;
             border-radius: 8px;
@@ -820,7 +887,7 @@ if (isset($_SESSION['user_id'])) {
         }
 
         .product-card button:hover, .product-card .login-link:hover {
-            background: var(--secondary-green);
+            background: var(--accent-yellow);
             color: var(--white);
         }
 
@@ -989,6 +1056,10 @@ if (isset($_SESSION['user_id'])) {
                 display: block;
             }
 
+            .floating-buttons {
+                display: none;
+            }
+
             .hero h1 {
                 font-size: 1.8rem;
             }
@@ -1048,8 +1119,8 @@ if (isset($_SESSION['user_id'])) {
             }
 
             .product-card img {
-                height: 120px;
-                width: 100%;
+                height: 250px;
+                width: 80%;
             }
 
             .product-card .caption {
@@ -1068,9 +1139,11 @@ if (isset($_SESSION['user_id'])) {
                 font-size: 0.8rem;
             }
 
-            .bottom-bar-actions a {
-                padding: 6px 10px;
-                font-size: 0.7rem;
+            .bottom-bar-actions a, .bottom-bar-actions button {
+                padding: 6px;
+                font-size: 0.8rem;
+                width: 36px;
+                height: 36px;
             }
         }
 
@@ -1137,8 +1210,6 @@ if (isset($_SESSION['user_id'])) {
                                 ?>
                             </span>
                         </a>
-                        <button class="header-btn feedback-btn" id="feedback-btn">💬 Feedback</button>
-                        <a href="https://wa.me/+256755087665" class="header-btn whatsapp-btn" target="_blank">📞 Help</a>
                     <?php else: ?>
                         <a href="login.php" class="header-btn">Login</a>
                         <a href="favorites.php" class="header-btn favorites-btn">
@@ -1149,8 +1220,6 @@ if (isset($_SESSION['user_id'])) {
                             🛒 Cart
                             <span class="cart-count"><?php echo array_sum($_SESSION['guest_cart']); ?></span>
                         </a>
-                        <button class="header-btn feedback-btn" id="feedback-btn">💬 Feedback</button>
-                        <a href="https://wa.me/+256755087665" class="header-btn whatsapp-btn" target="_blank">📞 Help</a>
                     <?php endif; ?>
                 </div>
             </div>
@@ -1195,9 +1264,9 @@ if (isset($_SESSION['user_id'])) {
     <div class="bottom-bar">
         <div class="bottom-bar-actions">
             <?php if (isset($_SESSION['username'])): ?>
-                <a href="logout.php">Logout</a>
-                <a href="favorites.php">❤️ Favorites <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
-                <a href="cart.php">🛒 Cart <span class="cart-count">
+                <a href="logout.php" data-tooltip="Logout">🚪</a>
+                <a href="favorites.php" data-tooltip="Favorites">❤️ <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
+                <a href="cart.php" data-tooltip="Cart">🛒 <span class="cart-count">
                     <?php
                     $user_id = $_SESSION['user_id'] ?? 0;
                     $stmt = $conn->prepare("SELECT SUM(quantity) as count FROM cart WHERE user_id = ?");
@@ -1208,16 +1277,21 @@ if (isset($_SESSION['user_id'])) {
                     $stmt->close();
                     ?>
                 </span></a>
-                <button class="feedback-btn" id="mobile-feedback-btn">💬 Feedback</button>
-                <a href="https://wa.me/+256755087665" target="_blank">📞 Help</a>
+                <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback">💬</button>
+                <a href="https://wa.me/+256755087665" target="_blank" data-tooltip="Help">📞</a>
             <?php else: ?>
-                <a href="login.php">Login</a>
-                <a href="favorites.php">❤️ Favorites <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
-                <a href="cart.php">🛒 Cart <span class="cart-count"><?php echo array_sum($_SESSION['guest_cart']); ?></span></a>
-                <button class="feedback-btn" id="mobile-feedback-btn">💬 Feedback</button>
-                <a href="https://wa.me/+256755087665" target="_blank">📞 Help</a>
+                <a href="login.php" data-tooltip="Login">🔑</a>
+                <a href="favorites.php" data-tooltip="Favorites">❤️ <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
+                <a href="cart.php" data-tooltip="Cart">🛒 <span class="cart-count"><?php echo array_sum($_SESSION['guest_cart']); ?></span></a>
+                <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback">💬</button>
+                <a href="https://wa.me/+256755087665" target="_blank" data-tooltip="Help">📞</a>
             <?php endif; ?>
         </div>
+    </div>
+
+    <div class="floating-buttons">
+        <button class="floating-btn feedback-btn" id="floating-feedback-btn" data-tooltip="Feedback">💬</button>
+        <a href="https://wa.me/+256755087665" class="floating-btn" target="_blank" data-tooltip="Help">📞</a>
     </div>
 
     <section class="hero">
@@ -1262,7 +1336,7 @@ if (isset($_SESSION['user_id'])) {
                 <label for="feedback_name">Name</label>
                 <input type="text" id="feedback_name" name="feedback_name" value="<?php echo isset($_SESSION['username']) ? htmlspecialchars($_SESSION['username']) : ''; ?>" required>
                 <label for="feedback_email">Email</label>
-                <input type="email" id="feedback_email" name="feedback_email" value="<?php echo $user_email; ?>" required>
+                <input type="email" id="feedback_email" name="feedback_email" placeholder="Enter your email" required>
                 <label for="feedback_message">Message</label>
                 <textarea id="feedback_message" name="feedback_message" required></textarea>
                 <button type="submit" name="submit_feedback">Submit Feedback</button>
@@ -1341,10 +1415,10 @@ if (isset($_SESSION['user_id'])) {
                                             <input type="hidden" name="product_id" value="<?php echo $product_id; ?>">
                                             <input type="number" name="quantity" class="quantity-input" value="1" min="1">
                                             <button type="submit" name="add_to_cart">🛒</button>
+                                            <button type="submit" name="toggle_favorite" class="favorite-btn <?php echo $is_favorited ? 'favorited' : ''; ?>">❤️</button>
                                         </form>
                                         <form method="POST" action="index.php">
                                             <input type="hidden" name="product_id" value="<?php echo $product_id; ?>">
-                                            <button type="submit" name="toggle_favorite" class="favorite-btn <?php echo $is_favorited ? 'favorited' : ''; ?>">❤️</button>
                                         </form>
                                     </div>
                                     <?php
@@ -1371,7 +1445,7 @@ if (isset($_SESSION['user_id'])) {
                 <div class="footer-section">
                     <h3>Quick Links</h3>
                     <ul>
-                        <li><a href="#">Contact</a></li>
+                        <li><a href="https://wa.me/+256755087665" target="_blank">Contact</a></li>
                         <li><a href="#">FAQs</a></li>
                         <li><a href="Bottles.php">Bottles</a></li>
                         <li><a href="favorites.php">Favorites</a></li>
@@ -1522,7 +1596,7 @@ if (isset($_SESSION['user_id'])) {
             const browseCategoriesBtn = document.getElementById('browse-categories-btn');
             const categoriesModal = document.getElementById('categories-modal');
             const modalCloseBtn = document.getElementById('modal-close-btn');
-            const feedbackBtn = document.getElementById('feedback-btn');
+            const feedbackBtn = document.getElementById('floating-feedback-btn');
             const mobileFeedbackBtn = document.getElementById('mobile-feedback-btn');
             const feedbackModal = document.getElementById('feedback-modal');
             const feedbackModalClose = document.getElementById('feedback-modal-close');

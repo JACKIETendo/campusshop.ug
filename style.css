@@ -150,6 +150,7 @@ nav {
     background: var(--secondary-green);
     border-radius: 8px;
     padding: 0.5rem;
+    padding-left: 6.5rem;
 }
 
 .nav-links {
@@ -366,8 +367,6 @@ nav {
 }
 
 .product-card button {
-    background: var(--accent-yellow);
-    color: var(--dark-gray);
     border: none;
     padding: 8px 15px;
     border-radius: 8px;
@@ -377,7 +376,7 @@ nav {
 }
 
 .product-card button:hover {
-    background: var(--secondary-green);
+    background: var(--accent-yellow);
     color: var(--white);
 }
 

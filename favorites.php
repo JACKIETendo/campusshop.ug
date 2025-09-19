@@ -2,6 +2,10 @@
 session_start();
 include 'db_connect.php';
 
+// Enable error reporting for debugging (remove in production)
+// error_reporting(E_ALL);
+// ini_set('display_errors', 1);
+
 // Initialize guest cart and favorites if not set
 if (!isset($_SESSION['guest_cart'])) {
     $_SESSION['guest_cart'] = [];
@@ -10,15 +14,42 @@ if (!isset($_SESSION['guest_favorites'])) {
     $_SESSION['guest_favorites'] = [];
 }
 
-// Handle add to cart from favorites
+// Sync guest favorites to database upon login
+if (isset($_SESSION['user_id']) && !empty($_SESSION['guest_favorites'])) {
+    $user_id = $_SESSION['user_id'];
+    foreach ($_SESSION['guest_favorites'] as $product_id) {
+        $product_id = (int)$product_id; // Ensure integer
+        $stmt = $conn->prepare("SELECT * FROM favorites WHERE user_id = ? AND product_id = ?");
+        $stmt->bind_param("ii", $user_id, $product_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        if ($result->num_rows === 0) {
+            $stmt_insert = $conn->prepare("INSERT INTO favorites (user_id, product_id) VALUES (?, ?)");
+            $stmt_insert->bind_param("ii", $user_id, $product_id);
+            if (!$stmt_insert->execute()) {
+                error_log("Failed to sync guest favorite for product_id $product_id: " . $stmt_insert->error);
+            }
+            $stmt_insert->close();
+        }
+        $stmt->close();
+    }
+    // Clear guest favorites after syncing
+    $_SESSION['guest_favorites'] = [];
+}
+
+// Handle adding to cart
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
-    $product_id = $conn->real_escape_string($_POST['product_id']);
+    $product_id = (int)$_POST['product_id'];
     $quantity = isset($_POST['quantity']) ? max(1, (int)$_POST['quantity']) : 1;
     
     if (isset($_SESSION['user_id'])) {
         $user_id = $_SESSION['user_id'];
-        $sql = "INSERT INTO cart (user_id, product_id, quantity) VALUES ('$user_id', '$product_id', '$quantity') ON DUPLICATE KEY UPDATE quantity = quantity + $quantity";
-        $conn->query($sql);
+        $stmt = $conn->prepare("INSERT INTO cart (user_id, product_id, quantity) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE quantity = quantity + ?");
+        $stmt->bind_param("iiii", $user_id, $product_id, $quantity, $quantity);
+        if (!$stmt->execute()) {
+            error_log("Failed to add to cart for user_id $user_id, product_id $product_id: " . $stmt->error);
+        }
+        $stmt->close();
     } else {
         if (!isset($_SESSION['guest_cart'][$product_id])) {
             $_SESSION['guest_cart'][$product_id] = $quantity;
@@ -33,12 +64,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
 
 // Handle remove from favorites
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['remove_favorite'])) {
-    $product_id = $conn->real_escape_string($_POST['product_id']);
+    $product_id = (int)$_POST['product_id'];
     
     if (isset($_SESSION['user_id'])) {
         $user_id = $_SESSION['user_id'];
-        $sql = "DELETE FROM favorites WHERE user_id = '$user_id' AND product_id = '$product_id'";
-        $conn->query($sql);
+        $stmt = $conn->prepare("DELETE FROM favorites WHERE user_id = ? AND product_id = ?");
+        $stmt->bind_param("ii", $user_id, $product_id);
+        if (!$stmt->execute()) {
+            error_log("Failed to remove favorite for user_id $user_id, product_id $product_id: " . $stmt->error);
+        }
+        $stmt->close();
     } else {
         $_SESSION['guest_favorites'] = array_diff($_SESSION['guest_favorites'], [$product_id]);
         $_SESSION['guest_favorites'] = array_values($_SESSION['guest_favorites']);
@@ -48,13 +83,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['remove_favorite'])) {
     exit();
 }
 
+// Handle feedback submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
+    $name = trim($_POST['feedback_name']);
+    $email = trim($_POST['feedback_email']);
+    $message = trim($_POST['feedback_message']);
+    $user_id = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+
+    // Basic validation
+    if (empty($name) || empty($email) || empty($message)) {
+        $response = ['success' => false, 'message' => 'All fields are required.'];
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $response = ['success' => false, 'message' => 'Invalid email format.'];
+    } else {
+        $stmt = $conn->prepare("INSERT INTO feedback (user_id, name, email, message) VALUES (?, ?, ?, ?)");
+        $stmt->bind_param("isss", $user_id, $name, $email, $message);
+        if ($stmt->execute()) {
+            $response = ['success' => true, 'message' => 'Feedback submitted successfully!'];
+        } else {
+            $response = ['success' => false, 'message' => 'Failed to submit feedback. Please try again.'];
+            error_log("Failed to submit feedback: " . $stmt->error);
+        }
+        $stmt->close();
+    }
+    
+    // Return JSON response for AJAX
+    header('Content-Type: application/json');
+    echo json_encode($response);
+    exit();
+}
+
 // Get favorites count
 $favorites_count = 0;
 if (isset($_SESSION['user_id'])) {
     $user_id = $_SESSION['user_id'];
-    $sql = "SELECT COUNT(*) as count FROM favorites WHERE user_id = '$user_id'";
-    $result = $conn->query($sql);
+    $stmt = $conn->prepare("SELECT COUNT(*) as count FROM favorites WHERE user_id = ?");
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
     $favorites_count = $result->fetch_assoc()['count'];
+    $stmt->close();
 } else {
     $favorites_count = count($_SESSION['guest_favorites']);
 }
@@ -63,21 +131,29 @@ if (isset($_SESSION['user_id'])) {
 $products = [];
 if (isset($_SESSION['user_id'])) {
     $user_id = $_SESSION['user_id'];
-    $sql = "SELECT p.* FROM products p JOIN favorites f ON p.id = f.product_id WHERE f.user_id = '$user_id'";
-    $result = $conn->query($sql);
+    $stmt = $conn->prepare("SELECT p.* FROM products p JOIN favorites f ON p.id = f.product_id WHERE f.user_id = ?");
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
     while ($row = $result->fetch_assoc()) {
         $products[] = $row;
     }
+    $stmt->close();
 } else {
     if (!empty($_SESSION['guest_favorites'])) {
         $product_ids = implode(',', array_map('intval', $_SESSION['guest_favorites']));
-        $sql = "SELECT * FROM products WHERE id IN ($product_ids)";
-        $result = $conn->query($sql);
+        $stmt = $conn->prepare("SELECT * FROM products WHERE id IN ($product_ids)");
+        $stmt->execute();
+        $result = $stmt->get_result();
         while ($row = $result->fetch_assoc()) {
             $products[] = $row;
         }
+        $stmt->close();
     }
 }
+
+// Set user_email to empty string (no email column in users table)
+$user_email = '';
 ?>
 
 <!DOCTYPE html>
@@ -86,7 +162,6 @@ if (isset($_SESSION['user_id'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Your Favorites - Bugema CampusShop</title>
-    <link rel="stylesheet" href="styles.css">
     <style>
         * {
             margin: 0;
@@ -111,7 +186,7 @@ if (isset($_SESSION['user_id'])) {
             line-height: 1.6;
             color: var(--dark-gray);
             background: var(--light-gray);
-            padding-bottom: 60px; /* Space for bottom bar on small screens */
+            padding-bottom: 60px;
         }
 
         .container {
@@ -367,6 +442,75 @@ if (isset($_SESSION['user_id'])) {
             font-weight: 600;
         }
 
+        .floating-buttons {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 1000;
+        }
+
+        .floating-btn {
+            background: var(--accent-yellow);
+            color: var(--dark-gray);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            border: none;
+            cursor: pointer;
+            transition: background 0.3s ease, transform 0.2s ease;
+            position: relative;
+        }
+
+        .floating-btn:hover {
+            background: var(--secondary-green);
+            color: var(--white);
+            transform: scale(1.1);
+        }
+
+        .floating-btn::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            right: 50px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: var(--dark-gray);
+            color: var(--white);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            white-space: nowrap;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s ease, visibility 0.2s ease;
+        }
+
+        .floating-btn:hover::after {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .remove-btn {
+            background: none;
+            border: none;
+            color: var(--error-red);
+            font-size: 1.2rem;
+            cursor: pointer;
+            margin-top: 0.5rem;
+            transition: color 0.3s ease, transform 0.2s ease;
+        }
+
+        .remove-btn:hover {
+            color: var(--secondary-green);
+            transform: scale(1.2);
+        }
+
         nav {
             margin-top: 0.5rem;
             background: var(--secondary-green);
@@ -415,22 +559,109 @@ if (isset($_SESSION['user_id'])) {
             align-items: center;
         }
 
-        .bottom-bar-actions a {
+        .bottom-bar-actions a, .bottom-bar-actions button {
             background: var(--accent-yellow);
             color: var(--dark-gray);
-            padding: 8px 15px;
-            border-radius: 8px;
+            padding: 8px;
+            border-radius: 50%;
             text-decoration: none;
             font-weight: 500;
-            position: relative;
-            font-size: 0.8rem;
+            font-size: 1rem;
             display: flex;
             align-items: center;
-            gap: 5px;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            transition: background 0.3s ease, color 0.3s ease;
+            position: relative;
         }
 
-        .bottom-bar-actions a:hover {
+        .bottom-bar-actions a:hover, .bottom-bar-actions button:hover {
             background: var(--secondary-green);
+            color: var(--white);
+        }
+
+        .bottom-bar-actions a::after, .bottom-bar-actions button::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--dark-gray);
+            color: var(--white);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            white-space: nowrap;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s ease, visibility 0.2s ease;
+        }
+
+        .bottom-bar-actions a:hover::after, .bottom-bar-actions button:hover::after {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .feedback-form {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .feedback-form label {
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: var(--dark-gray);
+        }
+
+        .feedback-form input,
+        .feedback-form textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--text-gray);
+            border-radius: 8px;
+            font-size: 0.9rem;
+            color: var(--dark-gray);
+        }
+
+        .feedback-form textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .feedback-form button {
+            background: var(--accent-yellow);
+            color: var(--dark-gray);
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s ease, color 0.3s ease;
+        }
+
+        .feedback-form button:hover {
+            background: var(--secondary-green);
+            color: var(--white);
+        }
+
+        .feedback-message {
+            font-size: 0.9rem;
+            text-align: center;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        .feedback-message.success {
+            background: var(--success-green);
+            color: var(--white);
+        }
+
+        .feedback-message.error {
+            background: var(--error-red);
             color: var(--white);
         }
 
@@ -451,6 +682,7 @@ if (isset($_SESSION['user_id'])) {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
             gap: 1rem;
+            margin-top: 2rem;
         }
 
         .product-card {
@@ -460,7 +692,7 @@ if (isset($_SESSION['user_id'])) {
             text-align: center;
             box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
             transition: all 0.3s ease;
-            min-height: 300px;
+            min-height: 220px;
             animation: fadeInUp 0.6s ease-out;
         }
 
@@ -485,21 +717,19 @@ if (isset($_SESSION['user_id'])) {
             color: black;
         }
 
-        .product-card .price {
-            font-size: 0.9rem;
-            color: var(--text-gray);
-            margin-bottom: 0.5rem;
-        }
-
         .product-card .caption {
             font-size: 0.85rem;
             color: var(--text-gray);
             margin-bottom: 0.5rem;
         }
 
+        .product-card .price {
+            font-size: 0.9rem;
+            color: var(--text-gray);
+            margin-bottom: 0.5rem;
+        }
+
         .product-card button {
-            background: var(--accent-yellow);
-            color: var(--dark-gray);
             border: none;
             padding: 8px 15px;
             border-radius: 8px;
@@ -510,23 +740,8 @@ if (isset($_SESSION['user_id'])) {
         }
 
         .product-card button:hover {
-            background: var(--secondary-green);
+            background: var(--accent-yellow);
             color: var(--white);
-        }
-
-        .remove-btn {
-            background: none;
-            color: var(--error-red);
-            border: none;
-            font-size: 1.2rem;
-            cursor: pointer;
-            margin-top: 0.5rem;
-            transition: color 0.3s ease, transform 0.2s ease;
-        }
-
-        .remove-btn:hover {
-            color: var(--secondary-green);
-            transform: scale(1.2);
         }
 
         .quantity-input {
@@ -543,9 +758,58 @@ if (isset($_SESSION['user_id'])) {
 
         .no-favorites {
             text-align: center;
-            font-size: 1.1rem;
+            font-size: 1rem;
             color: var(--text-gray);
+            padding: 1rem;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: var(--white);
+            border-radius: 12px;
             padding: 2rem;
+            max-width: 800px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            position: relative;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: var(--text-gray);
+            cursor: pointer;
+        }
+
+        .modal-close:hover {
+            color: var(--error-red);
+        }
+
+        .modal h2 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            color: var(--primary-green);
+            margin-bottom: 1.5rem;
+            text-align: center;
         }
 
         footer {
@@ -614,6 +878,10 @@ if (isset($_SESSION['user_id'])) {
                 display: block;
             }
 
+            .floating-buttons {
+                display: none;
+            }
+
             .product-grid {
                 grid-template-columns: 1fr;
             }
@@ -623,8 +891,9 @@ if (isset($_SESSION['user_id'])) {
                 width: 100%;
             }
 
-            .product-card {
-                min-height: 250px;
+            .modal-content {
+                width: 95%;
+                padding: 1.5rem;
             }
         }
 
@@ -652,22 +921,20 @@ if (isset($_SESSION['user_id'])) {
                 height: 30px;
             }
 
+            .product-grid {
+                grid-template-columns: 1fr;
+            }
+
             .product-card img {
-                height: 120px;
-                width: 100%;
+                height: 250px;
+                width: 80%;
             }
 
-            .product-card .caption {
+            .bottom-bar-actions a, .bottom-bar-actions button {
+                padding: 6px;
                 font-size: 0.8rem;
-            }
-
-            .product-card {
-                min-height: 220px;
-            }
-
-            .bottom-bar-actions a {
-                padding: 6px 10px;
-                font-size: 0.7rem;
+                width: 36px;
+                height: 36px;
             }
         }
 
@@ -725,9 +992,12 @@ if (isset($_SESSION['user_id'])) {
                             <span class="cart-count">
                                 <?php
                                 $user_id = $_SESSION['user_id'] ?? 0;
-                                $sql = "SELECT SUM(quantity) as count FROM cart WHERE user_id = '$user_id'";
-                                $result = $conn->query($sql);
+                                $stmt = $conn->prepare("SELECT SUM(quantity) as count FROM cart WHERE user_id = ?");
+                                $stmt->bind_param("i", $user_id);
+                                $stmt->execute();
+                                $result = $stmt->get_result();
                                 echo $result->fetch_assoc()['count'] ?? array_sum($_SESSION['guest_cart']);
+                                $stmt->close();
                                 ?>
                             </span>
                         </a>
@@ -785,21 +1055,50 @@ if (isset($_SESSION['user_id'])) {
     <div class="bottom-bar">
         <div class="bottom-bar-actions">
             <?php if (isset($_SESSION['username'])): ?>
-                <a href="logout.php">Logout</a>
-                <a href="favorites.php">❤️ Favorites <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
-                <a href="cart.php">🛒 Cart <span class="cart-count">
+                <a href="logout.php" data-tooltip="Logout">🚪</a>
+                <a href="favorites.php" data-tooltip="Favorites">❤️ <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
+                <a href="cart.php" data-tooltip="Cart">🛒 <span class="cart-count">
                     <?php
                     $user_id = $_SESSION['user_id'] ?? 0;
-                    $sql = "SELECT SUM(quantity) as count FROM cart WHERE user_id = '$user_id'";
-                    $result = $conn->query($sql);
+                    $stmt = $conn->prepare("SELECT SUM(quantity) as count FROM cart WHERE user_id = ?");
+                    $stmt->bind_param("i", $user_id);
+                    $stmt->execute();
+                    $result = $stmt->get_result();
                     echo $result->fetch_assoc()['count'] ?? array_sum($_SESSION['guest_cart']);
+                    $stmt->close();
                     ?>
                 </span></a>
+                <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback">💬</button>
+                <a href="https://wa.me/+256755087665" target="_blank" data-tooltip="Help">📞</a>
             <?php else: ?>
-                <a href="login.php">Login</a>
-                <a href="favorites.php">❤️ Favorites <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
-                <a href="cart.php">🛒 Cart <span class="cart-count"><?php echo array_sum($_SESSION['guest_cart']); ?></span></a>
+                <a href="login.php" data-tooltip="Login">🔑</a>
+                <a href="favorites.php" data-tooltip="Favorites">❤️ <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
+                <a href="cart.php" data-tooltip="Cart">🛒 <span class="cart-count"><?php echo array_sum($_SESSION['guest_cart']); ?></span></a>
+                <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback">💬</button>
+                <a href="https://wa.me/+256755087665" target="_blank" data-tooltip="Help">📞</a>
             <?php endif; ?>
+        </div>
+    </div>
+
+    <div class="floating-buttons">
+        <button class="floating-btn feedback-btn" id="floating-feedback-btn" data-tooltip="Feedback">💬</button>
+        <a href="https://wa.me/+256755087665" class="floating-btn" target="_blank" data-tooltip="Help">📞</a>
+    </div>
+
+    <div class="modal" id="feedback-modal">
+        <div class="modal-content">
+            <button class="modal-close" id="feedback-modal-close">&times;</button>
+            <h2>Leave Your Feedback</h2>
+            <div class="feedback-message" id="feedback-message" style="display: none;"></div>
+            <form id="feedback-form" class="feedback-form">
+                <label for="feedback_name">Name</label>
+                <input type="text" id="feedback_name" name="feedback_name" value="<?php echo isset($_SESSION['username']) ? htmlspecialchars($_SESSION['username']) : ''; ?>" required>
+                <label for="feedback_email">Email</label>
+                <input type="email" id="feedback_email" name="feedback_email" placeholder="Enter your email" required>
+                <label for="feedback_message">Message</label>
+                <textarea id="feedback_message" name="feedback_message" required></textarea>
+                <button type="submit" name="submit_feedback">Submit Feedback</button>
+            </form>
         </div>
     </div>
 
@@ -807,12 +1106,13 @@ if (isset($_SESSION['user_id'])) {
         <div class="container">
             <h2>Your Favorites</h2>
             <?php if (empty($products)): ?>
-                <p class="no-favorites">No favorites added yet. Start adding products to your favorites! ❤️</p>
+                <div class="no-favorites">No favorites added yet. Start adding products to your favorites! ❤️</div>
             <?php else: ?>
                 <div class="product-grid">
                     <?php foreach ($products as $row): ?>
                         <div class="product-card">
                             <?php
+                            $product_id = $row['id'];
                             $image_path = !empty($row['image_path']) ? htmlspecialchars($row['image_path']) : 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+A8AAQAB3gB4cAAAAABJRU5ErkJggg==';
                             ?>
                             <img src="<?php echo $image_path; ?>" alt="<?php echo htmlspecialchars($row['name']); ?>">
@@ -820,13 +1120,10 @@ if (isset($_SESSION['user_id'])) {
                             <p class="caption"><?php echo htmlspecialchars($row['caption'] ?? 'No description available'); ?></p>
                             <p class="price">Price: UGX <?php echo number_format($row['price']); ?></p>
                             <form method="POST" action="favorites.php">
-                                <input type="hidden" name="product_id" value="<?php echo $row['id']; ?>">
+                                <input type="hidden" name="product_id" value="<?php echo $product_id; ?>">
                                 <input type="number" name="quantity" class="quantity-input" value="1" min="1">
                                 <button type="submit" name="add_to_cart">🛒</button>
-                            </form>
-                            <form method="POST" action="favorites.php">
-                                <input type="hidden" name="product_id" value="<?php echo $row['id']; ?>">
-                                <button type="submit" name="remove_favorite" class="remove-btn">🗑️</button>
+                                <button type="submit" name="remove_favorite" class="remove-btn">Delete</button>
                             </form>
                         </div>
                     <?php endforeach; ?>
@@ -845,7 +1142,7 @@ if (isset($_SESSION['user_id'])) {
                 <div class="footer-section">
                     <h3>Quick Links</h3>
                     <ul>
-                        <li><a href="#">Contact</a></li>
+                        <li><a href="#" class="feedback-btn" id="footer-feedback-btn">Feedback</a></li>
                         <li><a href="#">FAQs</a></li>
                         <li><a href="Bottles.php">Student Bottles</a></li>
                         <li><a href="favorites.php">Favorites</a></li>
@@ -855,7 +1152,7 @@ if (isset($_SESSION['user_id'])) {
                     <h3>Connect</h3>
                     <ul>
                         <li><a href="#">📧 campusshop@bugemauniv.ac.ug</a></li>
-                        <li><a href="#">📞 +256 7550 87665</a></li>
+                        <li><a href="https://wa.me/+256755087665" target="_blank">📞 +256 7550 87665</a></li>
                         <li><a href="#">📍 Bugema University</a></li>
                         <li><a href="#">🕒 Mon-Fri 8AM-6PM</a></li>
                     </ul>
@@ -996,6 +1293,13 @@ if (isset($_SESSION['user_id'])) {
             const menuIcon = document.querySelector('.menu-icon');
             const mobileMenu = document.querySelector('.mobile-menu');
             const closeIcon = document.querySelector('.close-icon');
+            const feedbackBtn = document.getElementById('floating-feedback-btn');
+            const mobileFeedbackBtn = document.getElementById('mobile-feedback-btn');
+            const footerFeedbackBtn = document.getElementById('footer-feedback-btn');
+            const feedbackModal = document.getElementById('feedback-modal');
+            const feedbackModalClose = document.getElementById('feedback-modal-close');
+            const feedbackForm = document.getElementById('feedback-form');
+            const feedbackMessage = document.getElementById('feedback-message');
 
             menuIcon.addEventListener('click', function() {
                 mobileMenu.classList.add('active');
@@ -1009,6 +1313,74 @@ if (isset($_SESSION['user_id'])) {
                 if (e.target.classList.contains('mobile-nav') || e.target.tagName === 'A') {
                     mobileMenu.classList.remove('active');
                 }
+            });
+
+            feedbackBtn.addEventListener('click', function() {
+                feedbackModal.style.display = 'flex';
+                feedbackMessage.style.display = 'none';
+            });
+
+            mobileFeedbackBtn.addEventListener('click', function() {
+                feedbackModal.style.display = 'flex';
+                feedbackMessage.style.display = 'none';
+            });
+
+            footerFeedbackBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                feedbackModal.style.display = 'flex';
+                feedbackMessage.style.display = 'none';
+            });
+
+            feedbackModalClose.addEventListener('click', function() {
+                feedbackModal.style.display = 'none';
+                feedbackForm.reset();
+                feedbackMessage.style.display = 'none';
+            });
+
+            feedbackModal.addEventListener('click', function(e) {
+                if (e.target === feedbackModal) {
+                    feedbackModal.style.display = 'none';
+                    feedbackForm.reset();
+                    feedbackMessage.style.display = 'none';
+                }
+            });
+
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    if (feedbackModal.style.display === 'flex') {
+                        feedbackModal.style.display = 'none';
+                        feedbackForm.reset();
+                        feedbackMessage.style.display = 'none';
+                    }
+                }
+            });
+
+            feedbackForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const formData = new FormData(feedbackForm);
+                fetch('favorites.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    feedbackMessage.style.display = 'block';
+                    feedbackMessage.className = `feedback-message ${data.success ? 'success' : 'error'}`;
+                    feedbackMessage.textContent = data.message;
+                    if (data.success) {
+                        feedbackForm.reset();
+                        setTimeout(() => {
+                            feedbackModal.style.display = 'none';
+                            feedbackMessage.style.display = 'none';
+                        }, 2000);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    feedbackMessage.style.display = 'block';
+                    feedbackMessage.className = 'feedback-message error';
+                    feedbackMessage.textContent = 'An error occurred. Please try again.';
+                });
             });
         });
     </script>
