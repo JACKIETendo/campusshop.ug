@@ -226,13 +226,14 @@ $user_email = '';
             cursor: pointer;
         }
 
-        .mobile-menu {
+         .mobile-menu {
             position: fixed;
             top: 0;
             right: -100%;
             width: 250px;
             height: 100%;
-            background: var(--white);
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(10px);
             padding: 2rem;
             z-index: 1100;
             transition: right 0.3s ease;
@@ -378,7 +379,8 @@ $user_email = '';
             bottom: 0;
             left: 0;
             right: 0;
-            background: var(--white);
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(10px);
             padding: 0.5rem;
             box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
             z-index: 1000;
