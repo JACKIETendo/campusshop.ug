@@ -327,22 +327,24 @@ $user_email = '';
             flex-direction: column;
             gap: 10px;
             z-index: 1000;
+            font-size: 2rem;
         }
 
         .floating-btn {
             background: var(--accent-yellow);
             color: var(--dark-gray);
-            width: 40px;
-            height: 40px;
+            width: 60px;
+            height: 60px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.2rem;
+            font-size: 2rem;
             border: none;
             cursor: pointer;
             transition: background 0.3s ease, transform 0.2s ease;
             position: relative;
+            text-decoration: none;
         }
 
         .floating-btn:hover {

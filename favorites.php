@@ -85,7 +85,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['remove_favorite'])) {
 
 // Handle feedback submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
-    // Ensure database connection is valid
     if (!$conn || $conn->connect_error) {
         $response = ['success' => false, 'message' => 'Database connection failed.'];
         header('Content-Type: application/json');
@@ -98,7 +97,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
     $message = trim($_POST['feedback_message']);
     $user_id = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
 
-    // Basic validation
     if (empty($name) || empty($email) || empty($message)) {
         $response = ['success' => false, 'message' => 'All fields are required.'];
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -122,7 +120,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
         }
     }
     
-    // Return JSON response for AJAX
     header('Content-Type: application/json');
     echo json_encode($response);
     exit();
@@ -255,7 +252,7 @@ $user_email = '';
             cursor: pointer;
         }
 
-         .mobile-menu {
+        .mobile-menu {
             position: fixed;
             top: 0;
             right: -100%;
@@ -466,22 +463,24 @@ $user_email = '';
             flex-direction: column;
             gap: 10px;
             z-index: 1000;
+            font-size: 2rem;
         }
 
         .floating-btn {
             background: var(--accent-yellow);
             color: var(--dark-gray);
-            width: 40px;
-            height: 40px;
+            width: 60px;
+            height: 60px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.2rem;
+            font-size: 2rem;
             border: none;
             cursor: pointer;
             transition: background 0.3s ease, transform 0.2s ease;
             position: relative;
+            text-decoration: none;
         }
 
         .floating-btn:hover {
@@ -698,34 +697,39 @@ $user_email = '';
 
         .product-grid {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 1rem;
-            margin-top: 2rem;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
         }
 
         .product-card {
             background: var(--white);
-            padding: 1rem;
-            border-radius: 8px;
+            padding: 1.5rem;
+            border-radius: 10px;
             text-align: center;
-            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
             transition: all 0.3s ease;
-            min-height: 220px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 400px;
+            width: 100%;
+            max-width: 250px;
+            margin: 0 auto;
             animation: fadeInUp 0.6s ease-out;
         }
 
-        .product-card:hover {
-            transform: translateY(-3px) scale(1.05);
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
-        }
-
         .product-card img {
-            width: 80%;
-            height: 300px;
+            width: 100%;
+            height: 200px;
             object-fit: cover;
             border-radius: 8px;
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.75rem;
             background: var(--light-gray);
+            cursor: pointer;
+        }
+
+        .product-card .caption {
+            display: none;
         }
 
         .product-card h4 {
@@ -735,29 +739,26 @@ $user_email = '';
             color: black;
         }
 
-        .product-card .caption {
-            font-size: 0.85rem;
-            color: var(--text-gray);
-            margin-bottom: 0.5rem;
-        }
-
         .product-card .price {
             font-size: 0.9rem;
             color: var(--text-gray);
             margin-bottom: 0.5rem;
         }
 
-        .product-card button {
+        .product-card button, .product-card .login-link {
             border: none;
             padding: 8px 15px;
             border-radius: 8px;
             cursor: pointer;
             font-size: 0.9rem;
             margin-top: 0.5rem;
+            text-decoration: none;
+            display: inline-block;
+            font-weight: 500;
             transition: background 0.3s ease, color 0.3s ease;
         }
 
-        .product-card button:hover {
+        .product-card button:hover, .product-card .login-link:hover {
             background: var(--accent-yellow);
             color: var(--white);
         }
@@ -776,9 +777,9 @@ $user_email = '';
 
         .no-favorites {
             text-align: center;
-            font-size: 1rem;
+            font-size: 1.1rem;
             color: var(--text-gray);
-            padding: 1rem;
+            padding: 2rem;
         }
 
         .modal {
@@ -805,6 +806,40 @@ $user_email = '';
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
             position: relative;
             animation: fadeIn 0.3s ease-out;
+        }
+
+        .image-modal-content {
+            background: var(--white);
+            border-radius: 12px;
+            padding: 2.5rem;
+            max-width: 90%;
+            width: 600px;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            position: relative;
+            animation: fadeIn 0.3s ease-out;
+            text-align: center;
+        }
+
+        .image-modal-content img {
+            max-width: 100%;
+            height: auto;
+            max-height: 450px;
+            object-fit: cover;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        .image-modal-content .caption {
+            display: block;
+            font-size: 1.1rem;
+            color: var(--text-gray);
+            margin-bottom: 0.75rem;
+        }
+
+        .image-modal-content .price {
+            font-size: 1rem;
         }
 
         .modal-close {
@@ -901,17 +936,58 @@ $user_email = '';
             }
 
             .product-grid {
-                grid-template-columns: 1fr;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 0.5rem;
+            }
+
+            .product-card {
+                max-width: 100%;
+                height: 300px;
+                padding: 0.5rem;
             }
 
             .product-card img {
                 height: 150px;
-                width: 100%;
             }
 
-            .modal-content {
+            .product-card h4 {
+                font-size: 0.9rem;
+            }
+
+            .product-card .price {
+                font-size: 0.8rem;
+            }
+
+            .product-card button, .product-card .login-link {
+                padding: 6px 10px;
+                font-size: 0.8rem;
+            }
+
+            .quantity-input {
+                width: 50px;
+                padding: 4px;
+                font-size: 0.8rem;
+            }
+
+            .image-modal-content {
                 width: 95%;
-                padding: 1.5rem;
+                padding: 1rem;
+            }
+
+            .image-modal-content img {
+                max-height: 300px;
+            }
+
+            .image-modal-content h4 {
+                font-size: 1rem;
+            }
+
+            .image-modal-content .caption {
+                font-size: 0.9rem;
+            }
+
+            .image-modal-content .price {
+                font-size: 1rem;
             }
         }
 
@@ -940,12 +1016,36 @@ $user_email = '';
             }
 
             .product-grid {
-                grid-template-columns: 1fr;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 0.5rem;
+            }
+
+            .product-card {
+                height: 280px;
+                padding: 0.5rem;
             }
 
             .product-card img {
-                height: 250px;
-                width: 80%;
+                height: 140px;
+            }
+
+            .product-card h4 {
+                font-size: 0.9rem;
+            }
+
+            .product-card .price {
+                font-size: 0.8rem;
+            }
+
+            .product-card button, .product-card .login-link {
+                padding: 6px 10px;
+                font-size: 0.8rem;
+            }
+
+            .quantity-input {
+                width: 50px;
+                padding: 4px;
+                font-size: 0.8rem;
             }
 
             .bottom-bar-actions a, .bottom-bar-actions button {
@@ -953,6 +1053,27 @@ $user_email = '';
                 font-size: 0.8rem;
                 width: 36px;
                 height: 36px;
+            }
+
+            .image-modal-content {
+                width: 95%;
+                padding: 1rem;
+            }
+
+            .image-modal-content img {
+                max-height: 300px;
+            }
+
+            .image-modal-content h4 {
+                font-size: 1rem;
+            }
+
+            .image-modal-content .caption {
+                font-size: 0.9rem;
+            }
+
+            .image-modal-content .price {
+                font-size: 1rem;
             }
         }
 
@@ -1120,6 +1241,22 @@ $user_email = '';
         </div>
     </div>
 
+    <div class="modal" id="image-modal">
+        <div class="modal-content image-modal-content">
+            <button class="modal-close" id="image-modal-close">&times;</button>
+            <img id="modal-image" src="" alt="Product Image">
+            <h4 id="modal-title"></h4>
+            <p class="caption" id="modal-caption"></p>
+            <p class="price" id="modal-price"></p>
+            <form method="POST" action="favorites.php" id="modal-form">
+                <input type="hidden" name="product_id" id="modal-product-id">
+                <input type="number" name="quantity" class="quantity-input" value="1" min="1">
+                <button type="submit" name="add_to_cart">🛒 Add to Cart</button>
+                <button type="submit" name="remove_favorite" class="remove-btn">Delete</button>
+            </form>
+        </div>
+    </div>
+
     <section class="favorites-section">
         <div class="container">
             <h2>Your Favorites</h2>
@@ -1133,7 +1270,11 @@ $user_email = '';
                             $product_id = $row['id'];
                             $image_path = !empty($row['image_path']) ? htmlspecialchars($row['image_path']) : 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+A8AAQAB3gB4cAAAAABJRU5ErkJggg==';
                             ?>
-                            <img src="<?php echo $image_path; ?>" alt="<?php echo htmlspecialchars($row['name']); ?>">
+                            <img src="<?php echo $image_path; ?>" alt="<?php echo htmlspecialchars($row['name']); ?>" 
+                                 data-product-id="<?php echo $product_id; ?>" 
+                                 data-title="<?php echo htmlspecialchars($row['name']); ?>" 
+                                 data-caption="<?php echo htmlspecialchars($row['caption'] ?? 'No description available'); ?>" 
+                                 data-price="UGX <?php echo number_format($row['price']); ?>">
                             <h4><?php echo htmlspecialchars($row['name']); ?></h4>
                             <p class="caption"><?php echo htmlspecialchars($row['caption'] ?? 'No description available'); ?></p>
                             <p class="price">Price: UGX <?php echo number_format($row['price']); ?></p>
@@ -1318,6 +1459,14 @@ $user_email = '';
             const feedbackModalClose = document.getElementById('feedback-modal-close');
             const feedbackForm = document.getElementById('feedback-form');
             const feedbackMessage = document.getElementById('feedback-message');
+            const imageModal = document.getElementById('image-modal');
+            const imageModalClose = document.getElementById('image-modal-close');
+            const modalImage = document.getElementById('modal-image');
+            const modalTitle = document.getElementById('modal-title');
+            const modalCaption = document.getElementById('modal-caption');
+            const modalPrice = document.getElementById('modal-price');
+            const modalProductId = document.getElementById('modal-product-id');
+            const modalRemoveBtn = document.getElementById('modal-remove-btn');
 
             menuIcon.addEventListener('click', function() {
                 mobileMenu.classList.add('active');
@@ -1370,14 +1519,17 @@ $user_email = '';
                         feedbackForm.reset();
                         feedbackMessage.style.display = 'none';
                     }
+                    if (imageModal.style.display === 'flex') {
+                        imageModal.style.display = 'none';
+                    }
                 }
             });
 
             feedbackForm.addEventListener('submit', function(e) {
                 e.preventDefault();
                 const formData = new FormData(feedbackForm);
-                formData.append('submit_feedback', 'true'); // Ensure submit_feedback is sent
-                fetch('index.php', {
+                formData.append('submit_feedback', 'true');
+                fetch('favorites.php', {
                     method: 'POST',
                     body: formData
                 })
@@ -1405,6 +1557,34 @@ $user_email = '';
                     feedbackMessage.className = 'feedback-message error';
                     feedbackMessage.textContent = 'An error occurred: ' + error.message;
                 });
+            });
+
+            document.querySelectorAll('.product-card img').forEach(img => {
+                img.addEventListener('click', function() {
+                    const productId = this.getAttribute('data-product-id');
+                    const title = this.getAttribute('data-title');
+                    const caption = this.getAttribute('data-caption');
+                    const price = this.getAttribute('data-price');
+
+                    modalImage.src = this.src;
+                    modalImage.alt = title;
+                    modalTitle.textContent = title;
+                    modalCaption.textContent = caption;
+                    modalPrice.textContent = price;
+                    modalProductId.value = productId;
+
+                    imageModal.style.display = 'flex';
+                });
+            });
+
+            imageModalClose.addEventListener('click', function() {
+                imageModal.style.display = 'none';
+            });
+
+            imageModal.addEventListener('click', function(e) {
+                if (e.target === imageModal) {
+                    imageModal.style.display = 'none';
+                }
             });
         });
     </script>
