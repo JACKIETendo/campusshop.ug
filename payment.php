@@ -13,6 +13,10 @@ $cart_items = [];
 $total = 0;
 $is_single_item = isset($_GET['cart_id']) && is_numeric($_GET['cart_id']);
 
+// Commented out Stripe initialization to avoid autoload error
+// require_once 'vendor/autoload.php';
+// \Stripe\Stripe::setApiKey('your_stripe_secret_key');
+
 if ($is_single_item) {
     // Fetch specific cart item
     $cart_id = (int)$_GET['cart_id'];
@@ -50,7 +54,7 @@ if ($is_single_item) {
     $stmt->close();
 }
 
-// Process payment form submission
+// Process feedback form submission
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_feedback'])) {
     $name = trim($_POST['feedback_name']);
     $email = trim($_POST['feedback_email']);
@@ -73,59 +77,61 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_feedback'])) {
         }
         $stmt->close();
     }
-    
+
     // Return JSON response for AJAX
     header('Content-Type: application/json');
     echo json_encode($response);
     exit();
 }
 
-// Process payment form submission
+// Process payment form submission (Mobile Money and Pay on Delivery only)
 if ($_SERVER["REQUEST_METHOD"] == "POST" && !isset($_POST['submit_feedback'])) {
-    $phone = $conn->real_escape_string($_POST['phone']);
-    $location = $conn->real_escape_string($_POST['location']);
-    $username = $conn->real_escape_string($_SESSION['username']);
     $payment_method = isset($_POST['payment_method']) ? $_POST['payment_method'] : '';
 
-    // Validate phone number (Ugandan format: 07X-XXX-XXXX or +256XXX-XXXX)
-    if (!preg_match("/^(07[0-9]{8}|\+256[0-9]{8})$/", $phone)) {
-        $message = "Invalid phone number. Use format 07X-XXX-XXXX or +256XXX-XXXX.";
-    } elseif (!in_array($payment_method, ['Mobile Money', 'Pay on Delivery'])) {
-        $message = "Invalid payment method.";
-    } elseif (empty($location) || strlen($location) > 255) {
-        $message = "Location is required and must be 255 characters or less.";
-    } else {
-        $amount = $payment_method === 'Mobile Money' ? floatval($_POST['amount']) : NULL;
+    if ($payment_method === 'Mobile Money' || $payment_method === 'Pay on Delivery') {
+        $phone = $conn->real_escape_string($_POST['phone']);
+        $location = $conn->real_escape_string($_POST['location']);
+        $username = $conn->real_escape_string($_SESSION['username']);
 
-        // Insert into pending_deliveries for each cart item
-        foreach ($cart_items as $item) {
-            $cart_id = $item['cart_id'];
-            $stmt = $conn->prepare("INSERT INTO pending_deliveries (user_id, username, phone, payment_method, amount, cart_id, location, status) 
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending')");
-            $stmt->bind_param("isssdis", $user_id, $username, $phone, $payment_method, $amount, $cart_id, $location);
-            if ($stmt->execute() === false) {
-                $message = "Failed to save delivery details: " . $stmt->error;
-                error_log("Failed to save delivery: " . $stmt->error);
+        // Validate phone number (Ugandan format: 07X-XXX-XXXX or +256XXX-XXXX)
+        if (!preg_match("/^(07[0-9]{8}|\+256[0-9]{8})$/", $phone)) {
+            $message = "Invalid phone number. Use format 07X-XXX-XXXX or +256XXX-XXXX.";
+        } elseif (empty($location) || strlen($location) > 255) {
+            $message = "Location is required and must be 255 characters or less.";
+        } else {
+            $amount = $payment_method === 'Mobile Money' ? floatval($_POST['amount']) : NULL;
+
+            // Insert into pending_deliveries for each cart item
+            foreach ($cart_items as $item) {
+                $cart_id = $item['cart_id'];
+                $stmt = $conn->prepare("INSERT INTO pending_deliveries (user_id, username, phone, payment_method, amount, cart_id, location, status) 
+                                        VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending')");
+                $stmt->bind_param("isssdis", $user_id, $username, $phone, $payment_method, $amount, $cart_id, $location);
+                if ($stmt->execute() === false) {
+                    $message = "Failed to save delivery details: " . $stmt->error;
+                    error_log("Failed to save delivery: " . $stmt->error);
+                    $stmt->close();
+                    break;
+                }
                 $stmt->close();
-                break;
+
+                // Remove the item from cart
+                $stmt = $conn->prepare("DELETE FROM cart WHERE id = ? AND user_id = ?");
+                $stmt->bind_param("ii", $cart_id, $user_id);
+                $stmt->execute();
+                $stmt->close();
             }
-            $stmt->close();
 
-            // Remove the item from cart
-            $stmt = $conn->prepare("DELETE FROM cart WHERE id = ? AND user_id = ?");
-            $stmt->bind_param("ii", $cart_id, $user_id);
-            $stmt->execute();
-            $stmt->close();
-        }
-
-        if (!isset($message)) {
-            if ($payment_method === 'Mobile Money') {
-                $message = "Payment of UGX " . number_format($amount) . " initiated via Mobile Money to " . htmlspecialchars($phone) . ". Please confirm on your phone.";
-            } else {
-                $message = "Pay on Delivery requested to " . htmlspecialchars($phone) . " at " . htmlspecialchars($location) . ". We will contact you to confirm delivery details.";
+            if (!isset($message)) {
+                if ($payment_method === 'Mobile Money') {
+                    $message = "Payment of UGX " . number_format($amount) . " initiated via Mobile Money to " . htmlspecialchars($phone) . ". Please confirm on your phone.";
+                } else {
+                    $message = "Pay on Delivery requested to " . htmlspecialchars($phone) . " at " . htmlspecialchars($location) . ". We will contact you to confirm delivery details.";
+                }
             }
         }
     }
+    // Stripe and PayPal processing is disabled for UI-only focus
 }
 
 // Set user_email to empty string (no email column in users table)
@@ -134,10 +140,14 @@ $user_email = '';
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Payment - Bugema CampusShop</title>
+    <script src="https://js.stripe.com/v3/"></script>
+    <!-- PayPal SDK included but not initialized -->
+    <script src="https://www.paypal.com/sdk/js?client-id=your_paypal_client_id&currency=UGX"></script>
     <style>
         :root {
             --primary-green: #091bbeff;
@@ -226,7 +236,7 @@ $user_email = '';
             cursor: pointer;
         }
 
-         .mobile-menu {
+        .mobile-menu {
             position: fixed;
             top: 0;
             right: -100%;
@@ -271,7 +281,8 @@ $user_email = '';
             transition: background 0.3s ease;
         }
 
-        .mobile-nav a:hover, .mobile-nav a.active {
+        .mobile-nav a:hover,
+        .mobile-nav a.active {
             background: var(--secondary-green);
             color: var(--white);
         }
@@ -327,7 +338,6 @@ $user_email = '';
             flex-direction: column;
             gap: 10px;
             z-index: 1000;
-            font-size: 2rem;
         }
 
         .floating-btn {
@@ -394,7 +404,8 @@ $user_email = '';
             align-items: center;
         }
 
-        .bottom-bar-actions a, .bottom-bar-actions button {
+        .bottom-bar-actions a,
+        .bottom-bar-actions button {
             background: var(--accent-yellow);
             color: var(--dark-gray);
             padding: 3px;
@@ -412,12 +423,14 @@ $user_email = '';
             border: none;
         }
 
-        .bottom-bar-actions a:hover, .bottom-bar-actions button:hover {
+        .bottom-bar-actions a:hover,
+        .bottom-bar-actions button:hover {
             background: var(--secondary-green);
             color: var(--white);
         }
 
-        .bottom-bar-actions a::after, .bottom-bar-actions button::after {
+        .bottom-bar-actions a::after,
+        .bottom-bar-actions button::after {
             content: attr(data-tooltip);
             position: absolute;
             bottom: 50px;
@@ -434,7 +447,8 @@ $user_email = '';
             transition: opacity 0.2s ease, visibility 0.2s ease;
         }
 
-        .bottom-bar-actions a:hover::after, .bottom-bar-actions button:hover::after {
+        .bottom-bar-actions a:hover::after,
+        .bottom-bar-actions button:hover::after {
             opacity: 1;
             visibility: visible;
         }
@@ -554,6 +568,62 @@ $user_email = '';
             color: var(--text-gray);
         }
 
+        .payment-options {
+            margin-top: 1.5rem;
+            align-items: center;
+        }
+
+        .payment-option {
+            margin-bottom: 1rem;
+            align-items: center;
+        }
+
+        .payment-option-header {
+            background: var(--light-gray);
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 1rem;
+            font-weight: 500;
+            color: var(--dark-gray);
+            transition: background 0.3s ease;
+        }
+
+        .payment-option-header:hover {
+            background: var(--secondary-green);
+            color: var(--white);
+        }
+
+        .payment-option-header img {
+            width: 70px;
+            height: 40px;
+            margin-right: 10px;
+        }
+
+        .payment-option-header .toggle-icon::after {
+            content: '▼';
+            font-size: 0.8rem;
+        }
+
+        .payment-option-header.active .toggle-icon::after {
+            content: '▲';
+        }
+
+        .payment-option-content {
+            display: none;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 0.5rem;
+            background: var(--white);
+        }
+
+        .payment-option-content.active {
+            display: block;
+        }
+
         .payment-container label {
             display: block;
             font-size: 0.9rem;
@@ -597,6 +667,30 @@ $user_email = '';
             background: var(--secondary-green);
             color: var(--white);
             transform: translateY(-2px);
+        }
+
+        #card-element {
+            padding: 10px;
+            border: 1px solid var(--text-gray);
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            background: var(--white);
+        }
+
+        #paypal-button-container {
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .paypal-placeholder {
+            background: #003087;
+            color: var(--white);
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            text-align: center;
+            margin-bottom: 1rem;
         }
 
         .message {
@@ -710,7 +804,10 @@ $user_email = '';
         }
 
         @media (min-width: 769px) {
-            .menu-icon, .mobile-menu, .bottom-bar {
+
+            .menu-icon,
+            .mobile-menu,
+            .bottom-bar {
                 display: none;
             }
 
@@ -750,6 +847,10 @@ $user_email = '';
                 font-size: 0.9rem;
                 padding: 8px 15px;
             }
+
+            .payment-option-header {
+                font-size: 0.9rem;
+            }
         }
 
         @keyframes fadeIn {
@@ -757,6 +858,7 @@ $user_email = '';
                 opacity: 0;
                 transform: translateY(20px);
             }
+
             to {
                 opacity: 1;
                 transform: translateY(0);
@@ -764,6 +866,7 @@ $user_email = '';
         }
     </style>
 </head>
+
 <body>
     <header>
         <div class="container">
@@ -840,123 +943,233 @@ $user_email = '';
                     <?php echo htmlspecialchars($message); ?>
                 </p>
             <?php endif; ?>
-            <form method="POST">
-                <input type="hidden" name="payment_method" value="Mobile Money">
-                <label for="phone">Mobile Money Number</label>
-                <input type="text" id="phone" name="phone" placeholder="e.g., 0771234567 or +256771234567" required>
-                <label for="location">Delivery Location</label>
-                <input type="text" id="location" name="location" placeholder="e.g., Room 12, Hostel A, Bugema University" required>
-                <label for="amount">Total Amount (UGX)</label>
-                <input type="number" id="amount" name="amount" value="<?php echo number_format($total, 0, '', ''); ?>" readonly>
-                <button type="submit">Pay with Mobile Money</button>
-            </form>
-            <form method="POST">
-                <input type="hidden" name="payment_method" value="Pay on Delivery">
-                <label for="phone_cod">Phone Number for Delivery</label>
-                <input type="text" id="phone_cod" name="phone" placeholder="e.g., 0771234567 or +256771234567" required>
-                <label for="location_cod">Delivery Location</label>
-                <input type="text" id="location_cod" name="location" placeholder="e.g., Room 12, Hostel A, Bugema University" required>
-                <button type="submit">Pay on Delivery</button>
-            </form>
+            <div class="payment-options">
+                <!-- Mobile Money -->
+                <div class="payment-option">
+                    <div class="payment-option-header">
+                        <span>
+                            <img src="images/mobile money.png" alt="Mobile Money">
+                            Mobile Money
+                        </span>
+                        <span class="toggle-icon"></span>
+                    </div>
+                    <div class="payment-option-content">
+                        <div class="payment-container">
+                            <form id="mobile-money-form" method="POST">
+                            <input type="hidden" name="payment_method" value="Mobile Money">
+                            <label for="phone_mm">Mobile Money Number</label>
+                            <input type="text" id="phone_mm" name="phone" placeholder="e.g., 0771234567 or +256771234567" required>
+                            <label for="location_mm">Delivery Location</label>
+                            <input type="text" id="location_mm" name="location" placeholder="e.g., Room 12, Hostel A, Bugema University" required>
+                            <label for="amount_mm">Total Amount (UGX)</label>
+                            <input type="number" id="amount_mm" name="amount" value="<?php echo number_format($total, 0, '', ''); ?>" readonly>
+                            <button type="submit">Pay with Mobile Money</button>
+                        </form>
+                        </div>
+                    </div>
+                </div>
+                <!-- Pay on Delivery -->
+                <div class="payment-option">
+                    <div class="payment-option-header">
+                        <span>
+                            <img src="images/pay on delivery.jpeg" alt="Pay on Delivery">
+                            Pay on Delivery
+                        </span>
+                        <span class="toggle-icon"></span>
+                    </div>
+                    <div class="payment-option-content">
+                        <div class="payment-container">
+                            <form id="cod-form" method="POST">
+                            <input type="hidden" name="payment_method" value="Pay on Delivery">
+                            <label for="phone_cod">Phone Number for Delivery</label>
+                            <input type="text" id="phone_cod" name="phone" placeholder="e.g., 0771234567 or +256771234567" required>
+                            <label for="location_cod">Delivery Location</label>
+                            <input type="text" id="location_cod" name="location" placeholder="e.g., Room 12, Hostel A, Bugema University" required>
+                            <button type="submit">Pay on Delivery</button>
+                        </form>
+                        </div>
+                    </div>
+                </div>
+                <!-- Visa/Mastercard (Stripe) -->
+                <div class="payment-option">
+                    <div class="payment-option-header">
+                        <span>
+                            <img src="images/visa.png" alt="Visa/Mastercard">
+                            Visa/Mastercard
+                        </span>
+                        <span class="toggle-icon"></span>
+                    </div>
+                    <div class="payment-option-content">
+                        <div class="payment-container">
+                            <form id="stripe-form" method="POST">
+                            <input type="hidden" name="payment_method" value="Stripe">
+                            <label for="phone_stripe">Phone Number for Delivery</label>
+                            <input type="text" id="phone_stripe" name="phone" placeholder="e.g., 0771234567 or +256771234567" required>
+                            <label for="location_stripe">Delivery Location</label>
+                            <input type="text" id="location_stripe" name="location" placeholder="e.g., Room 12, Hostel A, Bugema University" required>
+                            <label for="card-element">Credit or Debit Card</label>
+                            <div id="card-element"></div>
+                            <div id="card-errors" role="alert" class="error" style="display: none;"></div>
+                            <button type="submit">Pay with Visa/Mastercard</button>
+                        </form>
+                        </div>
+                    </div>
+                </div>
+                <!-- PayPal -->
+                <div class="payment-option">
+                    <div class="payment-option-header">
+                        <span>
+                            <img src="images/paypal.png" alt="PayPal">
+                            PayPal
+                        </span>
+                        <span class="toggle-icon"></span>
+                    </div>
+                    <div class="payment-option-content">
+                        <div id="paypal-button-container" class="paypal-placeholder">PayPal Checkout (Coming Soon)</div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
     <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const menuIcon = document.querySelector('.menu-icon');
-        const mobileMenu = document.querySelector('.mobile-menu');
-        const closeIcon = document.querySelector('.close-icon');
-        const feedbackBtn = document.getElementById('floating-feedback-btn');
-        const mobileFeedbackBtn = document.getElementById('mobile-feedback-btn');
-        const feedbackModal = document.getElementById('feedback-modal');
-        const feedbackModalClose = document.getElementById('feedback-modal-close');
-        const feedbackForm = document.getElementById('feedback-form');
-        const feedbackMessage = document.getElementById('feedback-message');
+        document.addEventListener('DOMContentLoaded', function() {
+            const menuIcon = document.querySelector('.menu-icon');
+            const mobileMenu = document.querySelector('.mobile-menu');
+            const closeIcon = document.querySelector('.close-icon');
+            const feedbackBtn = document.getElementById('floating-feedback-btn');
+            const mobileFeedbackBtn = document.getElementById('mobile-feedback-btn');
+            const feedbackModal = document.getElementById('feedback-modal');
+            const feedbackModalClose = document.getElementById('feedback-modal-close');
+            const feedbackForm = document.getElementById('feedback-form');
+            const feedbackMessage = document.getElementById('feedback-message');
 
-        menuIcon.addEventListener('click', function() {
-            mobileMenu.classList.add('active');
-        });
+            // Accordion functionality for payment options
+            const paymentHeaders = document.querySelectorAll('.payment-option-header');
+            paymentHeaders.forEach(header => {
+                header.addEventListener('click', function() {
+                    const content = this.nextElementSibling;
+                    const isActive = content.classList.contains('active');
 
-        closeIcon.addEventListener('click', function() {
-            mobileMenu.classList.remove('active');
-        });
+                    // Close all other sections
+                    document.querySelectorAll('.payment-option-content').forEach(c => {
+                        c.classList.remove('active');
+                        c.previousElementSibling.classList.remove('active');
+                    });
 
-        mobileMenu.addEventListener('click', function(e) {
-            if (e.target.classList.contains('mobile-nav') || e.target.tagName === 'A') {
+                    // Toggle current section
+                    if (!isActive) {
+                        content.classList.add('active');
+                        this.classList.add('active');
+                    }
+                });
+            });
+
+            // Simulate Stripe card element (for UI only)
+            const cardElement = document.getElementById('card-element');
+            cardElement.innerHTML = '<input type="text" placeholder="Card Number (e.g., 4242 4242 4242 4242)" disabled><input type="text" placeholder="MM/YY" disabled><input type="text" placeholder="CVC" disabled>';
+            cardElement.style.display = 'flex';
+            cardElement.style.gap = '10px';
+            cardElement.querySelectorAll('input').forEach(input => {
+                input.style.flex = '1';
+                input.style.padding = '10px';
+                input.style.border = '1px solid var(--text-gray)';
+                input.style.borderRadius = '8px';
+                input.style.background = '#f3f4f6';
+            });
+
+            // Disable Stripe and PayPal form submissions for now
+            document.getElementById('stripe-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                alert('Visa/Mastercard payment is not yet enabled. Please use Mobile Money or Pay on Delivery.');
+            });
+
+            // Feedback form handling
+            menuIcon.addEventListener('click', function() {
+                mobileMenu.classList.add('active');
+            });
+
+            closeIcon.addEventListener('click', function() {
                 mobileMenu.classList.remove('active');
-            }
-        });
+            });
 
-        feedbackBtn.addEventListener('click', function() {
-            feedbackModal.style.display = 'flex';
-            feedbackMessage.style.display = 'none';
-        });
+            mobileMenu.addEventListener('click', function(e) {
+                if (e.target.classList.contains('mobile-nav') || e.target.tagName === 'A') {
+                    mobileMenu.classList.remove('active');
+                }
+            });
 
-        mobileFeedbackBtn.addEventListener('click', function() {
-            feedbackModal.style.display = 'flex';
-            feedbackMessage.style.display = 'none';
-        });
+            feedbackBtn.addEventListener('click', function() {
+                feedbackModal.style.display = 'flex';
+                feedbackMessage.style.display = 'none';
+            });
 
-        feedbackModalClose.addEventListener('click', function() {
-            feedbackModal.style.display = 'none';
-            feedbackForm.reset();
-            feedbackMessage.style.display = 'none';
-        });
+            mobileFeedbackBtn.addEventListener('click', function() {
+                feedbackModal.style.display = 'flex';
+                feedbackMessage.style.display = 'none';
+            });
 
-        feedbackModal.addEventListener('click', function(e) {
-            if (e.target === feedbackModal) {
+            feedbackModalClose.addEventListener('click', function() {
                 feedbackModal.style.display = 'none';
                 feedbackForm.reset();
                 feedbackMessage.style.display = 'none';
-            }
-        });
+            });
 
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') {
-                if (feedbackModal.style.display === 'flex') {
+            feedbackModal.addEventListener('click', function(e) {
+                if (e.target === feedbackModal) {
                     feedbackModal.style.display = 'none';
                     feedbackForm.reset();
                     feedbackMessage.style.display = 'none';
                 }
-            }
-        });
+            });
 
-       feedbackForm.addEventListener('submit', function(e) {
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    if (feedbackModal.style.display === 'flex') {
+                        feedbackModal.style.display = 'none';
+                        feedbackForm.reset();
+                        feedbackMessage.style.display = 'none';
+                    }
+                }
+            });
+
+            feedbackForm.addEventListener('submit', function(e) {
                 e.preventDefault();
                 const formData = new FormData(feedbackForm);
-                formData.append('submit_feedback', 'true'); // Ensure submit_feedback is sent
+                formData.append('submit_feedback', 'true');
                 fetch('index.php', {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok: ' + response.statusText);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    feedbackMessage.style.display = 'block';
-                    feedbackMessage.className = `feedback-message ${data.success ? 'success' : 'error'}`;
-                    feedbackMessage.textContent = data.message;
-                    if (data.success) {
-                        feedbackForm.reset();
-                        setTimeout(() => {
-                            feedbackModal.style.display = 'none';
-                            feedbackMessage.style.display = 'none';
-                        }, 2000);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error details:', error);
-                    feedbackMessage.style.display = 'block';
-                    feedbackMessage.className = 'feedback-message error';
-                    feedbackMessage.textContent = 'An error occurred: ' + error.message;
-                });
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok: ' + response.statusText);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        feedbackMessage.style.display = 'block';
+                        feedbackMessage.className = `feedback-message ${data.success ? 'success' : 'error'}`;
+                        feedbackMessage.textContent = data.message;
+                        if (data.success) {
+                            feedbackForm.reset();
+                            setTimeout(() => {
+                                feedbackModal.style.display = 'none';
+                                feedbackMessage.style.display = 'none';
+                            }, 2000);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error details:', error);
+                        feedbackMessage.style.display = 'block';
+                        feedbackMessage.className = 'feedback-message error';
+                        feedbackMessage.textContent = 'An error occurred: ' + error.message;
+                    });
             });
-    });
+        });
     </script>
 </body>
+
 </html>
 
 <?php
