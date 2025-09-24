@@ -1567,7 +1567,7 @@ $user_email = '';
 
     <section class="best-sellers">
         <div class="container">
-            <h2>Best Sellers</h2>
+            <h2>Best & Most Sells</h2>
             <div class="slider-container">
                 <button class="slider-arrow left">◀</button>
                 <div class="slider-track">
