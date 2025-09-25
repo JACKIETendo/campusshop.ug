@@ -1403,13 +1403,13 @@ $user_email = '';
     <div class="bottom-bar">
         <div class="bottom-bar-actions">
             <?php if (isset($_SESSION['username'])): ?>
-                <a href="index.php" data-tooltip="Home">🏠</a>
+                <a href="profile.php" data-tooltip="Profile">👤</a>
                 <a href="favorites.php" data-tooltip="Favorites">❤️ <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
                 <a href="cart.php" data-tooltip="Cart" class="active">🛒 <span class="cart-count"><?php echo $cart_count; ?></span></a>
                 <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback">💬</button>
                 <a href="https://wa.me/+256755087665" target="_blank" data-tooltip="Help">📞</a>
             <?php else: ?>
-                <a href="index.php" data-tooltip="Home">🏠</a>
+                <a href="profile.php" data-tooltip="Profile">👤</a>
                 <a href="favorites.php" data-tooltip="Favorites">❤️ <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
                 <a href="cart.php" data-tooltip="Cart" class="active">🛒 <span class="cart-count"><?php echo array_sum($_SESSION['guest_cart']); ?></span></a>
                 <a href="login.php" data-tooltip="Login">🔑</a>

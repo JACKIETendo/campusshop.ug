@@ -1195,6 +1195,7 @@ $user_email = '';
     <div class="bottom-bar">
         <div class="bottom-bar-actions">
             <?php if (isset($_SESSION['username'])): ?>
+                <a href="profile.php" data-tooltip="Profile">👤</a>
                 <a href="favorites.php" data-tooltip="Favorites">❤️ <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
                 <a href="cart.php" data-tooltip="Cart">🛒 <span class="cart-count">
                     <?php

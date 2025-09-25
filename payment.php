@@ -897,6 +897,7 @@ $user_email = '';
 
     <div class="bottom-bar">
         <div class="bottom-bar-actions">
+            <a href="profile.php" data-tooltip="Profile">👤</a>
             <a href="index.php" data-tooltip="Home">🏠</a>
             <a href="cart.php" data-tooltip="Cart">🛒</a>
             <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback">💬</button>
