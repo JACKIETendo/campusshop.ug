@@ -107,6 +107,23 @@ if (isset($_GET['complete_delivery'])) {
         $message = "Delivery marked as completed.";
     }
 }
+
+// Handle send notification
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_notification'])) {
+    $notification_message = trim($conn->real_escape_string($_POST['message']));
+    if (empty($notification_message)) {
+        $message = "Notification message cannot be empty.";
+    } else {
+        // Send to all users (user_id = NULL for broadcast)
+        $sql = "INSERT INTO notifications (user_id, message, created_at) VALUES (NULL, '$notification_message', NOW())";
+        if ($conn->query($sql) === false) {
+            $message = "Failed to send notification: " . $conn->error;
+            error_log("Failed to send notification: " . $conn->error);
+        } else {
+            $message = "Notification sent successfully.";
+        }
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -438,6 +455,18 @@ if (isset($_GET['complete_delivery'])) {
             </form>
         </div>
 
+        <!-- Send Notification Form -->
+        <div class="dashboard-section">
+            <h2>Send Notification</h2>
+            <form method="POST" action="admin_dashboard.php">
+                <div class="form-group">
+                    <label for="message">Notification Message</label>
+                    <textarea name="message" required placeholder="Enter notification message (e.g., New stock available!)"></textarea>
+                </div>
+                <button type="submit" name="send_notification">Send Notification</button>
+            </form>
+        </div>
+
         <!-- Product List -->
         <div class="dashboard-section">
             <h2>Manage Products</h2>
@@ -494,7 +523,6 @@ if (isset($_GET['complete_delivery'])) {
                     <th>Actions</th>
                 </tr>
                 <?php
-                // Check if table exists
                 $sql = "SHOW TABLES LIKE 'pending_deliveries'";
                 $table_check = $conn->query($sql);
                 if ($table_check->num_rows === 0) {

@@ -419,16 +419,17 @@ $user_email = '';
             color: var(--white);
         }
 
-        .username {
+        .username a {
             color: var(--white);
             font-size: 1.1rem;
             font-weight: 500;
             padding: 10px 20px;
             border-radius: 8px;
             transition: color 0.3s ease;
+            text-decoration: none;
         }
 
-        .username:hover {
+        .username a:hover {
             color: var(--accent-yellow);
             text-decoration: underline;
         }
@@ -1367,7 +1368,7 @@ $user_email = '';
                 </div>
                 <div class="header-actions">
                     <?php if (isset($_SESSION['username'])): ?>
-                        <span class="username">Hi, <?php echo htmlspecialchars($_SESSION['username']); ?></span>
+                        <span class="username"><a href="profile.php">Hi, <?php echo htmlspecialchars($_SESSION['username']); ?></a></span>
                         <a href="logout.php" class="header-btn">Logout</a>
                         <a href="favorites.php" class="header-btn favorites-btn">
                             ❤️ Favorites
@@ -1416,7 +1417,7 @@ $user_email = '';
             <div class="mobile-menu">
                 <button class="close-icon">✖</button>
                 <?php if (isset($_SESSION['username'])): ?>
-                    <span class="mobile-username">Hi, <?php echo htmlspecialchars($_SESSION['username']); ?></span>
+                    <span class="mobile-username"><a href="profile.php">Hi, <?php echo htmlspecialchars($_SESSION['username']); ?></a></span>
                 <?php endif; ?>
                 <div class="mobile-search-bar">
                     <input type="text" class="search-input" placeholder="Search for Textbooks, Branded Jumpers, Pens...">

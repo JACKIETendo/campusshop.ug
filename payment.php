@@ -316,7 +316,7 @@ $user_email = '';
             color: var(--white);
         }
 
-        .username {
+        .username a {
             color: var(--white);
             font-size: 1.1rem;
             font-weight: 500;
@@ -325,7 +325,7 @@ $user_email = '';
             transition: color 0.3s ease;
         }
 
-        .username:hover {
+        .username a:hover {
             color: var(--accent-yellow);
             text-decoration: underline;
         }
@@ -843,7 +843,7 @@ $user_email = '';
                 font-size: 0.8rem;
             }
 
-            .username {
+            .username a {
                 font-size: 0.9rem;
                 padding: 8px 15px;
             }
@@ -877,7 +877,7 @@ $user_email = '';
                 </div>
                 <button class="menu-icon">☰</button>
                 <div class="header-actions">
-                    <span class="username">Hi, <?php echo htmlspecialchars($_SESSION['username']); ?></span>
+                    <span class="username"><a href="profile.php">Hi, <?php echo htmlspecialchars($_SESSION['username']); ?></a></span>
                     <a href="index.php" class="header-btn">Home</a>
                     <a href="cart.php" class="header-btn">Cart</a>
                     <a href="logout.php" class="header-btn">Logout</a>
@@ -885,7 +885,7 @@ $user_email = '';
             </div>
             <div class="mobile-menu">
                 <button class="close-icon">✖</button>
-                <span class="mobile-username">Hi, <?php echo htmlspecialchars($_SESSION['username']); ?></span>
+                <span class="mobile-username"><a href="profile.php">Hi, <?php echo htmlspecialchars($_SESSION['username']); ?></a></span>
                 <div class="mobile-nav">
                     <a href="index.php">Home</a>
                     <a href="cart.php">Cart</a>
