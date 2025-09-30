@@ -87,6 +87,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_feedback'])) {
 // Process payment form submission (Mobile Money and Pay on Delivery only)
 if ($_SERVER["REQUEST_METHOD"] == "POST" && !isset($_POST['submit_feedback'])) {
     $payment_method = isset($_POST['payment_method']) ? $_POST['payment_method'] : '';
+    $network_provider = isset($_POST['network_provider']) ? $_POST['network_provider'] : '';
 
     if ($payment_method === 'Mobile Money' || $payment_method === 'Pay on Delivery') {
         $phone = $conn->real_escape_string($_POST['phone']);
@@ -98,15 +99,17 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && !isset($_POST['submit_feedback'])) {
             $message = "Invalid phone number. Use format 07X-XXX-XXXX or +256XXX-XXXX.";
         } elseif (empty($location) || strlen($location) > 255) {
             $message = "Location is required and must be 255 characters or less.";
+        } elseif ($payment_method === 'Mobile Money' && empty($network_provider)) {
+            $message = "Please select a network provider (Airtel or MTN).";
         } else {
             $amount = $payment_method === 'Mobile Money' ? floatval($_POST['amount']) : NULL;
 
             // Insert into pending_deliveries for each cart item
             foreach ($cart_items as $item) {
                 $cart_id = $item['cart_id'];
-                $stmt = $conn->prepare("INSERT INTO pending_deliveries (user_id, username, phone, payment_method, amount, cart_id, location, status) 
-                                        VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending')");
-                $stmt->bind_param("isssdis", $user_id, $username, $phone, $payment_method, $amount, $cart_id, $location);
+                $stmt = $conn->prepare("INSERT INTO pending_deliveries (user_id, username, phone, payment_method, amount, cart_id, location, status, network_provider) 
+                                        VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending', ?)");
+                $stmt->bind_param("isssdiss", $user_id, $username, $phone, $payment_method, $amount, $cart_id, $location, $network_provider);
                 if ($stmt->execute() === false) {
                     $message = "Failed to save delivery details: " . $stmt->error;
                     error_log("Failed to save delivery: " . $stmt->error);
@@ -124,7 +127,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && !isset($_POST['submit_feedback'])) {
 
             if (!isset($message)) {
                 if ($payment_method === 'Mobile Money') {
-                    $message = "Payment of UGX " . number_format($amount) . " initiated via Mobile Money to " . htmlspecialchars($phone) . ". Please confirm on your phone.";
+                    $message = "Payment of UGX " . number_format($amount) . " initiated via " . htmlspecialchars($network_provider) . " Mobile Money to " . htmlspecialchars($phone) . ". Please confirm on your phone.";
                 } else {
                     $message = "Pay on Delivery requested to " . htmlspecialchars($phone) . " at " . htmlspecialchars($location) . ". We will contact you to confirm delivery details.";
                 }
@@ -649,6 +652,17 @@ $user_email = '';
             box-shadow: 0 0 5px rgba(5, 150, 105, 0.3);
         }
 
+        .payment-container select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--text-gray);
+            border-radius: 8px;
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+            background: var(--white);
+            cursor: pointer;
+        }
+
         .payment-container button {
             width: 100%;
             padding: 10px;
@@ -804,7 +818,6 @@ $user_email = '';
         }
 
         @media (min-width: 769px) {
-
             .menu-icon,
             .mobile-menu,
             .bottom-bar {
@@ -839,7 +852,8 @@ $user_email = '';
             }
 
             .payment-container input,
-            .payment-container button {
+            .payment-container button,
+            .payment-container select {
                 font-size: 0.8rem;
             }
 
@@ -858,7 +872,6 @@ $user_email = '';
                 opacity: 0;
                 transform: translateY(20px);
             }
-
             to {
                 opacity: 1;
                 transform: translateY(0);
@@ -957,15 +970,21 @@ $user_email = '';
                     <div class="payment-option-content">
                         <div class="payment-container">
                             <form id="mobile-money-form" method="POST">
-                            <input type="hidden" name="payment_method" value="Mobile Money">
-                            <label for="phone_mm">Mobile Money Number</label>
-                            <input type="text" id="phone_mm" name="phone" placeholder="e.g., 0771234567 or +256771234567" required>
-                            <label for="location_mm">Delivery Location</label>
-                            <input type="text" id="location_mm" name="location" placeholder="e.g., Room 12, Hostel A, Bugema University" required>
-                            <label for="amount_mm">Total Amount (UGX)</label>
-                            <input type="number" id="amount_mm" name="amount" value="<?php echo number_format($total, 0, '', ''); ?>" readonly>
-                            <button type="submit">Pay with Mobile Money</button>
-                        </form>
+                                <input type="hidden" name="payment_method" value="Mobile Money">
+                                <label for="network_provider">Select Network</label>
+                                <select id="network_provider" name="network_provider" required>
+                                    <option value="">Select Provider</option>
+                                    <option value="Airtel">Airtel</option>
+                                    <option value="MTN">MTN</option>
+                                </select>
+                                <label for="phone_mm">Mobile Money Number</label>
+                                <input type="text" id="phone_mm" name="phone" placeholder="e.g., 0771234567 or +256771234567" required>
+                                <label for="location_mm">Delivery Location</label>
+                                <input type="text" id="location_mm" name="location" placeholder="e.g., Room 12, Hostel A, Bugema University" required>
+                                <label for="amount_mm">Total Amount (UGX)</label>
+                                <input type="number" id="amount_mm" name="amount" value="<?php echo number_format($total, 0, '', ''); ?>" readonly>
+                                <button type="submit">Pay with Mobile Money</button>
+                            </form>
                         </div>
                     </div>
                 </div>
@@ -981,13 +1000,13 @@ $user_email = '';
                     <div class="payment-option-content">
                         <div class="payment-container">
                             <form id="cod-form" method="POST">
-                            <input type="hidden" name="payment_method" value="Pay on Delivery">
-                            <label for="phone_cod">Phone Number for Delivery</label>
-                            <input type="text" id="phone_cod" name="phone" placeholder="e.g., 0771234567 or +256771234567" required>
-                            <label for="location_cod">Delivery Location</label>
-                            <input type="text" id="location_cod" name="location" placeholder="e.g., Room 12, Hostel A, Bugema University" required>
-                            <button type="submit">Pay on Delivery</button>
-                        </form>
+                                <input type="hidden" name="payment_method" value="Pay on Delivery">
+                                <label for="phone_cod">Phone Number for Delivery</label>
+                                <input type="text" id="phone_cod" name="phone" placeholder="e.g., 0771234567 or +256771234567" required>
+                                <label for="location_cod">Delivery Location</label>
+                                <input type="text" id="location_cod" name="location" placeholder="e.g., Room 12, Hostel A, Bugema University" required>
+                                <button type="submit">Pay on Delivery</button>
+                            </form>
                         </div>
                     </div>
                 </div>
@@ -1003,16 +1022,16 @@ $user_email = '';
                     <div class="payment-option-content">
                         <div class="payment-container">
                             <form id="stripe-form" method="POST">
-                            <input type="hidden" name="payment_method" value="Stripe">
-                            <label for="phone_stripe">Phone Number for Delivery</label>
-                            <input type="text" id="phone_stripe" name="phone" placeholder="e.g., 0771234567 or +256771234567" required>
-                            <label for="location_stripe">Delivery Location</label>
-                            <input type="text" id="location_stripe" name="location" placeholder="e.g., Room 12, Hostel A, Bugema University" required>
-                            <label for="card-element">Credit or Debit Card</label>
-                            <div id="card-element"></div>
-                            <div id="card-errors" role="alert" class="error" style="display: none;"></div>
-                            <button type="submit">Pay with Visa/Mastercard</button>
-                        </form>
+                                <input type="hidden" name="payment_method" value="Stripe">
+                                <label for="phone_stripe">Phone Number for Delivery</label>
+                                <input type="text" id="phone_stripe" name="phone" placeholder="e.g., 0771234567 or +256771234567" required>
+                                <label for="location_stripe">Delivery Location</label>
+                                <input type="text" id="location_stripe" name="location" placeholder="e.g., Room 12, Hostel A, Bugema University" required>
+                                <label for="card-element">Credit or Debit Card</label>
+                                <div id="card-element"></div>
+                                <div id="card-errors" role="alert" class="error" style="display: none;"></div>
+                                <button type="submit">Pay with Visa/Mastercard</button>
+                            </form>
                         </div>
                     </div>
                 </div>
@@ -1138,34 +1157,34 @@ $user_email = '';
                 e.preventDefault();
                 const formData = new FormData(feedbackForm);
                 formData.append('submit_feedback', 'true');
-                fetch('index.php', {
-                        method: 'POST',
-                        body: formData
-                    })
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error('Network response was not ok: ' + response.statusText);
-                        }
-                        return response.json();
-                    })
-                    .then(data => {
-                        feedbackMessage.style.display = 'block';
-                        feedbackMessage.className = `feedback-message ${data.success ? 'success' : 'error'}`;
-                        feedbackMessage.textContent = data.message;
-                        if (data.success) {
-                            feedbackForm.reset();
-                            setTimeout(() => {
-                                feedbackModal.style.display = 'none';
-                                feedbackMessage.style.display = 'none';
-                            }, 2000);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error details:', error);
-                        feedbackMessage.style.display = 'block';
-                        feedbackMessage.className = 'feedback-message error';
-                        feedbackMessage.textContent = 'An error occurred: ' + error.message;
-                    });
+                fetch('payment.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok: ' + response.statusText);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    feedbackMessage.style.display = 'block';
+                    feedbackMessage.className = `feedback-message ${data.success ? 'success' : 'error'}`;
+                    feedbackMessage.textContent = data.message;
+                    if (data.success) {
+                        feedbackForm.reset();
+                        setTimeout(() => {
+                            feedbackModal.style.display = 'none';
+                            feedbackMessage.style.display = 'none';
+                        }, 2000);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error details:', error);
+                    feedbackMessage.style.display = 'block';
+                    feedbackMessage.className = 'feedback-message error';
+                    feedbackMessage.textContent = 'An error occurred: ' + error.message;
+                });
             });
         });
     </script>

@@ -860,6 +860,86 @@ $stmt->close();
             background: var(--error-red);
             color: var(--white);
         }
+        .chatbot-btn {
+            background: var(--light-gray);
+            color: blue;
+            padding: 10px 10px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s ease, color 0.3s ease;
+            margin: 0.5rem 0;
+        }
+
+        .chatbot-btn:hover {
+            background: var(--secondary-green);
+            color: var(--white);
+        }
+
+        .chatbot-form {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .chatbot-form input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid var(--text-gray);
+            border-radius: 8px;
+            font-size: 0.9rem;
+            color: var(--dark-gray);
+        }
+
+        .chatbot-form button {
+            background: var(--accent-yellow);
+            color: var(--dark-gray);
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s ease, color 0.3s ease;
+        }
+
+        .chatbot-form button:hover {
+            background: var(--secondary-green);
+            color: var(--white);
+        }
+
+        .chatbot-messages {
+            max-height: 300px;
+            overflow-y: auto;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--light-gray);
+            margin-bottom: 1rem;
+        }
+
+        .chatbot-message {
+            margin: 0.5rem 0;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+
+        .chatbot-message.user {
+            background: var(--primary-green);
+            color: var(--white);
+            margin-left: 20%;
+            border-bottom-right-radius: 0;
+        }
+
+        .chatbot-message.bot {
+            background: var(--white);
+            color: var(--dark-gray);
+            margin-right: 20%;
+            border-bottom-left-radius: 0;
+        }
 
         .modal {
             display: none;
@@ -1175,6 +1255,19 @@ $stmt->close();
             </form>
         </div>
     </div>
+    <div class="modal" id="chatbot-modal" role="dialog" aria-labelledby="chatbot-title">
+        <div class="modal-content">
+            <button class="modal-close" id="chatbot-modal-close" aria-label="Close chatbot">&times;</button>
+            <h2 id="chatbot-title">Chat with CampusShop Support</h2>
+            <div class="chatbot-messages" id="chatbot-messages">
+                <!-- Messages will be dynamically added here -->
+            </div>
+            <form id="chatbot-form" class="chatbot-form">
+                <input type="text" id="chatbot-input" name="chatbot_input" placeholder="Type your message..." required aria-label="Chatbot input">
+                <button type="submit" aria-label="Send message">Send</button>
+            </form>
+        </div>
+    </div>
 
     <section class="profile-container">
         <div class="profile-header">
@@ -1263,8 +1356,9 @@ $stmt->close();
                 <div class="profile-section">
                     <h2>Help Center</h2>
                     <div class="help-center">
-                        <p>Need assistance? Contact us via WhatsApp.</p>
-                        <a href="https://wa.me/+256755087665" target="_blank">📞 Contact Support</a>
+                        <p>Need assistance? Chat with our support bot or contact us via WhatsApp.</p>
+                        <button class="chatbot-btn" id="chatbot-btn">💬 Chat with Us</button>
+                        <a href="https://wa.me/+256755087665" target="_blank">📞 Contact Support via WhatsApp</a>
                     </div>
                 </div>
 
@@ -1312,217 +1406,308 @@ $stmt->close();
     </footer>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const observerOptions = {
-                threshold: 0.1,
-                rootMargin: '0px 0px -50px 0px'
-            };
+document.addEventListener('DOMContentLoaded', function() {
+    const observerOptions = {
+        threshold: 0.1,
+        rootMargin: '0px 0px -50px 0px'
+    };
 
-            const observer = new IntersectionObserver(function(entries) {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting) {
-                        entry.target.style.opacity = '1';
-                        entry.target.style.transform = 'translateY(0)';
-                    }
+    const observer = new IntersectionObserver(function(entries) {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.style.opacity = '1';
+                entry.target.style.transform = 'translateY(0)';
+            }
+        });
+    }, observerOptions);
+
+    document.querySelectorAll('.profile-section').forEach(el => {
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(20px)';
+        el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+        observer.observe(el);
+    });
+
+    const searchInput = document.querySelectorAll('.search-input');
+    const searchResults = document.querySelectorAll('.search-results');
+    let selectedIndex = -1;
+
+    function fetchSuggestions(query, resultsContainer) {
+        if (query.length >= 2) {
+            fetch(`search.php?query=${encodeURIComponent(query)}&type=autocomplete`)
+                .then(response => response.text())
+                .then(data => {
+                    resultsContainer.innerHTML = data;
+                    resultsContainer.classList.add('active');
+                    selectedIndex = -1;
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    resultsContainer.innerHTML = '<div class="no-results">Error fetching suggestions</div>';
+                    resultsContainer.classList.add('active');
                 });
-            }, observerOptions);
+        } else {
+            resultsContainer.innerHTML = '';
+            resultsContainer.classList.remove('active');
+        }
+    }
 
-            document.querySelectorAll('.profile-section').forEach(el => {
-                el.style.opacity = '0';
-                el.style.transform = 'translateY(20px)';
-                el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
-                observer.observe(el);
+    function fetchFullResults(query, resultsContainer) {
+        fetch(`search.php?query=${encodeURIComponent(query)}&type=full`)
+            .then(response => response.text())
+            .then(data => {
+                resultsContainer.innerHTML = data;
+                resultsContainer.classList.add('active');
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                resultsContainer.innerHTML = '<div class="no-results">Error fetching results</div>';
+                resultsContainer.classList.add('active');
             });
+    }
 
-            const searchInput = document.querySelectorAll('.search-input');
-            const searchResults = document.querySelectorAll('.search-results');
-            let selectedIndex = -1;
+    searchInput.forEach(input => {
+        input.addEventListener('input', function() {
+            const resultsContainer = this.parentElement.querySelector('.search-results');
+            fetchSuggestions(this.value.trim(), resultsContainer);
+        });
 
-            function fetchSuggestions(query, resultsContainer) {
-                if (query.length >= 2) {
-                    fetch(`search.php?query=${encodeURIComponent(query)}&type=autocomplete`)
-                        .then(response => response.text())
-                        .then(data => {
-                            resultsContainer.innerHTML = data;
-                            resultsContainer.classList.add('active');
-                            selectedIndex = -1;
-                        })
-                        .catch(error => {
-                            console.error('Error:', error);
-                            resultsContainer.innerHTML = '<div class="no-results">Error fetching suggestions</div>';
-                            resultsContainer.classList.add('active');
-                        });
-                } else {
-                    resultsContainer.innerHTML = '';
-                    resultsContainer.classList.remove('active');
-                }
+        input.addEventListener('keydown', function(e) {
+            const resultsContainer = this.parentElement.querySelector('.search-results');
+            const suggestions = resultsContainer.querySelectorAll('.suggestion');
+            if (suggestions.length === 0) return;
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                selectedIndex = Math.min(selectedIndex + 1, suggestions.length - 1);
+                updateSelection(suggestions);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                selectedIndex = Math.max(selectedIndex - 1, -1);
+                updateSelection(suggestions);
+            } else if (e.key === 'Enter' && selectedIndex >= 0) {
+                e.preventDefault();
+                const selectedSuggestion = suggestions[selectedIndex].textContent;
+                this.value = selectedSuggestion;
+                fetchFullResults(selectedSuggestion, resultsContainer);
             }
+        });
+    });
 
-            function fetchFullResults(query, resultsContainer) {
-                fetch(`search.php?query=${encodeURIComponent(query)}&type=full`)
-                    .then(response => response.text())
-                    .then(data => {
-                        resultsContainer.innerHTML = data;
-                        resultsContainer.classList.add('active');
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        resultsContainer.innerHTML = '<div class="no-results">Error fetching results</div>';
-                        resultsContainer.classList.add('active');
-                    });
+    function updateSelection(suggestions) {
+        suggestions.forEach((suggestion, index) => {
+            suggestion.classList.toggle('selected', index === selectedIndex);
+        });
+        if (selectedIndex >= 0) {
+            const activeInput = document.querySelector('.search-input:focus');
+            if (activeInput) activeInput.value = suggestions[selectedIndex].textContent;
+        }
+    }
+
+    searchResults.forEach(resultsContainer => {
+        resultsContainer.addEventListener('click', function(e) {
+            const suggestion = e.target.closest('.suggestion');
+            if (suggestion) {
+                const activeInput = document.querySelector('.search-input:focus') || document.querySelector('.search-input');
+                activeInput.value = suggestion.textContent;
+                fetchFullResults(suggestion.textContent, resultsContainer);
             }
+        });
+    });
 
-            searchInput.forEach(input => {
-                input.addEventListener('input', function() {
-                    const resultsContainer = this.parentElement.querySelector('.search-results');
-                    fetchSuggestions(this.value.trim(), resultsContainer);
-                });
-
-                input.addEventListener('keydown', function(e) {
-                    const resultsContainer = this.parentElement.querySelector('.search-results');
-                    const suggestions = resultsContainer.querySelectorAll('.suggestion');
-                    if (suggestions.length === 0) return;
-
-                    if (e.key === 'ArrowDown') {
-                        e.preventDefault();
-                        selectedIndex = Math.min(selectedIndex + 1, suggestions.length - 1);
-                        updateSelection(suggestions);
-                    } else if (e.key === 'ArrowUp') {
-                        e.preventDefault();
-                        selectedIndex = Math.max(selectedIndex - 1, -1);
-                        updateSelection(suggestions);
-                    } else if (e.key === 'Enter' && selectedIndex >= 0) {
-                        e.preventDefault();
-                        const selectedSuggestion = suggestions[selectedIndex].textContent;
-                        this.value = selectedSuggestion;
-                        fetchFullResults(selectedSuggestion, resultsContainer);
-                    }
-                });
-            });
-
-            function updateSelection(suggestions) {
-                suggestions.forEach((suggestion, index) => {
-                    suggestion.classList.toggle('selected', index === selectedIndex);
-                });
-                if (selectedIndex >= 0) {
-                    const activeInput = document.querySelector('.search-input:focus');
-                    if (activeInput) activeInput.value = suggestions[selectedIndex].textContent;
-                }
-            }
-
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.search-bar') && !e.target.closest('.search-results')) {
             searchResults.forEach(resultsContainer => {
-                resultsContainer.addEventListener('click', function(e) {
-                    const suggestion = e.target.closest('.suggestion');
-                    if (suggestion) {
-                        const activeInput = document.querySelector('.search-input:focus') || document.querySelector('.search-input');
-                        activeInput.value = suggestion.textContent;
-                        fetchFullResults(suggestion.textContent, resultsContainer);
-                    }
-                });
+                resultsContainer.classList.remove('active');
             });
+        }
+    });
 
-            document.addEventListener('click', function(e) {
-                if (!e.target.closest('.search-bar') && !e.target.closest('.search-results')) {
-                    searchResults.forEach(resultsContainer => {
-                        resultsContainer.classList.remove('active');
-                    });
-                }
-            });
+    const feedbackBtn = document.getElementById('floating-feedback-btn');
+    const mobileFeedbackBtn = document.getElementById('mobile-feedback-btn');
+    const feedbackModal = document.getElementById('feedback-modal');
+    const feedbackModalClose = document.getElementById('feedback-modal-close');
+    const feedbackForm = document.getElementById('feedback-form');
+    const feedbackMessage = document.getElementById('feedback-message');
 
-            const feedbackBtn = document.getElementById('floating-feedback-btn');
-            const mobileFeedbackBtn = document.getElementById('mobile-feedback-btn');
-            const feedbackModal = document.getElementById('feedback-modal');
-            const feedbackModalClose = document.getElementById('feedback-modal-close');
-            const feedbackForm = document.getElementById('feedback-form');
-            const feedbackMessage = document.getElementById('feedback-message');
+    feedbackBtn.addEventListener('click', function() {
+        feedbackModal.style.display = 'flex';
+        feedbackMessage.style.display = 'none';
+    });
 
-            feedbackBtn.addEventListener('click', function() {
-                feedbackModal.style.display = 'flex';
-                feedbackMessage.style.display = 'none';
-            });
+    mobileFeedbackBtn.addEventListener('click', function() {
+        feedbackModal.style.display = 'flex';
+        feedbackMessage.style.display = 'none';
+    });
 
-            mobileFeedbackBtn.addEventListener('click', function() {
-                feedbackModal.style.display = 'flex';
-                feedbackMessage.style.display = 'none';
-            });
+    feedbackModalClose.addEventListener('click', function() {
+        feedbackModal.style.display = 'none';
+        feedbackForm.reset();
+        feedbackMessage.style.display = 'none';
+    });
 
-            feedbackModalClose.addEventListener('click', function() {
+    feedbackModal.addEventListener('click', function(e) {
+        if (e.target === feedbackModal) {
+            feedbackModal.style.display = 'none';
+            feedbackForm.reset();
+            feedbackMessage.style.display = 'none';
+        }
+    });
+
+    feedbackForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData(feedbackForm);
+        formData.append('submit_feedback', 'true');
+        fetch('profile.php', { // Changed to profile.php
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok: ' + response.statusText);
+            }
+            return response.json();
+        })
+        .then(data => {
+            feedbackMessage.style.display = 'block';
+            feedbackMessage.className = `feedback-message ${data.success ? 'success' : 'error'}`;
+            feedbackMessage.textContent = data.message;
+            if (data.success) {
+                feedbackForm.reset();
+                setTimeout(() => {
+                    feedbackModal.style.display = 'none';
+                    feedbackMessage.style.display = 'none';
+                }, 2000);
+            }
+        })
+        .catch(error => {
+            console.error('Error details:', error);
+            feedbackMessage.style.display = 'block';
+            feedbackMessage.className = 'feedback-message error';
+            feedbackMessage.textContent = 'An error occurred: ' + error.message;
+        });
+    });
+
+    const menuIcon = document.querySelector('.menu-icon');
+    const mobileMenu = document.querySelector('.mobile-menu');
+    const closeIcon = document.querySelector('.close-icon');
+
+    menuIcon.addEventListener('click', function() {
+        mobileMenu.classList.add('active');
+    });
+
+    closeIcon.addEventListener('click', function() {
+        mobileMenu.classList.remove('active');
+    });
+
+    mobileMenu.addEventListener('click', function(e) {
+        if (e.target.classList.contains('mobile-nav') || e.target.tagName === 'A') {
+            mobileMenu.classList.remove('active');
+        }
+    });
+
+    // Chatbot functionality
+    const chatbotBtn = document.getElementById('chatbot-btn');
+    const chatbotModal = document.getElementById('chatbot-modal');
+    const chatbotModalClose = document.getElementById('chatbot-modal-close');
+    const chatbotForm = document.getElementById('chatbot-form');
+    const chatbotMessages = document.getElementById('chatbot-messages');
+    const chatbotInput = document.getElementById('chatbot-input');
+
+    function openChatbotModal() {
+        chatbotModal.style.display = 'flex';
+        chatbotInput.focus();
+        scrollToBottom();
+    }
+
+    function closeChatbotModal() {
+        chatbotModal.style.display = 'none';
+        chatbotInput.value = '';
+    }
+
+    function scrollToBottom() {
+        chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
+    }
+
+    function addMessage(content, sender) {
+        const messageDiv = document.createElement('div');
+        messageDiv.classList.add('chatbot-message', sender);
+        messageDiv.innerHTML = `<p>${content}</p>`;
+        chatbotMessages.appendChild(messageDiv);
+        scrollToBottom();
+    }
+
+    const responses = {
+        'hello': 'Hi! How can I assist you today?',
+        'delivery': 'We offer fast campus delivery within 24 hours to your dorm or a campus pickup point. Would you like more details on delivery options?',
+        'discount': 'Bugema University students with a valid student ID can enjoy exclusive discounts. Verify your ID at checkout to apply them!',
+        'products': 'We offer textbooks, branded jumpers, pens, wall clocks, notebooks, T-shirts, and bottles. Browse categories via the navigation menu!',
+        'contact': 'You can reach us at campusshop@bugemauniv.ac.ug or via WhatsApp at +256 7550 87665. Want to call now?',
+        'help': 'I’m here to assist! Ask about delivery, discounts, products, or anything else.',
+        'default': 'Sorry, I didn’t understand that. Try asking about delivery, discounts, products, or contact info!'
+    };
+
+    chatbotBtn.addEventListener('click', openChatbotModal);
+
+    chatbotModalClose.addEventListener('click', closeChatbotModal);
+
+    chatbotModal.addEventListener('click', function(e) {
+        if (e.target === chatbotModal) {
+            closeChatbotModal();
+        }
+    });
+
+    chatbotForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const message = chatbotInput.value.trim();
+        if (!message) return;
+
+        // Add user message
+        addMessage(message, 'user');
+
+        // Get bot response
+        const lowerMessage = message.toLowerCase();
+        let response = responses['default'];
+        for (const key in responses) {
+            if (lowerMessage.includes(key)) {
+                response = responses[key];
+                break;
+            }
+        }
+
+        // Add bot response
+        setTimeout(() => {
+            addMessage(response, 'bot');
+        }, 500);
+
+        chatbotInput.value = '';
+        chatbotInput.focus();
+    });
+
+    chatbotInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            chatbotForm.dispatchEvent(new Event('submit'));
+        }
+    });
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            if (feedbackModal.style.display === 'flex') {
                 feedbackModal.style.display = 'none';
                 feedbackForm.reset();
                 feedbackMessage.style.display = 'none';
-            });
-
-            feedbackModal.addEventListener('click', function(e) {
-                if (e.target === feedbackModal) {
-                    feedbackModal.style.display = 'none';
-                    feedbackForm.reset();
-                    feedbackMessage.style.display = 'none';
-                }
-            });
-
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape') {
-                    if (feedbackModal.style.display === 'flex') {
-                        feedbackModal.style.display = 'none';
-                        feedbackForm.reset();
-                        feedbackMessage.style.display = 'none';
-                    }
-                }
-            });
-
-            feedbackForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                const formData = new FormData(feedbackForm);
-                formData.append('submit_feedback', 'true');
-                fetch('index.php', {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok: ' + response.statusText);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    feedbackMessage.style.display = 'block';
-                    feedbackMessage.className = `feedback-message ${data.success ? 'success' : 'error'}`;
-                    feedbackMessage.textContent = data.message;
-                    if (data.success) {
-                        feedbackForm.reset();
-                        setTimeout(() => {
-                            feedbackModal.style.display = 'none';
-                            feedbackMessage.style.display = 'none';
-                        }, 2000);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error details:', error);
-                    feedbackMessage.style.display = 'block';
-                    feedbackMessage.className = 'feedback-message error';
-                    feedbackMessage.textContent = 'An error occurred: ' + error.message;
-                });
-            });
-
-            const menuIcon = document.querySelector('.menu-icon');
-            const mobileMenu = document.querySelector('.mobile-menu');
-            const closeIcon = document.querySelector('.close-icon');
-
-            menuIcon.addEventListener('click', function() {
-                mobileMenu.classList.add('active');
-            });
-
-            closeIcon.addEventListener('click', function() {
+            }
+            if (chatbotModal.style.display === 'flex') {
+                closeChatbotModal();
+            }
+            if (mobileMenu.classList.contains('active')) {
                 mobileMenu.classList.remove('active');
-            });
-
-            mobileMenu.addEventListener('click', function(e) {
-                if (e.target.classList.contains('mobile-nav') || e.target.tagName === 'A') {
-                    mobileMenu.classList.remove('active');
-                }
-            });
-        });
-    </script>
+            }
+        }
+    });
+});
+</script>
 </body>
 </html>
 

@@ -120,7 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
     // Basic validation
     if (empty($name) || empty($email) || empty($message)) {
         $response = ['success' => false, 'message' => 'All fields are required.'];
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    } elseif (!preg_match("/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$/", $email)) {
         $response = ['success' => false, 'message' => 'Invalid email format.'];
     } elseif (strlen($name) > 255 || strlen($email) > 255) {
         $response = ['success' => false, 'message' => 'Name or email exceeds maximum length.'];
@@ -141,11 +141,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
         }
     }
     
-    // Return JSON response for AJAX
     header('Content-Type: application/json');
     echo json_encode($response);
     exit();
 }
+
+/* Optional: Handle chatbot submission (uncomment to enable logging)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_chat'])) {
+    if (!$conn || $conn->connect_error) {
+        $response = ['success' => false, 'message' => 'Database connection failed.'];
+        header('Content-Type: application/json');
+        echo json_encode($response);
+        exit();
+    }
+
+    $message = trim($_POST['message']);
+    $response_text = trim($_POST['response']);
+    $user_id = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+
+    if (empty($message) || empty($response_text)) {
+        $response = ['success' => false, 'message' => 'Message and response are required.'];
+    } else {
+        $stmt = $conn->prepare("INSERT INTO chat_logs (user_id, message, response, created_at) VALUES (?, ?, ?, NOW())");
+        if (!$stmt) {
+            $response = ['success' => false, 'message' => 'Failed to prepare query: ' . $conn->error];
+            error_log("Prepare failed: " . $conn->error);
+        } else {
+            $stmt->bind_param("iss", $user_id, $message, $response_text);
+            if ($stmt->execute()) {
+                $response = ['success' => true, 'message' => 'Chat logged successfully!'];
+            } else {
+                $response = ['success' => false, 'message' => 'Failed to log chat: ' . $stmt->error];
+                error_log("Failed to log chat: " . $stmt->error);
+            }
+            $stmt->close();
+        }
+    }
+
+    header('Content-Type: application/json');
+    echo json_encode($response);
+    exit();
+}
+*/
 
 // Get favorites count
 $favorites_count = 0;
@@ -685,6 +722,132 @@ $user_email = '';
             color: var(--white);
         }
 
+        /* Chatbot styles */
+        .chatbot-modal-content {
+            max-width: 600px;
+            width: 90%;
+            padding: 1.5rem;
+            text-align: left;
+        }
+
+        .chatbot-container {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            max-height: 60vh;
+        }
+
+        .chatbot-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+            background: var(--light-gray);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .chatbot-message {
+            padding: 0.75rem;
+            border-radius: 8px;
+            max-width: 80%;
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+
+        .chatbot-message.bot {
+            background: var(--primary-green);
+            color: var(--white);
+            align-self: flex-start;
+        }
+
+        .chatbot-message.user {
+            background: var(--accent-yellow);
+            color: var(--dark-gray);
+            align-self: flex-end;
+        }
+
+        .chatbot-form {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .chatbot-form input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid var(--text-gray);
+            border-radius: 8px;
+            font-size: 0.9rem;
+            color: var(--dark-gray);
+        }
+
+        .chatbot-form button {
+            background: var(--accent-yellow);
+            color: var(--dark-gray);
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s ease, color 0.3s ease;
+        }
+
+        .chatbot-form button:hover {
+            background: var(--secondary-green);
+            color: var(--white);
+        }
+
+        .chatbot-messages::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .chatbot-messages::-webkit-scrollbar-track {
+            background: var(--light-gray);
+            border-radius: 8px;
+        }
+
+        .chatbot-messages::-webkit-scrollbar-thumb {
+            background: var(--primary-green);
+            border-radius: 8px;
+        }
+
+        .chatbot-messages::-webkit-scrollbar-thumb:hover {
+            background: var(--secondary-green);
+        }
+
+        /* Share modal styles */
+        .share-modal-content {
+            max-width: 500px;
+            width: 90%;
+            padding: 1.5rem;
+            text-align: center;
+        }
+
+        .share-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .share-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            text-decoration: none;
+            transition: background 0.3s ease, transform 0.2s ease;
+        }
+
+        .share-btn:hover {
+            transform: scale(1.1);
+        }
+
         .hero {
             background: var(--primary-green);
             padding: 3rem 0;
@@ -864,14 +1027,12 @@ $user_email = '';
             right: 10px;
         }
 
-        /* Update product-grid to support larger cards on larger screens */
         .product-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 1.5rem;
         }
 
-        /* Ensure product cards have equal height and width */
         .product-card {
             background: var(--white);
             padding: 1.5rem;
@@ -887,10 +1048,9 @@ $user_email = '';
             max-width: 250px;
             margin: 0 auto;
             animation: fadeInUp 0.6s ease-out;
-            flex-shrink: 0; /* For slider */
+            flex-shrink: 0;
         }
 
-        /* Ensure images scale properly */
         .product-card img {
             width: 100%;
             height: 200px;
@@ -901,7 +1061,6 @@ $user_email = '';
             cursor: pointer;
         }
 
-        /* Hide caption in product cards */
         .product-card .caption {
             display: none;
         }
@@ -949,7 +1108,6 @@ $user_email = '';
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
         }
 
-        /* Modal caption visibility */
         .image-modal-content .caption {
             display: block;
             font-size: 1.1rem;
@@ -1111,6 +1269,142 @@ $user_email = '';
             font-size: 0.9rem;
             color: var(--text-gray);
         }
+        .image-modal-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            align-items: start;
+        }
+
+        .image-modal-left {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .image-modal-right {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .image-modal-content h4 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--primary-green);
+            margin-bottom: 0.5rem;
+        }
+
+        .image-modal-content .caption {
+            font-size: 1rem;
+            color: var(--text-gray);
+            margin-bottom: 0.5rem;
+        }
+
+        .image-modal-content .price {
+            font-size: 1.2rem;
+            font-weight: 500;
+            color: var(--dark-gray);
+            margin-bottom: 1rem;
+        }
+
+        .modal-form {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .form-group {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .action-btn {
+            color: var(--dark-gray);
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s ease, color 0.3s ease, transform 0.2s ease;
+        }
+
+        .action-btn:hover {
+            background: var(--secondary-green);
+            color: var(--white);
+            transform: translateY(-2px);
+        }
+
+        .action-btn.favorite-btn {
+            padding: 5px;
+            font-size: 1rem;
+            width: 35%;
+        }
+
+        .action-btn.favorite-btn.favorited {
+            color: var(--error-red);
+        }
+
+        .share-section {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--light-gray);
+        }
+
+        .share-section h5 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--primary-green);
+            margin-bottom: 0.75rem;
+        }
+
+        .share-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-start;
+            flex-wrap: wrap;
+        }
+
+        .share-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            text-decoration: none;
+            transition: background 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease;
+            position: relative;
+        }
+
+        .share-btn:hover {
+            color: var(--white);
+            transform: scale(1.1);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .share-btn::after {
+            content: attr(data-platform);
+            position: absolute;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            white-space: nowrap;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s ease, visibility 0.2s ease;
+        }
+
+        .share-btn:hover::after {
+            opacity: 1;
+            visibility: visible;
+        }
 
         /* Responsive adjustments for small screens */
         @media (max-width: 768px) {
@@ -1215,6 +1509,99 @@ $user_email = '';
                 padding: 8px 12px;
                 font-size: 1.2rem;
             }
+
+            .chatbot-modal-content {
+                width: 95%;
+                padding: 1rem;
+            }
+
+            .chatbot-messages {
+                max-height: 50vh;
+            }
+
+            .chatbot-form input {
+                font-size: 0.8rem;
+            }
+
+            .chatbot-form button {
+                padding: 8px 15px;
+                font-size: 0.8rem;
+            }
+
+            .image-modal-content {
+                width: 95%;
+                padding: 1rem;
+            }
+
+            .image-modal-grid {
+                grid-template-columns: 1fr; /* Stack vertically on smaller screens */
+                gap: 1rem;
+            }
+
+            .image-modal-left img {
+                max-height: 300px; /* Adjusted for smaller screens */
+            }
+
+            .image-modal-content h4 {
+                font-size: 1.4rem;
+            }
+
+            .image-modal-content .caption {
+                font-size: 0.9rem;
+            }
+
+            .image-modal-content .price {
+                font-size: 1.1rem;
+            }
+
+            .form-group {
+                gap: 0.5rem;
+            }
+
+            .quantity-input {
+                width: 70px;
+                padding: 6px;
+                font-size: 0.8rem;
+            }
+
+            .action-btn {
+                padding: 6px 12px;
+                font-size: 0.8rem;
+            }
+
+            .action-btn.favorite-btn {
+                padding: 6px 12px;
+                font-size: 1rem;
+                min-width: 45px;
+            }
+
+            .share-btn {
+                width: 36px;
+                height: 36px;
+                font-size: 1rem;
+            }
+
+            .share-btn img {
+                width: 20px;
+                height: 20px;
+            }
+
+            .form-group {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .action-btn {
+                padding: 8px 8px;
+                font-size: 1rem;
+                width: 35%;
+            }
+
+            .share-btn {
+                width: 45px;
+                height: 45px;
+                font-size: 1.2rem;
+            }
         }
 
         @media (min-width: 769px) {
@@ -1290,29 +1677,130 @@ $user_email = '';
             }
 
             .image-modal-content {
-                width: 95%;
-                padding: 1rem;
-            }
+            width: 95%;
+            padding: 0.8rem;
+        }
 
-            .image-modal-content img {
-                max-height: 300px;
-            }
+        .image-modal-grid {
+            gap: 0.8rem;
+        }
 
-            .image-modal-content h4 {
-                font-size: 1rem;
-            }
+        .image-modal-left img {
+            max-height: 250px;
+        }
 
-            .image-modal-content .caption {
-                font-size: 0.9rem;
-            }
+        .image-modal-content h4 {
+            font-size: 1.2rem;
+        }
 
-            .image-modal-content .price {
-                font-size: 1rem;
-            }
+        .image-modal-content .caption {
+            font-size: 0.8rem;
+        }
+
+        .image-modal-content .price {
+            font-size: 0.9rem;
+        }
+
+        .form-group {
+            gap: 0.4rem;
+        }
+
+        .quantity-input {
+            width: 60px;
+            padding: 5px;
+            font-size: 0.7rem;
+        }
+
+        .action-btn {
+            padding: 5px 10px;
+            font-size: 0.7rem;
+        }
+
+        .action-btn.favorite-btn {
+            padding: 5px 10px;
+            font-size: 0.9rem;
+            min-width: 40px;
+        }
+
+        .share-btn {
+            width: 32px;
+            height: 32px;
+            font-size: 0.9rem;
+        }
+
+        .share-btn img {
+            width: 18px;
+            height: 18px;
+        }
 
             .slider-arrow {
                 padding: 6px 10px;
                 font-size: 1rem;
+            }
+
+            .chatbot-modal-content {
+                width: 95%;
+                padding: 1rem;
+            }
+
+            .chatbot-messages {
+                max-height: 50vh;
+            }
+
+            .chatbot-form input {
+                font-size: 0.8rem;
+            }
+
+            .chatbot-form button {
+                padding: 8px 15px;
+                font-size: 0.8rem;
+            }
+
+            .share-modal-content {
+                width: 95%;
+                padding: 1rem;
+            }
+
+            .share-btn {
+                width: 50px;
+                height: 50px;
+                font-size: 1.2rem;
+            }
+            .image-modal-content {
+                width: 95%;
+                padding: 0.8rem;
+            }
+
+            .image-modal-grid {
+                gap: 0.8rem;
+            }
+
+            .image-modal-content img {
+                max-height: 250px;
+            }
+
+            .image-modal-content h4 {
+                font-size: 1.1rem;
+            }
+
+            .image-modal-content .caption {
+                font-size: 0.8rem;
+            }
+
+            .image-modal-content .price {
+                font-size: 0.9rem;
+            }
+
+            .action-btn {
+                padding: 6px 12px;
+                font-size: 0.8rem;
+                width: 35%;
+            }
+
+            .share-btn {
+                width: 40px;
+                height: 40px;
+                font-size: 1.1rem;
             }
         }
 
@@ -1457,12 +1945,14 @@ $user_email = '';
                     ?>
                 </span></a>
                 <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback">💬</button>
+                <button class="chatbot-btn" id="mobile-chatbot-btn" data-tooltip="Chat with Us"><img src="images/chat.png" style="height: 40px; width:40px; border-radius:60px;" alt=""></button>
                 <a href="https://wa.me/+256755087665" target="_blank" data-tooltip="Help">📞</a>
             <?php else: ?>
                 <a href="login.php" data-tooltip="Login">🔑</a>
                 <a href="favorites.php" data-tooltip="Favorites">❤️ <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
                 <a href="cart.php" data-tooltip="Cart">🛒 <span class="cart-count"><?php echo array_sum($_SESSION['guest_cart']); ?></span></a>
                 <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback">💬</button>
+                <button class="chatbot-btn" id="mobile-chatbot-btn" data-tooltip="Chat with Us"><img src="images/chat.png" style="height: 40px; width:40px; border-radius:60px;" alt=""></button>
                 <a href="https://wa.me/+256755087665" target="_blank" data-tooltip="Help">📞</a>
             <?php endif; ?>
         </div>
@@ -1470,6 +1960,7 @@ $user_email = '';
 
     <div class="floating-buttons">
         <button class="floating-btn feedback-btn" id="floating-feedback-btn" data-tooltip="Feedback">💬</button>
+        <button class="floating-btn chatbot-btn" id="floating-chatbot-btn" data-tooltip="Chat with Us"><img src="images/chat.png" style="height: 40px; width:40px; border-radius:60px;" alt=""></button>
         <a href="https://wa.me/+256755087665" class="floating-btn" target="_blank" data-tooltip="Help">📞</a>
     </div>
 
@@ -1523,19 +2014,56 @@ $user_email = '';
         </div>
     </div>
 
-    <div class="modal" id="image-modal">
+    <div class="modal" id="chatbot-modal" role="dialog" aria-labelledby="chatbot-title" aria-modal="true">
+        <div class="modal-content chatbot-modal-content">
+            <button class="modal-close" id="chatbot-modal-close" aria-label="Close chatbot">&times;</button>
+            <h2 id="chatbot-title">CampusShop Assistant</h2>
+            <div class="chatbot-container">
+                <div class="chatbot-messages" id="chatbot-messages">
+                    <div class="chatbot-message bot">
+                        <p>Hello! Welcome to Bugema CampusShop's Assistant. How can I help you today? Try asking about products, delivery, or discounts!</p>
+                    </div>
+                </div>
+                <form id="chatbot-form" class="chatbot-form">
+                    <label for="chatbot-input" class="sr-only">Type your question</label>
+                    <input type="text" id="chatbot-input" placeholder="Type your question..." autocomplete="off" required aria-required="true">
+                    <button type="submit" aria-label="Send message">Send</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+   <div class="modal" id="image-modal" role="dialog" aria-labelledby="modal-title" aria-modal="true">
         <div class="modal-content image-modal-content">
-            <button class="modal-close" id="image-modal-close">&times;</button>
-            <img id="modal-image" src="" alt="Product Image">
-            <h4 id="modal-title"></h4>
-            <p class="caption" id="modal-caption"></p>
-            <p class="price" id="modal-price"></p>
-            <form method="POST" action="index.php" id="modal-form">
-                <input type="hidden" name="product_id" id="modal-product-id">
-                <input type="number" name="quantity" class="quantity-input" value="1" min="1">
-                <button type="submit" name="add_to_cart">🛒 Add to Cart</button>
-                <button type="submit" name="toggle_favorite" class="favorite-btn" id="modal-favorite-btn">❤️</button>
-            </form>
+            <button class="modal-close" id="image-modal-close" aria-label="Close product modal">&times;</button>
+            <div class="image-modal-grid">
+                <div class="image-modal-left">
+                    <img id="modal-image" src="" alt="Product Image" loading="lazy">
+                </div>
+                <div class="image-modal-right">
+                    <h4 id="modal-title"></h4>
+                    <p class="caption" id="modal-caption"></p>
+                    <p class="price" id="modal-price"></p>
+                    <form method="POST" action="index.php" id="modal-form" class="modal-form">
+                        <input type="hidden" name="product_id" id="modal-product-id">
+                        <div class="form-group">
+                            <label for="modal-quantity" class="sr-only">Quantity</label>
+                            <input type="number" name="quantity" id="modal-quantity" class="quantity-input" value="1" min="1" aria-label="Quantity">
+                            <button type="submit" name="add_to_cart" class="action-btn cart-btn" aria-label="Add to cart">🛒</button>
+                            <button type="submit" name="toggle_favorite" class="action-btn favorite-btn" id="modal-favorite-btn" aria-label="Toggle favorite">❤️</button>
+                        </div>
+                    </form>
+                    <div class="share-section">
+                        <h5>Share This Product</h5>
+                        <div class="share-buttons">
+                            <a href="#" class="share-btn whatsapp" data-platform="whatsapp" target="_blank" aria-label="Share on WhatsApp"><img src="images/whatsapp2.png" style="height: 25px; width:25px;" alt=""></a>
+                            <a href="#" class="share-btn facebook" data-platform="facebook" target="_blank" aria-label="Share on Facebook"><img src="images/facebook.png" style="height: 25px; width:25px;" alt=""></a>
+                            <a href="#" class="share-btn x" data-platform="x" target="_blank" aria-label="Share on X"><img src="images/xicon.png" style="height: 25px; width:25px;" alt=""></a>
+                            <a href="#" class="share-btn telegram" data-platform="telegram" target="_blank" aria-label="Share on Telegram"><img src="images/telegram.png" style="height: 25px; width:25px;" alt=""></a>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1574,7 +2102,6 @@ $user_email = '';
                 <button class="slider-arrow left">◀</button>
                 <div class="slider-track">
                     <?php
-                    // Fetch 10 random products as "best sellers"
                     $stmt = $conn->prepare("SELECT * FROM products ORDER BY RAND() LIMIT 10");
                     $stmt->execute();
                     $result = $stmt->get_result();
@@ -1652,327 +2179,421 @@ $user_email = '';
         </div>
     </footer>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const observerOptions = {
-                threshold: 0.1,
-                rootMargin: '0px 0px -50px 0px'
-            };
+   <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
 
-            const observer = new IntersectionObserver(function(entries) {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting) {
-                        entry.target.style.opacity = '1';
-                        entry.target.style.transform = 'translateY(0)';
-                    }
-                });
-            }, observerOptions);
-
-            document.querySelectorAll('.feature-card, .product-card').forEach(el => {
-                el.style.opacity = '0';
-                el.style.transform = 'translateY(20px)';
-                el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
-                observer.observe(el);
-            });
-
-            const searchInput = document.querySelectorAll('.search-input');
-            const searchResults = document.querySelectorAll('.search-results');
-            let selectedIndex = -1;
-
-            function fetchSuggestions(query, resultsContainer) {
-                if (query.length >= 2) {
-                    fetch(`search.php?query=${encodeURIComponent(query)}&type=autocomplete`)
-                        .then(response => response.text())
-                        .then(data => {
-                            resultsContainer.innerHTML = data;
-                            resultsContainer.classList.add('active');
-                            selectedIndex = -1;
-                        })
-                        .catch(error => {
-                            console.error('Error:', error);
-                            resultsContainer.innerHTML = '<div class="no-results">Error fetching suggestions</div>';
-                            resultsContainer.classList.add('active');
-                        });
-                } else {
-                    resultsContainer.innerHTML = '';
-                    resultsContainer.classList.remove('active');
+        const observer = new IntersectionObserver(function(entries) {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
                 }
-            }
+            });
+        }, observerOptions);
 
-            function fetchFullResults(query, resultsContainer) {
-                fetch(`search.php?query=${encodeURIComponent(query)}&type=full`)
+        document.querySelectorAll('.feature-card, .product-card').forEach(el => {
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(20px)';
+            el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+            observer.observe(el);
+        });
+
+        const searchInput = document.querySelectorAll('.search-input');
+        const searchResults = document.querySelectorAll('.search-results');
+        let selectedIndex = -1;
+
+        function fetchSuggestions(query, resultsContainer) {
+            if (query.length >= 2) {
+                fetch(`search.php?query=${encodeURIComponent(query)}&type=autocomplete`)
                     .then(response => response.text())
                     .then(data => {
                         resultsContainer.innerHTML = data;
                         resultsContainer.classList.add('active');
+                        selectedIndex = -1;
                     })
                     .catch(error => {
                         console.error('Error:', error);
-                        resultsContainer.innerHTML = '<div class="no-results">Error fetching results</div>';
+                        resultsContainer.innerHTML = '<div class="no-results">Error fetching suggestions</div>';
                         resultsContainer.classList.add('active');
                     });
+            } else {
+                resultsContainer.innerHTML = '';
+                resultsContainer.classList.remove('active');
             }
+        }
 
-            searchInput.forEach(input => {
-                input.addEventListener('input', function() {
-                    const resultsContainer = this.parentElement.querySelector('.search-results');
-                    fetchSuggestions(this.value.trim(), resultsContainer);
+        function fetchFullResults(query, resultsContainer) {
+            fetch(`search.php?query=${encodeURIComponent(query)}&type=full`)
+                .then(response => response.text())
+                .then(data => {
+                    resultsContainer.innerHTML = data;
+                    resultsContainer.classList.add('active');
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    resultsContainer.innerHTML = '<div class="no-results">Error fetching results</div>';
+                    resultsContainer.classList.add('active');
                 });
+        }
 
-                input.addEventListener('keydown', function(e) {
-                    const resultsContainer = this.parentElement.querySelector('.search-results');
-                    const suggestions = resultsContainer.querySelectorAll('.suggestion');
-                    if (suggestions.length === 0) return;
-
-                    if (e.key === 'ArrowDown') {
-                        e.preventDefault();
-                        selectedIndex = Math.min(selectedIndex + 1, suggestions.length - 1);
-                        updateSelection(suggestions);
-                    } else if (e.key === 'ArrowUp') {
-                        e.preventDefault();
-                        selectedIndex = Math.max(selectedIndex - 1, -1);
-                        updateSelection(suggestions);
-                    } else if (e.key === 'Enter' && selectedIndex >= 0) {
-                        e.preventDefault();
-                        const selectedSuggestion = suggestions[selectedIndex].textContent;
-                        this.value = selectedSuggestion;
-                        fetchFullResults(selectedSuggestion, resultsContainer);
-                    }
-                });
+        searchInput.forEach(input => {
+            input.addEventListener('input', function() {
+                const resultsContainer = this.parentElement.querySelector('.search-results');
+                fetchSuggestions(this.value.trim(), resultsContainer);
             });
 
-            function updateSelection(suggestions) {
-                suggestions.forEach((suggestion, index) => {
-                    suggestion.classList.toggle('selected', index === selectedIndex);
-                });
-                if (selectedIndex >= 0) {
-                    const activeInput = document.querySelector('.search-input:focus');
-                    if (activeInput) activeInput.value = suggestions[selectedIndex].textContent;
-                }
-            }
+            input.addEventListener('keydown', function(e) {
+                const resultsContainer = this.parentElement.querySelector('.search-results');
+                const suggestions = resultsContainer.querySelectorAll('.suggestion');
+                if (suggestions.length === 0) return;
 
-            searchResults.forEach(resultsContainer => {
-                resultsContainer.addEventListener('click', function(e) {
-                    const suggestion = e.target.closest('.suggestion');
-                    if (suggestion) {
-                        const activeInput = document.querySelector('.search-input:focus') || document.querySelector('.search-input');
-                        activeInput.value = suggestion.textContent;
-                        fetchFullResults(suggestion.textContent, resultsContainer);
-                    }
-                });
-            });
-
-            document.addEventListener('click', function(e) {
-                if (!e.target.closest('.search-bar') && !e.target.closest('.search-results')) {
-                    searchResults.forEach(resultsContainer => {
-                        resultsContainer.classList.remove('active');
-                    });
-                }
-            });
-
-            const cartBtn = document.querySelectorAll('.cart-btn');
-            cartBtn.forEach(btn => {
-                btn.addEventListener('click', function(e) {
+                if (e.key === 'ArrowDown') {
                     e.preventDefault();
-                    window.location.href = 'cart.php';
-                });
-            });
-
-            const browseCategoriesBtn = document.getElementById('browse-categories-btn');
-            const categoriesModal = document.getElementById('categories-modal');
-            const modalCloseBtn = document.getElementById('modal-close-btn');
-            const feedbackBtn = document.getElementById('floating-feedback-btn');
-            const mobileFeedbackBtn = document.getElementById('mobile-feedback-btn');
-            const feedbackModal = document.getElementById('feedback-modal');
-            const feedbackModalClose = document.getElementById('feedback-modal-close');
-            const feedbackForm = document.getElementById('feedback-form');
-            const feedbackMessage = document.getElementById('feedback-message');
-            const imageModal = document.getElementById('image-modal');
-            const imageModalClose = document.getElementById('image-modal-close');
-            const modalImage = document.getElementById('modal-image');
-            const modalTitle = document.getElementById('modal-title');
-            const modalCaption = document.getElementById('modal-caption');
-            const modalPrice = document.getElementById('modal-price');
-            const modalProductId = document.getElementById('modal-product-id');
-            const modalFavoriteBtn = document.getElementById('modal-favorite-btn');
-
-            browseCategoriesBtn.addEventListener('click', function() {
-                categoriesModal.style.display = 'flex';
-            });
-
-            modalCloseBtn.addEventListener('click', function() {
-                categoriesModal.style.display = 'none';
-            });
-
-            categoriesModal.addEventListener('click', function(e) {
-                if (e.target === categoriesModal) {
-                    categoriesModal.style.display = 'none';
+                    selectedIndex = Math.min(selectedIndex + 1, suggestions.length - 1);
+                    updateSelection(suggestions);
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    selectedIndex = Math.max(selectedIndex - 1, -1);
+                    updateSelection(suggestions);
+                } else if (e.key === 'Enter' && selectedIndex >= 0) {
+                    e.preventDefault();
+                    const selectedSuggestion = suggestions[selectedIndex].textContent;
+                    this.value = selectedSuggestion;
+                    fetchFullResults(selectedSuggestion, resultsContainer);
                 }
             });
+        });
 
-            feedbackBtn.addEventListener('click', function() {
-                feedbackModal.style.display = 'flex';
-                feedbackMessage.style.display = 'none';
+        function updateSelection(suggestions) {
+            suggestions.forEach((suggestion, index) => {
+                suggestion.classList.toggle('selected', index === selectedIndex);
             });
+            if (selectedIndex >= 0) {
+                const activeInput = document.querySelector('.search-input:focus');
+                if (activeInput) activeInput.value = suggestions[selectedIndex].textContent;
+            }
+        }
 
-            mobileFeedbackBtn.addEventListener('click', function() {
-                feedbackModal.style.display = 'flex';
-                feedbackMessage.style.display = 'none';
+        searchResults.forEach(resultsContainer => {
+            resultsContainer.addEventListener('click', function(e) {
+                const suggestion = e.target.closest('.suggestion');
+                if (suggestion) {
+                    const activeInput = document.querySelector('.search-input:focus') || document.querySelector('.search-input');
+                    activeInput.value = suggestion.textContent;
+                    fetchFullResults(suggestion.textContent, resultsContainer);
+                }
             });
+        });
 
-            feedbackModalClose.addEventListener('click', function() {
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.search-bar') && !e.target.closest('.search-results')) {
+                searchResults.forEach(resultsContainer => {
+                    resultsContainer.classList.remove('active');
+                });
+            }
+        });
+
+        const cartBtn = document.querySelectorAll('.cart-btn');
+        cartBtn.forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                window.location.href = 'cart.php';
+            });
+        });
+
+        const browseCategoriesBtn = document.getElementById('browse-categories-btn');
+        const categoriesModal = document.getElementById('categories-modal');
+        const modalCloseBtn = document.getElementById('modal-close-btn');
+        const feedbackBtn = document.getElementById('floating-feedback-btn');
+        const mobileFeedbackBtn = document.getElementById('mobile-feedback-btn');
+        const feedbackModal = document.getElementById('feedback-modal');
+        const feedbackModalClose = document.getElementById('feedback-modal-close');
+        const feedbackForm = document.getElementById('feedback-form');
+        const feedbackMessage = document.getElementById('feedback-message');
+        const imageModal = document.getElementById('image-modal');
+        const imageModalClose = document.getElementById('image-modal-close');
+        const modalImage = document.getElementById('modal-image');
+        const modalTitle = document.getElementById('modal-title');
+        const modalCaption = document.getElementById('modal-caption');
+        const modalPrice = document.getElementById('modal-price');
+        const modalProductId = document.getElementById('modal-product-id');
+        const modalFavoriteBtn = document.getElementById('modal-favorite-btn');
+        const chatbotBtn = document.getElementById('floating-chatbot-btn');
+        const mobileChatbotBtn = document.getElementById('mobile-chatbot-btn');
+        const chatbotModal = document.getElementById('chatbot-modal');
+        const chatbotModalClose = document.getElementById('chatbot-modal-close');
+        const chatbotForm = document.getElementById('chatbot-form');
+        const chatbotMessages = document.getElementById('chatbot-messages');
+        const chatbotInput = document.getElementById('chatbot-input');
+        const menuIcon = document.querySelector('.menu-icon');
+        const mobileMenu = document.querySelector('.mobile-menu');
+        const closeIcon = document.querySelector('.close-icon');
+
+        // Menu icon toggle for mobile menu
+        menuIcon.addEventListener('click', function() {
+            mobileMenu.classList.toggle('active');
+        });
+
+        // Close icon to hide mobile menu
+        closeIcon.addEventListener('click', function() {
+            mobileMenu.classList.remove('active');
+        });
+
+        // Close mobile menu when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!mobileMenu.contains(e.target) && !menuIcon.contains(e.target) && mobileMenu.classList.contains('active')) {
+                mobileMenu.classList.remove('active');
+            }
+        });
+
+        browseCategoriesBtn.addEventListener('click', function() {
+            categoriesModal.style.display = 'flex';
+        });
+
+        modalCloseBtn.addEventListener('click', function() {
+            categoriesModal.style.display = 'none';
+        });
+
+        categoriesModal.addEventListener('click', function(e) {
+            if (e.target === categoriesModal) {
+                categoriesModal.style.display = 'none';
+            }
+        });
+
+        feedbackBtn.addEventListener('click', function() {
+            feedbackModal.style.display = 'flex';
+            feedbackMessage.style.display = 'none';
+        });
+
+        mobileFeedbackBtn.addEventListener('click', function() {
+            feedbackModal.style.display = 'flex';
+            feedbackMessage.style.display = 'none';
+        });
+
+        feedbackModalClose.addEventListener('click', function() {
+            feedbackModal.style.display = 'none';
+            feedbackForm.reset();
+            feedbackMessage.style.display = 'none';
+        });
+
+        feedbackModal.addEventListener('click', function(e) {
+            if (e.target === feedbackModal) {
                 feedbackModal.style.display = 'none';
                 feedbackForm.reset();
                 feedbackMessage.style.display = 'none';
-            });
+            }
+        });
 
-            feedbackModal.addEventListener('click', function(e) {
-                if (e.target === feedbackModal) {
+        // Chatbot functionality
+        function openChatbotModal() {
+            chatbotModal.style.display = 'flex';
+            chatbotInput.focus();
+            scrollToBottom();
+        }
+
+        function closeChatbotModal() {
+            chatbotModal.style.display = 'none';
+            chatbotInput.value = '';
+        }
+
+        function scrollToBottom() {
+            chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
+        }
+
+        function addMessage(content, sender) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('chatbot-message', sender);
+            messageDiv.innerHTML = `<p>${content}</p>`;
+            chatbotMessages.appendChild(messageDiv);
+            scrollToBottom();
+        }
+
+        const responses = {
+            'hello': 'Hi! How can I assist you today?',
+            'delivery': 'We offer fast campus delivery within 24 hours to your dorm or a campus pickup point. Would you like more details on delivery options?',
+            'discount': 'Bugema University students with a valid student ID can enjoy exclusive discounts. Verify your ID at checkout to apply them!',
+            'products': 'We offer textbooks, branded jumpers, pens, wall clocks, notebooks, T-shirts, and bottles. Browse categories via the "Browse Categories" button!',
+            'contact': 'You can reach us at campusshop@bugemauniv.ac.ug or via WhatsApp at +256 7550 87665. Want to call now?',
+            'help': 'I’m here to assist! Ask about delivery, discounts, products, or anything else.',
+            'default': 'Sorry, I didn’t understand that. Try asking about delivery, discounts, products, or contact info!'
+        };
+
+        chatbotBtn.addEventListener('click', openChatbotModal);
+        mobileChatbotBtn.addEventListener('click', openChatbotModal);
+
+        chatbotModalClose.addEventListener('click', closeChatbotModal);
+
+        chatbotModal.addEventListener('click', function(e) {
+            if (e.target === chatbotModal) {
+                closeChatbotModal();
+            }
+        });
+
+        chatbotForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const message = chatbotInput.value.trim();
+            if (!message) return;
+
+            // Add user message
+            addMessage(message, 'user');
+
+            // Get bot response
+            const lowerMessage = message.toLowerCase();
+            let response = responses['default'];
+            for (const key in responses) {
+                if (lowerMessage.includes(key)) {
+                    response = responses[key];
+                    break;
+                }
+            }
+
+            // Add bot response
+            setTimeout(() => {
+                addMessage(response, 'bot');
+            }, 500);
+
+            chatbotInput.value = '';
+            chatbotInput.focus();
+        });
+
+        chatbotInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                chatbotForm.dispatchEvent(new Event('submit'));
+            }
+        });
+
+        // Image modal and share functionality
+        document.querySelectorAll('.product-card img').forEach(img => {
+            img.addEventListener('click', function() {
+                const productId = this.getAttribute('data-product-id');
+                const title = this.getAttribute('data-title');
+                const caption = this.getAttribute('data-caption');
+                const price = this.getAttribute('data-price');
+                const favorited = this.getAttribute('data-favorited') === 'true';
+
+                modalImage.src = this.src;
+                modalImage.alt = title;
+                modalTitle.textContent = title;
+                modalCaption.textContent = caption;
+                modalPrice.textContent = price;
+                modalProductId.value = productId;
+                modalFavoriteBtn.classList.toggle('favorited', favorited);
+
+                // Update share links
+                const shareUrl = `${window.location.origin}/product.php?id=${productId}`;
+                const encodedUrl = encodeURIComponent(shareUrl);
+                const encodedText = encodeURIComponent(`Check out this product from Bugema CampusShop: ${title} - ${shareUrl}`);
+
+                const shareLinks = {
+                    whatsapp: `https://api.whatsapp.com/send?text=${encodedText}`,
+                    facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`,
+                    x: `https://x.com/intent/tweet?text=${encodedText}`,
+                    telegram: `https://t.me/share/url?url=${encodedUrl}&text=${encodedText}`
+                };
+
+                document.querySelectorAll('.share-btn').forEach(btn => {
+                    const platform = btn.getAttribute('data-platform');
+                    btn.href = shareLinks[platform];
+                });
+
+                imageModal.style.display = 'flex';
+            });
+        });
+
+        imageModalClose.addEventListener('click', function() {
+            imageModal.style.display = 'none';
+        });
+
+        imageModal.addEventListener('click', function(e) {
+            if (e.target === imageModal) {
+                imageModal.style.display = 'none';
+            }
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                if (categoriesModal.style.display === 'flex') {
+                    categoriesModal.style.display = 'none';
+                }
+                if (feedbackModal.style.display === 'flex') {
                     feedbackModal.style.display = 'none';
                     feedbackForm.reset();
                     feedbackMessage.style.display = 'none';
                 }
-            });
-
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape') {
-                    if (categoriesModal.style.display === 'flex') {
-                        categoriesModal.style.display = 'none';
-                    }
-                    if (feedbackModal.style.display === 'flex') {
-                        feedbackModal.style.display = 'none';
-                        feedbackForm.reset();
-                        feedbackMessage.style.display = 'none';
-                    }
-                    if (imageModal.style.display === 'flex') {
-                        imageModal.style.display = 'none';
-                    }
-                }
-            });
-
-            feedbackForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                const formData = new FormData(feedbackForm);
-                formData.append('submit_feedback', 'true');
-                fetch('index.php', {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok: ' + response.statusText);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    feedbackMessage.style.display = 'block';
-                    feedbackMessage.className = `feedback-message ${data.success ? 'success' : 'error'}`;
-                    feedbackMessage.textContent = data.message;
-                    if (data.success) {
-                        feedbackForm.reset();
-                        setTimeout(() => {
-                            feedbackModal.style.display = 'none';
-                            feedbackMessage.style.display = 'none';
-                        }, 2000);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error details:', error);
-                    feedbackMessage.style.display = 'block';
-                    feedbackMessage.className = 'feedback-message error';
-                    feedbackMessage.textContent = 'An error occurred: ' + error.message;
-                });
-            });
-
-            const menuIcon = document.querySelector('.menu-icon');
-            const mobileMenu = document.querySelector('.mobile-menu');
-            const closeIcon = document.querySelector('.close-icon');
-
-            menuIcon.addEventListener('click', function() {
-                mobileMenu.classList.add('active');
-            });
-
-            closeIcon.addEventListener('click', function() {
-                mobileMenu.classList.remove('active');
-            });
-
-            mobileMenu.addEventListener('click', function(e) {
-                if (e.target.classList.contains('mobile-nav') || e.target.tagName === 'A') {
-                    mobileMenu.classList.remove('active');
-                }
-            });
-
-            document.querySelectorAll('.product-card img').forEach(img => {
-                img.addEventListener('click', function() {
-                    const productId = this.getAttribute('data-product-id');
-                    const title = this.getAttribute('data-title');
-                    const caption = this.getAttribute('data-caption');
-                    const price = this.getAttribute('data-price');
-                    const favorited = this.getAttribute('data-favorited') === 'true';
-
-                    modalImage.src = this.src;
-                    modalImage.alt = title;
-                    modalTitle.textContent = title;
-                    modalCaption.textContent = caption;
-                    modalPrice.textContent = price;
-                    modalProductId.value = productId;
-                    modalFavoriteBtn.classList.toggle('favorited', favorited);
-
-                    imageModal.style.display = 'flex';
-                });
-            });
-
-            imageModalClose.addEventListener('click', function() {
-                imageModal.style.display = 'none';
-            });
-
-            imageModal.addEventListener('click', function(e) {
-                if (e.target === imageModal) {
+                if (imageModal.style.display === 'flex') {
                     imageModal.style.display = 'none';
                 }
-            });
-
-            // Slider functionality
-            const sliderContainer = document.querySelector('.slider-container');
-            if (sliderContainer) {
-                const sliderTrack = sliderContainer.querySelector('.slider-track');
-                const leftArrow = sliderContainer.querySelector('.left');
-                const rightArrow = sliderContainer.querySelector('.right');
-                const slides = sliderTrack.querySelectorAll('.product-card');
-                let currentIndex = 0;
-                let visibleSlides = getVisibleSlides();
-
-                function getVisibleSlides() {
-                    return window.innerWidth <= 768 ? 2 : 4;
+                if (chatbotModal.style.display === 'flex') {
+                    closeChatbotModal();
                 }
-
-                function updateSlider() {
-                    const slideWidth = slides[0].offsetWidth + parseInt(getComputedStyle(slides[0]).marginRight);
-                    sliderTrack.style.transform = `translateX(-${currentIndex * slideWidth}px)`;
+                if (mobileMenu.classList.contains('active')) {
+                    mobileMenu.classList.remove('active');
                 }
-
-                leftArrow.addEventListener('click', () => {
-                    currentIndex = Math.max(currentIndex - 1, 0);
-                    updateSlider();
-                });
-
-                rightArrow.addEventListener('click', () => {
-                    currentIndex = Math.min(currentIndex + 1, slides.length - visibleSlides);
-                    updateSlider();
-                });
-
-                window.addEventListener('resize', () => {
-                    visibleSlides = getVisibleSlides();
-                    updateSlider();
-                });
-
-                // Add auto-sliding every 20 seconds
-                setInterval(() => {
-                    currentIndex = (currentIndex + 1) % (slides.length - visibleSlides + 1);
-                    updateSlider();
-                }, 20000); // 20 seconds
             }
         });
+
+        // Slider functionality
+        const sliderContainer = document.querySelector('.slider-container');
+        if (sliderContainer) {
+            const sliderTrack = sliderContainer.querySelector('.slider-track');
+            const leftArrow = sliderContainer.querySelector('.left');
+            const rightArrow = sliderContainer.querySelector('.right');
+            const slides = sliderTrack.querySelectorAll('.product-card');
+            let currentIndex = 0;
+            let visibleSlides = getVisibleSlides();
+
+            function getVisibleSlides() {
+                return window.innerWidth <= 768 ? 2 : 4;
+            }
+
+            function updateSlider() {
+                const slideWidth = slides[0].offsetWidth + parseInt(getComputedStyle(slides[0]).marginRight);
+                sliderTrack.style.transform = `translateX(-${currentIndex * slideWidth}px)`;
+            }
+
+            leftArrow.addEventListener('click', () => {
+                currentIndex = Math.max(currentIndex - 1, 0);
+                updateSlider();
+            });
+
+            rightArrow.addEventListener('click', () => {
+                currentIndex = Math.min(currentIndex + 1, slides.length - visibleSlides);
+                updateSlider();
+            });
+
+            window.addEventListener('resize', () => {
+                visibleSlides = getVisibleSlides();
+                updateSlider();
+            });
+
+            // Add auto-sliding every 20 seconds
+            setInterval(() => {
+                currentIndex = (currentIndex + 1) % (slides.length - visibleSlides + 1);
+                updateSlider();
+            }, 20000); // 20 seconds
+        }
+
+        // Screen reader only class for accessibility
+        const style = document.createElement('style');
+        style.textContent = `
+            .sr-only {
+                position: absolute;
+                width: 1px;
+                height: 1px;
+                padding: 0;
+                margin: -1px;
+                overflow: hidden;
+                clip: rect(0, 0, 0, 0);
+                border: 0;
+            }
+        `;
+        document.head.appendChild(style);
+    });
     </script>
 </body>
 </html>
