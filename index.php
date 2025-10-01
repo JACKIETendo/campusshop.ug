@@ -1682,7 +1682,7 @@ $user_email = '';
         }
 
         .image-modal-grid {
-            gap: 0.8rem;
+            gap: 0.5rem;
         }
 
         .image-modal-left img {

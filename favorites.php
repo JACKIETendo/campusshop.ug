@@ -682,6 +682,101 @@ $user_email = '';
             color: var(--white);
         }
 
+        /* Chatbot styles */
+        .chatbot-modal-content {
+            max-width: 600px;
+            width: 90%;
+            padding: 1.5rem;
+            text-align: left;
+        }
+
+        .chatbot-container {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            max-height: 60vh;
+        }
+
+        .chatbot-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+            background: var(--light-gray);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .chatbot-message {
+            padding: 0.75rem;
+            border-radius: 8px;
+            max-width: 80%;
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+
+        .chatbot-message.bot {
+            background: var(--primary-green);
+            color: var(--white);
+            align-self: flex-start;
+        }
+
+        .chatbot-message.user {
+            background: var(--accent-yellow);
+            color: var(--dark-gray);
+            align-self: flex-end;
+        }
+
+        .chatbot-form {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .chatbot-form input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid var(--text-gray);
+            border-radius: 8px;
+            font-size: 0.9rem;
+            color: var(--dark-gray);
+        }
+
+        .chatbot-form button {
+            background: var(--accent-yellow);
+            color: var(--dark-gray);
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s ease, color 0.3s ease;
+        }
+
+        .chatbot-form button:hover {
+            background: var(--secondary-green);
+            color: var(--white);
+        }
+
+        .chatbot-messages::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .chatbot-messages::-webkit-scrollbar-track {
+            background: var(--light-gray);
+            border-radius: 8px;
+        }
+
+        .chatbot-messages::-webkit-scrollbar-thumb {
+            background: var(--primary-green);
+            border-radius: 8px;
+        }
+
+        .chatbot-messages::-webkit-scrollbar-thumb:hover {
+            background: var(--secondary-green);
+        }
+
         .favorites-section {
             padding: 3rem 0;
             background: var(--light-gray);
@@ -806,6 +901,7 @@ $user_email = '';
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
             position: relative;
             animation: fadeIn 0.3s ease-out;
+            text-align: center;
         }
 
         .image-modal-content {
@@ -839,7 +935,10 @@ $user_email = '';
         }
 
         .image-modal-content .price {
-            font-size: 1rem;
+            font-size: 1.2rem;
+            font-weight: 500;
+            color: var(--dark-gray);
+            margin-bottom: 1rem;
         }
 
         .modal-close {
@@ -862,7 +961,133 @@ $user_email = '';
             font-weight: 600;
             color: var(--primary-green);
             margin-bottom: 1.5rem;
-            text-align: center;
+        }
+
+        /* Enhanced popup design for all screens */
+        .image-modal-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            align-items: start;
+        }
+
+        .image-modal-left {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .image-modal-right {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .image-modal-content h4 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--primary-green);
+            margin-bottom: 0.5rem;
+        }
+
+        .modal-form {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .form-group {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .action-btn {
+            color: var(--dark-gray);
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s ease, color 0.3s ease, transform 0.2s ease;
+        }
+
+        .action-btn:hover {
+            background: var(--secondary-green);
+            color: var(--white);
+            transform: translateY(-2px);
+        }
+
+        .action-btn.remove-btn {
+            padding: 5px;
+            font-size: 1rem;
+            color: var(--error-red);
+        }
+
+        .action-btn.remove-btn:hover {
+            color: var(--white);
+            background: var(--error-red);
+        }
+
+        .share-section {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--light-gray);
+        }
+
+        .share-section h5 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--primary-green);
+            margin-bottom: 0.75rem;
+        }
+
+        .share-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .share-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            text-decoration: none;
+            transition: background 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease;
+            position: relative;
+        }
+
+        .share-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .share-btn::after {
+            content: attr(data-platform);
+            position: absolute;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--dark-gray);
+            color: var(--white);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            white-space: nowrap;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s ease, visibility 0.2s ease;
+        }
+
+        .share-btn:hover::after {
+            opacity: 1;
+            visibility: visible;
         }
 
         footer {
@@ -910,6 +1135,7 @@ $user_email = '';
             color: var(--text-gray);
         }
 
+        /* Responsive adjustments */
         @media (max-width: 768px) {
             .container {
                 max-width: 90%;
@@ -974,12 +1200,17 @@ $user_email = '';
                 padding: 1rem;
             }
 
-            .image-modal-content img {
+            .image-modal-grid {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
+
+            .image-modal-left img {
                 max-height: 300px;
             }
 
             .image-modal-content h4 {
-                font-size: 1rem;
+                font-size: 1.2rem;
             }
 
             .image-modal-content .caption {
@@ -988,6 +1219,46 @@ $user_email = '';
 
             .image-modal-content .price {
                 font-size: 1rem;
+            }
+
+            .action-btn {
+                padding: 8px;
+                font-size: 0.8rem;
+            }
+
+            .action-btn.remove-btn {
+                padding: 6px 12px;
+                font-size: 1rem;
+                min-width: 45px;
+            }
+
+            .share-btn {
+                width: 45px;
+                height: 45px;
+                font-size: 1.2rem;
+            }
+
+            .share-btn img {
+                width: 20px;
+                height: 20px;
+            }
+
+            .chatbot-modal-content {
+                width: 95%;
+                padding: 1rem;
+            }
+
+            .chatbot-messages {
+                max-height: 50vh;
+            }
+
+            .chatbot-form input {
+                font-size: 0.8rem;
+            }
+
+            .chatbot-form button {
+                padding: 8px 15px;
+                font-size: 0.8rem;
             }
         }
 
@@ -1057,23 +1328,49 @@ $user_email = '';
 
             .image-modal-content {
                 width: 95%;
-                padding: 1rem;
+                padding: 0.8rem;
             }
 
-            .image-modal-content img {
-                max-height: 300px;
+            .image-modal-grid {
+                gap: 0.8rem;
+            }
+
+            .image-modal-left img {
+                max-height: 250px;
             }
 
             .image-modal-content h4 {
-                font-size: 1rem;
+                font-size: 1.1rem;
             }
 
             .image-modal-content .caption {
-                font-size: 0.9rem;
+                font-size: 0.8rem;
             }
 
             .image-modal-content .price {
-                font-size: 1rem;
+                font-size: 0.9rem;
+            }
+
+            .action-btn {
+                padding: 6px 12px;
+                font-size: 0.8rem;
+            }
+
+            .action-btn.remove-btn {
+                padding: 5px 10px;
+                font-size: 0.9rem;
+                min-width: 40px;
+            }
+
+            .share-btn {
+                width: 40px;
+                height: 40px;
+                font-size: 1.1rem;
+            }
+
+            .share-btn img {
+                width: 18px;
+                height: 18px;
             }
         }
 
@@ -1209,12 +1506,14 @@ $user_email = '';
                     ?>
                 </span></a>
                 <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback">💬</button>
+                <button class="chatbot-btn" id="mobile-chatbot-btn" data-tooltip="Chat with Us"><img src="images/chat.png" style="height: 40px; width:40px; border-radius:60px;" alt=""></button>
                 <a href="https://wa.me/+256755087665" target="_blank" data-tooltip="Help">📞</a>
             <?php else: ?>
                 <a href="login.php" data-tooltip="Login">🔑</a>
                 <a href="favorites.php" data-tooltip="Favorites">❤️ <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
                 <a href="cart.php" data-tooltip="Cart">🛒 <span class="cart-count"><?php echo array_sum($_SESSION['guest_cart']); ?></span></a>
                 <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback">💬</button>
+                <button class="chatbot-btn" id="mobile-chatbot-btn" data-tooltip="Chat with Us"><img src="images/chat.png" style="height: 40px; width:40px; border-radius:60px;" alt=""></button>
                 <a href="https://wa.me/+256755087665" target="_blank" data-tooltip="Help">📞</a>
             <?php endif; ?>
         </div>
@@ -1222,6 +1521,7 @@ $user_email = '';
 
     <div class="floating-buttons">
         <button class="floating-btn feedback-btn" id="floating-feedback-btn" data-tooltip="Feedback">💬</button>
+        <button class="floating-btn chatbot-btn" id="floating-chatbot-btn" data-tooltip="Chat with Us"><img src="images/chat.png" style="height: 40px; width:40px; border-radius:60px;" alt=""></button>
         <a href="https://wa.me/+256755087665" class="floating-btn" target="_blank" data-tooltip="Help">📞</a>
     </div>
 
@@ -1242,19 +1542,56 @@ $user_email = '';
         </div>
     </div>
 
-    <div class="modal" id="image-modal">
+    <div class="modal" id="chatbot-modal" role="dialog" aria-labelledby="chatbot-title" aria-modal="true">
+        <div class="modal-content chatbot-modal-content">
+            <button class="modal-close" id="chatbot-modal-close" aria-label="Close chatbot">&times;</button>
+            <h2 id="chatbot-title">CampusShop Assistant</h2>
+            <div class="chatbot-container">
+                <div class="chatbot-messages" id="chatbot-messages">
+                    <div class="chatbot-message bot">
+                        <p>Hello! Welcome to Bugema CampusShop's Assistant. How can I help you today? Try asking about products, delivery, or discounts!</p>
+                    </div>
+                </div>
+                <form id="chatbot-form" class="chatbot-form">
+                    <label for="chatbot-input" class="sr-only">Type your question</label>
+                    <input type="text" id="chatbot-input" placeholder="Type your question..." autocomplete="off" required aria-required="true">
+                    <button type="submit" aria-label="Send message">Send</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="image-modal" role="dialog" aria-labelledby="modal-title" aria-modal="true">
         <div class="modal-content image-modal-content">
-            <button class="modal-close" id="image-modal-close">&times;</button>
-            <img id="modal-image" src="" alt="Product Image">
-            <h4 id="modal-title"></h4>
-            <p class="caption" id="modal-caption"></p>
-            <p class="price" id="modal-price"></p>
-            <form method="POST" action="favorites.php" id="modal-form">
-                <input type="hidden" name="product_id" id="modal-product-id">
-                <input type="number" name="quantity" class="quantity-input" value="1" min="1">
-                <button type="submit" name="add_to_cart">🛒 Add to Cart</button>
-                <button type="submit" name="remove_favorite" class="remove-btn">Delete</button>
-            </form>
+            <button class="modal-close" id="image-modal-close" aria-label="Close product modal">&times;</button>
+            <div class="image-modal-grid">
+                <div class="image-modal-left">
+                    <img id="modal-image" src="" alt="Product Image" loading="lazy">
+                </div>
+                <div class="image-modal-right">
+                    <h4 id="modal-title"></h4>
+                    <p class="caption" id="modal-caption"></p>
+                    <p class="price" id="modal-price"></p>
+                    <form method="POST" action="favorites.php" id="modal-form" class="modal-form">
+                        <input type="hidden" name="product_id" id="modal-product-id">
+                        <div class="form-group">
+                            <label for="modal-quantity" class="sr-only">Quantity</label>
+                            <input type="number" name="quantity" id="modal-quantity" class="quantity-input" value="1" min="1" aria-label="Quantity">
+                            <button type="submit" name="add_to_cart" class="action-btn cart-btn" aria-label="Add to cart">🛒</button>
+                            <button type="submit" name="remove_favorite" class="action-btn remove-btn" aria-label="Remove from favorites">Delete</button>
+                        </div>
+                    </form>
+                    <div class="share-section">
+                        <h5>Share This Product</h5>
+                        <div class="share-buttons">
+                            <a href="#" class="share-btn whatsapp" data-platform="WhatsApp" target="_blank" aria-label="Share on WhatsApp"><img src="images/whatsapp2.png" style="height: 25px; width:25px;" alt=""></a>
+                            <a href="#" class="share-btn facebook" data-platform="Facebook" target="_blank" aria-label="Share on Facebook"><img src="images/facebook.png" style="height: 25px; width:25px;" alt=""></a>
+                            <a href="#" class="share-btn x" data-platform="X" target="_blank" aria-label="Share on X"><img src="images/xicon.png" style="height: 25px; width:25px;" alt=""></a>
+                            <a href="#" class="share-btn telegram" data-platform="Telegram" target="_blank" aria-label="Share on Telegram"><img src="images/telegram.png" style="height: 25px; width:25px;" alt=""></a>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1467,7 +1804,13 @@ $user_email = '';
             const modalCaption = document.getElementById('modal-caption');
             const modalPrice = document.getElementById('modal-price');
             const modalProductId = document.getElementById('modal-product-id');
-            const modalRemoveBtn = document.getElementById('modal-remove-btn');
+            const chatbotBtn = document.getElementById('floating-chatbot-btn');
+            const mobileChatbotBtn = document.getElementById('mobile-chatbot-btn');
+            const chatbotModal = document.getElementById('chatbot-modal');
+            const chatbotModalClose = document.getElementById('chatbot-modal-close');
+            const chatbotForm = document.getElementById('chatbot-form');
+            const chatbotMessages = document.getElementById('chatbot-messages');
+            const chatbotInput = document.getElementById('chatbot-input');
 
             menuIcon.addEventListener('click', function() {
                 mobileMenu.classList.add('active');
@@ -1513,6 +1856,131 @@ $user_email = '';
                 }
             });
 
+            // Chatbot functionality
+            function openChatbotModal() {
+                chatbotModal.style.display = 'flex';
+                chatbotInput.focus();
+                scrollToBottom();
+            }
+
+            function closeChatbotModal() {
+                chatbotModal.style.display = 'none';
+                chatbotInput.value = '';
+            }
+
+            function scrollToBottom() {
+                chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
+            }
+
+            function addMessage(content, sender) {
+                const messageDiv = document.createElement('div');
+                messageDiv.classList.add('chatbot-message', sender);
+                messageDiv.innerHTML = `<p>${content}</p>`;
+                chatbotMessages.appendChild(messageDiv);
+                scrollToBottom();
+            }
+
+            const responses = {
+                'hello': 'Hi! How can I assist you today?',
+                'delivery': 'We offer fast campus delivery within 24 hours to your dorm or a campus pickup point. Would you like more details on delivery options?',
+                'discount': 'Bugema University students with a valid student ID can enjoy exclusive discounts. Verify your ID at checkout to apply them!',
+                'products': 'We offer textbooks, branded jumpers, pens, wall clocks, notebooks, T-shirts, and bottles. Browse categories via the navigation menu!',
+                'contact': 'You can reach us at campusshop@bugemauniv.ac.ug or via WhatsApp at +256 7550 87665. Want to call now?',
+                'help': 'I’m here to assist! Ask about delivery, discounts, products, or anything else.',
+                'default': 'Sorry, I didn’t understand that. Try asking about delivery, discounts, products, or contact info!'
+            };
+
+            chatbotBtn.addEventListener('click', openChatbotModal);
+            mobileChatbotBtn.addEventListener('click', openChatbotModal);
+
+            chatbotModalClose.addEventListener('click', closeChatbotModal);
+
+            chatbotModal.addEventListener('click', function(e) {
+                if (e.target === chatbotModal) {
+                    closeChatbotModal();
+                }
+            });
+
+            chatbotForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const message = chatbotInput.value.trim();
+                if (!message) return;
+
+                // Add user message
+                addMessage(message, 'user');
+
+                // Get bot response
+                const lowerMessage = message.toLowerCase();
+                let response = responses['default'];
+                for (const key in responses) {
+                    if (lowerMessage.includes(key)) {
+                        response = responses[key];
+                        break;
+                    }
+                }
+
+                // Add bot response
+                setTimeout(() => {
+                    addMessage(response, 'bot');
+                }, 500);
+
+                chatbotInput.value = '';
+                chatbotInput.focus();
+            });
+
+            chatbotInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    chatbotForm.dispatchEvent(new Event('submit'));
+                }
+            });
+
+            // Image modal and share functionality
+            document.querySelectorAll('.product-card img').forEach(img => {
+                img.addEventListener('click', function() {
+                    const productId = this.getAttribute('data-product-id');
+                    const title = this.getAttribute('data-title');
+                    const caption = this.getAttribute('data-caption');
+                    const price = this.getAttribute('data-price');
+
+                    modalImage.src = this.src;
+                    modalImage.alt = title;
+                    modalTitle.textContent = title;
+                    modalCaption.textContent = caption;
+                    modalPrice.textContent = price;
+                    modalProductId.value = productId;
+
+                    // Update share links
+                    const shareUrl = `${window.location.origin}/product.php?id=${productId}`;
+                    const encodedUrl = encodeURIComponent(shareUrl);
+                    const encodedText = encodeURIComponent(`Check out this product from Bugema CampusShop: ${title} - ${shareUrl}`);
+
+                    const shareLinks = {
+                        whatsapp: `https://api.whatsapp.com/send?text=${encodedText}`,
+                        facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`,
+                        x: `https://x.com/intent/tweet?text=${encodedText}`,
+                        telegram: `https://t.me/share/url?url=${encodedUrl}&text=${encodedText}`
+                    };
+
+                    document.querySelectorAll('.share-btn').forEach(btn => {
+                        const platform = btn.getAttribute('data-platform').toLowerCase();
+                        btn.href = shareLinks[platform];
+                    });
+
+                    imageModal.style.display = 'flex';
+                });
+            });
+
+            imageModalClose.addEventListener('click', function() {
+                imageModal.style.display = 'none';
+            });
+
+            imageModal.addEventListener('click', function(e) {
+                if (e.target === imageModal) {
+                    imageModal.style.display = 'none';
+                }
+            });
+
             document.addEventListener('keydown', function(e) {
                 if (e.key === 'Escape') {
                     if (feedbackModal.style.display === 'flex') {
@@ -1522,6 +1990,12 @@ $user_email = '';
                     }
                     if (imageModal.style.display === 'flex') {
                         imageModal.style.display = 'none';
+                    }
+                    if (chatbotModal.style.display === 'flex') {
+                        closeChatbotModal();
+                    }
+                    if (mobileMenu.classList.contains('active')) {
+                        mobileMenu.classList.remove('active');
                     }
                 }
             });
@@ -1560,33 +2034,21 @@ $user_email = '';
                 });
             });
 
-            document.querySelectorAll('.product-card img').forEach(img => {
-                img.addEventListener('click', function() {
-                    const productId = this.getAttribute('data-product-id');
-                    const title = this.getAttribute('data-title');
-                    const caption = this.getAttribute('data-caption');
-                    const price = this.getAttribute('data-price');
-
-                    modalImage.src = this.src;
-                    modalImage.alt = title;
-                    modalTitle.textContent = title;
-                    modalCaption.textContent = caption;
-                    modalPrice.textContent = price;
-                    modalProductId.value = productId;
-
-                    imageModal.style.display = 'flex';
-                });
-            });
-
-            imageModalClose.addEventListener('click', function() {
-                imageModal.style.display = 'none';
-            });
-
-            imageModal.addEventListener('click', function(e) {
-                if (e.target === imageModal) {
-                    imageModal.style.display = 'none';
+            // Screen reader only class for accessibility
+            const style = document.createElement('style');
+            style.textContent = `
+                .sr-only {
+                    position: absolute;
+                    width: 1px;
+                    height: 1px;
+                    padding: 0;
+                    margin: -1px;
+                    overflow: hidden;
+                    clip: rect(0, 0, 0, 0);
+                    border: 0;
                 }
-            });
+            `;
+            document.head.appendChild(style);
         });
     </script>
 </body>
