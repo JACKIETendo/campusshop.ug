@@ -19,14 +19,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $action = $_POST['action'];
     $name = $conn->real_escape_string($_POST['name']);
     $price = floatval($_POST['price']);
+    $stock = intval($_POST['stock']);
     $category = $conn->real_escape_string($_POST['category']);
     $caption = $conn->real_escape_string($_POST['caption']);
-    $image_path = NULL;
+    $image_path = null;
 
-    // Validate category
+    // Validate inputs
     $valid_categories = ['Textbooks', 'Branded Jumpers', 'Bottles', 'Pens', 'Note Books', 'Wall Clocks', 'T-Shirts'];
     if (!in_array($category, $valid_categories)) {
         $message = "Invalid category selected.";
+    } elseif ($price <= 0) {
+        $message = "Price must be greater than zero.";
+    } elseif ($stock < 0) {
+        $message = "Stock cannot be negative.";
     } elseif (strlen($caption) > 255) {
         $message = "Caption must be 255 characters or less.";
     } else {
@@ -49,31 +54,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         }
 
         if ($action === 'add' && !isset($message)) {
-            $sql = "INSERT INTO products (name, price, category, caption, image_path) VALUES ('$name', '$price', '$category', " . ($caption ? "'$caption'" : 'NULL') . ", " . ($image_path ? "'$image_path'" : 'NULL') . ")";
-            if ($conn->query($sql) === false) {
-                $message = "Failed to add product: " . $conn->error;
-            } else {
+            $sql = "INSERT INTO products (name, price, stock, category, caption, image_path) VALUES (?, ?, ?, ?, ?, ?)";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("sdisss", $name, $price, $stock, $category, $caption, $image_path);
+            if ($stmt->execute()) {
                 $message = "Product added successfully.";
+            } else {
+                $message = "Failed to add product: " . $stmt->error;
+                error_log("Add product failed: " . $stmt->error);
             }
+            $stmt->close();
         } elseif ($action === 'edit' && !isset($message)) {
             $id = intval($_POST['id']);
-            error_log("Editing product ID: $id, Name: $name, Price: $price, Category: $category, Caption: $caption, Image: " . ($image_path ?: 'NULL'));
-            $sql = "UPDATE products SET name='$name', price='$price', category='$category', caption=" . ($caption ? "'$caption'" : 'NULL') . ($image_path ? ", image_path='$image_path'" : "") . " WHERE id='$id'";
-            if ($conn->query($sql) === false) {
-                $message = "Failed to update product: " . $conn->error;
+            error_log("Editing product ID: $id, Name: $name, Price: $price, Stock: $stock, Category: $category, Caption: $caption, Image: " . ($image_path ?: 'NULL'));
+            $sql = "UPDATE products SET name = ?, price = ?, stock = ?, category = ?, caption = ?" . ($image_path ? ", image_path = ?" : "") . " WHERE id = ?";
+            $stmt = $conn->prepare($sql);
+            if ($image_path) {
+                $stmt->bind_param("sdisssi", $name, $price, $stock, $category, $caption, $image_path, $id);
             } else {
+                $stmt->bind_param("sdissi", $name, $price, $stock, $category, $caption, $id);
+            }
+            if ($stmt->execute()) {
                 // Delete old image if a new one was uploaded
                 if ($image_path) {
-                    $old_image_sql = "SELECT image_path FROM products WHERE id='$id'";
-                    $old_image_result = $conn->query($old_image_sql);
+                    $old_image_sql = "SELECT image_path FROM products WHERE id = ?";
+                    $old_image_stmt = $conn->prepare($old_image_sql);
+                    $old_image_stmt->bind_param("i", $id);
+                    $old_image_stmt->execute();
+                    $old_image_result = $old_image_stmt->get_result();
                     if ($old_image_result && $old_image_row = $old_image_result->fetch_assoc() && $old_image_row['image_path']) {
                         if (file_exists($old_image_row['image_path'])) {
                             unlink($old_image_row['image_path']);
                         }
                     }
+                    $old_image_stmt->close();
                 }
                 $message = "Product updated successfully.";
+            } else {
+                $message = "Failed to update product: " . $stmt->error;
+                error_log("Update product failed: " . $stmt->error);
             }
+            $stmt->close();
         }
     }
 }
@@ -81,31 +102,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 // Handle delete product
 if (isset($_GET['delete'])) {
     $id = intval($_GET['delete']);
-    $sql = "SELECT image_path FROM products WHERE id='$id'";
-    $result = $conn->query($sql);
+    $sql = "SELECT image_path FROM products WHERE id = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("i", $id);
+    $stmt->execute();
+    $result = $stmt->get_result();
     if ($result && $row = $result->fetch_assoc() && $row['image_path']) {
         if (file_exists($row['image_path'])) {
             unlink($row['image_path']);
         }
     }
-    $sql = "DELETE FROM products WHERE id='$id'";
-    if ($conn->query($sql) === false) {
-        $message = "Failed to delete product: " . $conn->error;
-    } else {
+    $sql = "DELETE FROM products WHERE id = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("i", $id);
+    if ($stmt->execute()) {
         $message = "Product deleted successfully.";
+    } else {
+        $message = "Failed to delete product: " . $stmt->error;
+        error_log("Delete product failed: " . $stmt->error);
     }
+    $stmt->close();
 }
 
 // Handle complete delivery
 if (isset($_GET['complete_delivery'])) {
     $id = intval($_GET['complete_delivery']);
-    $sql = "UPDATE pending_deliveries SET status='Completed' WHERE id='$id'";
-    if ($conn->query($sql) === false) {
-        $message = "Failed to mark delivery as completed: " . $conn->error;
-        error_log("Failed to complete delivery ID $id: " . $conn->error);
-    } else {
+    $sql = "UPDATE pending_deliveries SET status = 'Completed' WHERE id = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("i", $id);
+    if ($stmt->execute()) {
         $message = "Delivery marked as completed.";
+    } else {
+        $message = "Failed to mark delivery as completed: " . $stmt->error;
+        error_log("Complete delivery ID $id failed: " . $stmt->error);
     }
+    $stmt->close();
 }
 
 // Handle send notification
@@ -114,16 +145,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_notification']))
     if (empty($notification_message)) {
         $message = "Notification message cannot be empty.";
     } else {
-        // Send to all users (user_id = NULL for broadcast)
-        $sql = "INSERT INTO notifications (user_id, message, created_at) VALUES (NULL, '$notification_message', NOW())";
-        if ($conn->query($sql) === false) {
-            $message = "Failed to send notification: " . $conn->error;
-            error_log("Failed to send notification: " . $conn->error);
-        } else {
+        $sql = "INSERT INTO notifications (user_id, message, created_at) VALUES (NULL, ?, NOW())";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("s", $notification_message);
+        if ($stmt->execute()) {
             $message = "Notification sent successfully.";
+        } else {
+            $message = "Failed to send notification: " . $stmt->error;
+            error_log("Send notification failed: " . $stmt->error);
         }
+        $stmt->close();
     }
 }
+
+// Handle sales report date filter
+$start_date = isset($_POST['start_date']) ? $_POST['start_date'] : date('Y-m-d', strtotime('-30 days'));
+$end_date = isset($_POST['end_date']) ? $_POST['end_date'] : date('Y-m-d');
+$total_revenue = 0;
 ?>
 
 <!DOCTYPE html>
@@ -150,6 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_notification']))
             --white: #ffffff;
             --error-red: #dc2626;
             --success-green: #1059b9ff;
+            --low-stock: #ff9800;
         }
 
         body {
@@ -235,6 +274,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_notification']))
             font-size: 0.9rem;
         }
 
+        .form-group input[type="date"] {
+            padding: 8px;
+        }
+
         .form-group textarea {
             resize: vertical;
             min-height: 80px;
@@ -269,6 +312,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_notification']))
 
         .success { color: var(--success-green); }
         .error { color: var(--error-red); }
+        .low-stock { color: var(--low-stock); font-weight: bold; }
 
         table {
             width: 100%;
@@ -431,6 +475,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_notification']))
                     <input type="number" name="price" step="0.01" required>
                 </div>
                 <div class="form-group">
+                    <label for="stock">Stock Quantity</label>
+                    <input type="number" name="stock" required min="0">
+                </div>
+                <div class="form-group">
                     <label for="category">Category</label>
                     <select name="category" required>
                         <option value="">Select Category</option>
@@ -467,7 +515,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_notification']))
             </form>
         </div>
 
-        <!-- Product List -->
+        <!-- Product List (with Inventory) -->
         <div class="dashboard-section">
             <h2>Manage Products</h2>
             <table>
@@ -475,6 +523,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_notification']))
                     <th>ID</th>
                     <th>Name</th>
                     <th>Price (UGX)</th>
+                    <th>Stock</th>
                     <th>Category</th>
                     <th>Caption</th>
                     <th>Image</th>
@@ -484,15 +533,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_notification']))
                 $sql = "SELECT * FROM products";
                 $result = $conn->query($sql);
                 if ($result === false) {
-                    echo "<tr><td colspan='7'>Error fetching products: " . htmlspecialchars($conn->error) . "</td></tr>";
+                    echo "<tr><td colspan='8'>Error fetching products: " . htmlspecialchars($conn->error) . "</td></tr>";
                     error_log("Product list query failed: " . $conn->error);
                 } elseif ($result->num_rows > 0) {
                     while ($row = $result->fetch_assoc()) {
                         $image_path = !empty($row['image_path']) ? htmlspecialchars($row['image_path']) : 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+A8AAQAB3gB4cAAAAABJRU5ErkJggg==';
+                        $stock_class = $row['stock'] <= 10 ? 'low-stock' : '';
                         echo "<tr>";
                         echo "<td>" . htmlspecialchars($row['id']) . "</td>";
                         echo "<td>" . htmlspecialchars($row['name']) . "</td>";
                         echo "<td>" . number_format($row['price']) . "</td>";
+                        echo "<td class='$stock_class'>" . htmlspecialchars($row['stock']) . "</td>";
                         echo "<td>" . (isset($row['category']) && !empty($row['category']) ? htmlspecialchars($row['category']) : 'N/A') . "</td>";
                         echo "<td>" . (empty($row['caption']) ? 'N/A' : htmlspecialchars($row['caption'])) . "</td>";
                         echo "<td><img src='$image_path' alt='" . htmlspecialchars($row['name']) . "'></td>";
@@ -503,7 +554,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_notification']))
                         echo "</tr>";
                     }
                 } else {
-                    echo "<tr><td colspan='7'>No products found.</td></tr>";
+                    echo "<tr><td colspan='8'>No products found.</td></tr>";
                 }
                 ?>
             </table>
@@ -529,7 +580,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_notification']))
                     echo "<tr><td colspan='7'>Error: 'pending_deliveries' table does not exist.</td></tr>";
                     error_log("Error: 'pending_deliveries' table does not exist.");
                 } else {
-                    $sql = "SELECT id, username, phone, location, payment_method, amount FROM pending_deliveries WHERE status='Pending'";
+                    $sql = "SELECT id, username, phone, location, payment_method, amount FROM pending_deliveries WHERE status = 'Pending'";
                     $result = $conn->query($sql);
                     if ($result === false) {
                         echo "<tr><td colspan='7'>Error fetching pending deliveries: " . htmlspecialchars($conn->error) . "</td></tr>";
@@ -556,6 +607,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_notification']))
             </table>
         </div>
 
+        <!-- Sales Report -->
+        <div class="dashboard-section">
+            <h2>Sales Report</h2>
+            <form method="POST" action="admin_dashboard.php">
+                <div class="form-group" style="display: flex; gap: 1rem;">
+                    <div>
+                        <label for="start_date">Start Date</label>
+                        <input type="date" name="start_date" value="<?php echo htmlspecialchars($start_date); ?>" required>
+                    </div>
+                    <div>
+                        <label for="end_date">End Date</label>
+                        <input type="date" name="end_date" value="<?php echo htmlspecialchars($end_date); ?>" required>
+                    </div>
+                    <button type="submit" style="align-self: flex-end;">Filter</button>
+                </div>
+            </form>
+            <table>
+                <tr>
+                    <th>ID</th>
+                    <th>Username</th>
+                    <th>Phone Number</th>
+                    <th>Location</th>
+                    <th>Payment Method</th>
+                    <th>Amount (UGX)</th>
+                    <th>Date</th>
+                </tr>
+                <?php
+                $sql = "SELECT id, username, phone, location, payment_method, amount, created_at 
+                        FROM pending_deliveries 
+                        WHERE status = 'Completed' AND created_at BETWEEN ? AND ? ORDER BY created_at DESC";
+                $stmt = $conn->prepare($sql);
+                $end_date_plus_one = date('Y-m-d', strtotime($end_date . ' +1 day')); // Include end date
+                $stmt->bind_param("ss", $start_date, $end_date_plus_one);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                if ($result === false) {
+                    echo "<tr><td colspan='7'>Error fetching sales: " . htmlspecialchars($conn->error) . "</td></tr>";
+                    error_log("Sales report query failed: " . $conn->error);
+                } elseif ($result->num_rows > 0) {
+                    while ($row = $result->fetch_assoc()) {
+                        $total_revenue += $row['amount'];
+                        echo "<tr>";
+                        echo "<td>" . htmlspecialchars($row['id']) . "</td>";
+                        echo "<td>" . htmlspecialchars($row['username']) . "</td>";
+                        echo "<td>" . htmlspecialchars($row['phone']) . "</td>";
+                        echo "<td>" . (isset($row['location']) && !empty($row['location']) ? htmlspecialchars($row['location']) : 'N/A') . "</td>";
+                        echo "<td>" . htmlspecialchars($row['payment_method']) . "</td>";
+                        echo "<td>" . ($row['amount'] ? number_format($row['amount']) : 'N/A') . "</td>";
+                        echo "<td>" . htmlspecialchars(date('Y-m-d H:i', strtotime($row['created_at']))) . "</td>";
+                        echo "</tr>";
+                    }
+                } else {
+                    echo "<tr><td colspan='7'>No sales found for the selected period.</td></tr>";
+                }
+                $stmt->close();
+                ?>
+            </table>
+            <p style="margin-top: 1rem; font-weight: bold;">
+                Total Revenue: UGX <?php echo number_format($total_revenue); ?>
+            </p>
+        </div>
+
         <!-- Edit Product Modal -->
         <?php
         if (isset($_GET['edit'])) {
@@ -564,8 +677,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_notification']))
             if ($id <= 0) {
                 $message = "Invalid product ID.";
             } else {
-                $sql = "SELECT * FROM products WHERE id='$id'";
-                $result = $conn->query($sql);
+                $sql = "SELECT * FROM products WHERE id = ?";
+                $stmt = $conn->prepare($sql);
+                $stmt->bind_param("i", $id);
+                $stmt->execute();
+                $result = $stmt->get_result();
                 if ($result === false) {
                     $message = "Error fetching product: " . $conn->error;
                     error_log("Edit query failed: " . $conn->error);
@@ -587,6 +703,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_notification']))
                         <div class="form-group">
                             <label for="price">Price (UGX)</label>
                             <input type="number" name="price" step="0.01" value="<?php echo htmlspecialchars($row['price']); ?>" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="stock">Stock Quantity</label>
+                            <input type="number" name="stock" value="<?php echo htmlspecialchars($row['stock']); ?>" required min="0">
                         </div>
                         <div class="form-group">
                             <label for="category">Category</label>
@@ -619,14 +739,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_notification']))
                     $message = "Product not found for ID: $id";
                     error_log("Product not found for ID: $id");
                 }
+                $stmt->close();
             }
         }
         ?>
     </div>
-
-    <script>
-        // No additional JavaScript needed; close button uses window.location.href
-    </script>
 </body>
 </html>
 
