@@ -575,13 +575,12 @@ $user_email = '';
         }
 
         .bottom-bar-actions a, .bottom-bar-actions button {
-            background: var(--accent-yellow);
             color: var(--dark-gray);
             padding: 8px;
             border-radius: 50%;
             text-decoration: none;
             font-weight: 500;
-            font-size: 1rem;
+            font-size: 1.5rem;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -1296,7 +1295,7 @@ $user_email = '';
             }
 
             .product-card img {
-                height: 140px;
+                height: 110px;
             }
 
             .product-card h4 {
@@ -1320,7 +1319,7 @@ $user_email = '';
 
             .bottom-bar-actions a, .bottom-bar-actions button {
                 padding: 6px;
-                font-size: 0.8rem;
+                font-size: 1.2rem;
                 width: 36px;
                 height: 36px;
             }
@@ -1505,14 +1504,12 @@ $user_email = '';
                     ?>
                 </span></a>
                 <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback">💬</button>
-                <button class="chatbot-btn" id="mobile-chatbot-btn" data-tooltip="Chat with Us"><img src="images/chat.png" style="height: 40px; width:40px; border-radius:60px;" alt=""></button>
                 <a href="https://wa.me/+256755087665" target="_blank" data-tooltip="Help">📞</a>
             <?php else: ?>
                 <a href="login.php" data-tooltip="Login">🔑</a>
                 <a href="favorites.php" data-tooltip="Favorites">❤️ <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
                 <a href="cart.php" data-tooltip="Cart">🛒 <span class="cart-count"><?php echo array_sum($_SESSION['guest_cart']); ?></span></a>
                 <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback">💬</button>
-                <button class="chatbot-btn" id="mobile-chatbot-btn" data-tooltip="Chat with Us"><img src="images/chat.png" style="height: 40px; width:40px; border-radius:60px;" alt=""></button>
                 <a href="https://wa.me/+256755087665" target="_blank" data-tooltip="Help">📞</a>
             <?php endif; ?>
         </div>

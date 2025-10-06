@@ -409,13 +409,12 @@ $user_email = '';
 
         .bottom-bar-actions a,
         .bottom-bar-actions button {
-            background: var(--accent-yellow);
             color: var(--dark-gray);
             padding: 3px;
             border-radius: 50%;
             text-decoration: none;
             font-weight: 500;
-            font-size: 1rem;
+            font-size: 1.5rem;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -864,6 +863,12 @@ $user_email = '';
 
             .payment-option-header {
                 font-size: 0.9rem;
+            }
+            .bottom-bar-actions a, .bottom-bar-actions button {
+                padding: 6px;
+                font-size: 1.2rem;
+                width: 36px;
+                height: 36px;
             }
         }
 
