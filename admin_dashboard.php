@@ -1,31 +1,49 @@
 <?php
+// admin_dashboard.php (single-file dashboard: Products, Deliveries, Reports, Notifications)
+// Requires: db_connect.php (creates $conn mysqli connection)
+// Database: campusshop_db
+// Tables required:
+//  - products(id, name, price, stock, category, caption, image_path)
+//  - pending_deliveries(id, username, amount, payment_method, status, created_at)
+//  - notifications(id, user_id, message, created_at)
+
 session_start();
 include 'db_connect.php';
 
-// Enable error reporting for debugging
+// Enable errors for debugging (comment out in production)
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-// Check if user is admin
+// Admin auth check
 if (!isset($_SESSION['username']) || $_SESSION['role'] !== 'admin') {
     error_log("Unauthorized access attempt: " . print_r($_SESSION, true));
     header("Location: index.php");
     exit;
 }
 
-// Handle add/edit product
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+// Global categories
+$valid_categories = ['Textbooks', 'Branded Jumpers', 'Bottles', 'Pens', 'Note Books', 'Wall Clocks', 'T-Shirts'];
+
+// Helper
+function post_val($k, $d='') { return isset($_POST[$k]) ? $_POST[$k] : $d; }
+$message = null;
+
+// --------------------
+// HANDLE REQUESTS
+// --------------------
+
+// Add / Edit Product
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && in_array($_POST['action'], ['add', 'edit'])) {
     $action = $_POST['action'];
-    $name = $conn->real_escape_string($_POST['name']);
-    $price = floatval($_POST['price']);
-    $stock = intval($_POST['stock']);
-    $category = $conn->real_escape_string($_POST['category']);
-    $caption = $conn->real_escape_string($_POST['caption']);
+    $name = $conn->real_escape_string(post_val('name'));
+    $price = floatval(post_val('price', 0));
+    $stock = intval(post_val('stock', 0));
+    $category = $conn->real_escape_string(post_val('category'));
+    $caption = $conn->real_escape_string(post_val('caption', ''));
     $image_path = null;
 
-    // Validate inputs
-    $valid_categories = ['Textbooks', 'Branded Jumpers', 'Bottles', 'Pens', 'Note Books', 'Wall Clocks', 'T-Shirts'];
+    // Basic validation
     if (!in_array($category, $valid_categories)) {
         $message = "Invalid category selected.";
     } elseif ($price <= 0) {
@@ -35,718 +53,901 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     } elseif (strlen($caption) > 255) {
         $message = "Caption must be 255 characters or less.";
     } else {
-        // Handle image upload
+
+        // Image upload (optional)
         if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
             $image = $_FILES['image'];
-            $allowed_types = ['image/jpeg', 'image/png', 'image/jpg'];
             $image_info = getimagesize($image['tmp_name']);
-            if (in_array($image_info['mime'], $allowed_types)) {
-                $filename = time() . '_' . basename($image['name']);
-                $path = 'images/' . $filename;
-                if (move_uploaded_file($image['tmp_name'], $path)) {
-                    $image_path = $path;
-                } else {
-                    $message = "Failed to upload image.";
-                }
+            $allowed = ['image/jpeg','image/png','image/jpg'];
+            if ($image_info && in_array($image_info['mime'], $allowed)) {
+                if (!is_dir('images')) mkdir('images', 0755, true);
+                $fn = time() . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '_', basename($image['name']));
+                $path = 'images/' . $fn;
+                if (move_uploaded_file($image['tmp_name'], $path)) $image_path = $path;
+                else $message = "Failed to upload image.";
             } else {
                 $message = "Invalid image format. Use JPEG or PNG.";
             }
         }
 
-        if ($action === 'add' && !isset($message)) {
-            $sql = "INSERT INTO products (name, price, stock, category, caption, image_path) VALUES (?, ?, ?, ?, ?, ?)";
-            $stmt = $conn->prepare($sql);
-            $stmt->bind_param("sdisss", $name, $price, $stock, $category, $caption, $image_path);
-            if ($stmt->execute()) {
-                $message = "Product added successfully.";
-            } else {
-                $message = "Failed to add product: " . $stmt->error;
-                error_log("Add product failed: " . $stmt->error);
-            }
-            $stmt->close();
-        } elseif ($action === 'edit' && !isset($message)) {
-            $id = intval($_POST['id']);
-            error_log("Editing product ID: $id, Name: $name, Price: $price, Stock: $stock, Category: $category, Caption: $caption, Image: " . ($image_path ?: 'NULL'));
-            $sql = "UPDATE products SET name = ?, price = ?, stock = ?, category = ?, caption = ?" . ($image_path ? ", image_path = ?" : "") . " WHERE id = ?";
-            $stmt = $conn->prepare($sql);
-            if ($image_path) {
-                $stmt->bind_param("sdisssi", $name, $price, $stock, $category, $caption, $image_path, $id);
-            } else {
-                $stmt->bind_param("sdissi", $name, $price, $stock, $category, $caption, $id);
-            }
-            if ($stmt->execute()) {
-                // Delete old image if a new one was uploaded
-                if ($image_path) {
-                    $old_image_sql = "SELECT image_path FROM products WHERE id = ?";
-                    $old_image_stmt = $conn->prepare($old_image_sql);
-                    $old_image_stmt->bind_param("i", $id);
-                    $old_image_stmt->execute();
-                    $old_image_result = $old_image_stmt->get_result();
-                    if ($old_image_result && $old_image_row = $old_image_result->fetch_assoc() && $old_image_row['image_path']) {
-                        if (file_exists($old_image_row['image_path'])) {
-                            unlink($old_image_row['image_path']);
+        if (!isset($message)) {
+            if ($action === 'add') {
+                $sql = "INSERT INTO products (name, price, stock, category, caption, image_path) VALUES (?, ?, ?, ?, ?, ?)";
+                $stmt = $conn->prepare($sql);
+                $stmt->bind_param("sdisss", $name, $price, $stock, $category, $caption, $image_path);
+                if ($stmt->execute()) $message = "Product added successfully.";
+                else { $message = "Failed to add product: ".$stmt->error; error_log("Add product failed: ".$stmt->error); }
+                $stmt->close();
+            } else { 
+                // Handle edit notification
+                if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_notification'])) {
+                    $nid = intval($_POST['nid']);
+                    $message = $conn->real_escape_string(trim($_POST['nmessage']));
+                    if ($nid <= 0 || empty($message)) {
+                        $message = "Invalid notification edit.";
+                    } else {
+                        $stmt = $conn->prepare("UPDATE notifications SET message = ?, created_at = NOW() WHERE id = ?");
+                        $stmt->bind_param("si", $message, $nid);
+                        if ($stmt->execute()) {
+                            $message = "Notification updated successfully.";
+                        } else {
+                            $message = "Failed to update notification: " . $stmt->error;
+                            error_log("Edit notification failed: " . $stmt->error);
                         }
+                        $stmt->close();
                     }
-                    $old_image_stmt->close();
+                    // Redirect or output JSON for fetch
+                    if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+                        echo $message;
+                        exit;
+                    }
+                    // For non-AJAX, let the page reload with the message
                 }
-                $message = "Product updated successfully.";
-            } else {
-                $message = "Failed to update product: " . $stmt->error;
-                error_log("Update product failed: " . $stmt->error);
+
             }
-            $stmt->close();
         }
     }
 }
 
-// Handle delete product
-if (isset($_GET['delete'])) {
-    $id = intval($_GET['delete']);
-    $sql = "SELECT image_path FROM products WHERE id = ?";
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("i", $id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    if ($result && $row = $result->fetch_assoc() && $row['image_path']) {
-        if (file_exists($row['image_path'])) {
-            unlink($row['image_path']);
+// Delete product
+if (isset($_GET['delete_product'])) {
+    $id = intval($_GET['delete_product']);
+    if ($id > 0) {
+        $sql = "SELECT image_path FROM products WHERE id = ?";
+        $st = $conn->prepare($sql);
+        $st->bind_param("i",$id);
+        $st->execute();
+        $r = $st->get_result();
+        if ($r && ($row = $r->fetch_assoc()) && !empty($row['image_path'])) {
+            if (file_exists($row['image_path'])) @unlink($row['image_path']);
         }
+        $st->close();
+
+        $del = $conn->prepare("DELETE FROM products WHERE id = ?");
+        $del->bind_param("i",$id);
+        if ($del->execute()) $message = "Product deleted.";
+        else { $message = "Failed to delete product: ".$del->error; error_log("Delete product failed: ".$del->error); }
+        $del->close();
     }
-    $sql = "DELETE FROM products WHERE id = ?";
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("i", $id);
-    if ($stmt->execute()) {
-        $message = "Product deleted successfully.";
-    } else {
-        $message = "Failed to delete product: " . $stmt->error;
-        error_log("Delete product failed: " . $stmt->error);
-    }
-    $stmt->close();
 }
 
-// Handle complete delivery
+// Mark delivery complete
 if (isset($_GET['complete_delivery'])) {
     $id = intval($_GET['complete_delivery']);
-    $sql = "UPDATE pending_deliveries SET status = 'Completed' WHERE id = ?";
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("i", $id);
-    if ($stmt->execute()) {
-        $message = "Delivery marked as completed.";
-    } else {
-        $message = "Failed to mark delivery as completed: " . $stmt->error;
-        error_log("Complete delivery ID $id failed: " . $stmt->error);
-    }
-    $stmt->close();
-}
-
-// Handle send notification
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_notification'])) {
-    $notification_message = trim($conn->real_escape_string($_POST['message']));
-    if (empty($notification_message)) {
-        $message = "Notification message cannot be empty.";
-    } else {
-        $sql = "INSERT INTO notifications (user_id, message, created_at) VALUES (NULL, ?, NOW())";
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param("s", $notification_message);
-        if ($stmt->execute()) {
-            $message = "Notification sent successfully.";
-        } else {
-            $message = "Failed to send notification: " . $stmt->error;
-            error_log("Send notification failed: " . $stmt->error);
-        }
+    if ($id > 0) {
+        $stmt = $conn->prepare("UPDATE pending_deliveries SET status = 'Completed' WHERE id = ?");
+        $stmt->bind_param("i",$id);
+        if ($stmt->execute()) $message = "Delivery marked completed.";
+        else { $message = "Failed to update delivery: ".$stmt->error; error_log("Complete delivery failed: ".$stmt->error); }
         $stmt->close();
     }
 }
 
-// Handle sales report date filter
-$start_date = isset($_POST['start_date']) ? $_POST['start_date'] : date('Y-m-d', strtotime('-30 days'));
-$end_date = isset($_POST['end_date']) ? $_POST['end_date'] : date('Y-m-d');
-$total_revenue = 0;
+// Delete delivery (optional)
+if (isset($_GET['delete_delivery'])) {
+    $id = intval($_GET['delete_delivery']);
+    if ($id > 0) {
+        $del = $conn->prepare("DELETE FROM pending_deliveries WHERE id = ?");
+        $del->bind_param("i",$id);
+        if ($del->execute()) $message = "Delivery deleted.";
+        else { $message = "Failed to delete delivery: ".$del->error; error_log("Delete delivery failed: ".$del->error); }
+        $del->close();
+    }
+}
+
+// Notifications: add (send), edit, delete
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_notification'])) {
+    $notification_message = trim($conn->real_escape_string(post_val('message')));
+    if (empty($notification_message)) {
+        $message = "Notification cannot be empty.";
+    } else {
+        $stmt = $conn->prepare("INSERT INTO notifications (user_id, message, created_at) VALUES (NULL, ?, NOW())");
+        $stmt->bind_param("s", $notification_message);
+        if ($stmt->execute()) $message = "Notification sent.";
+        else { $message = "Failed to send notification: ".$stmt->error; error_log("Send notification failed: ".$stmt->error); }
+        $stmt->close();
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_notification'])) {
+    $nid = intval(post_val('nid', 0));
+    $msg = $conn->real_escape_string(post_val('nmessage', ''));
+    if ($nid <= 0 || $msg === '') $message = "Invalid notification edit.";
+    else {
+        $stmt = $conn->prepare("UPDATE notifications SET message = ?, created_at = NOW() WHERE id = ?");
+        $stmt->bind_param("si", $msg, $nid);
+        if ($stmt->execute()) $message = "Notification updated.";
+        else { $message = "Failed to update notification: ".$stmt->error; error_log("Edit notification failed: ".$stmt->error); }
+        $stmt->close();
+    }
+}
+
+if (isset($_GET['delete_notification'])) {
+    $nid = intval($_GET['delete_notification']);
+    if ($nid > 0) {
+        $stmt = $conn->prepare("DELETE FROM notifications WHERE id = ?");
+        $stmt->bind_param("i",$nid);
+        if ($stmt->execute()) $message = "Notification deleted.";
+        else { $message = "Failed to delete notification: ".$stmt->error; error_log("Delete notification failed: ".$stmt->error); }
+        $stmt->close();
+    }
+}
+
+// --------------------
+// FETCH DASHBOARD DATA
+// --------------------
+$totalSales = 0;
+if ($res = $conn->query("SELECT SUM(amount) AS total_sales FROM pending_deliveries WHERE status = 'Completed'")) {
+    $r = $res->fetch_assoc(); $totalSales = $r['total_sales'] ? floatval($r['total_sales']) : 0;
+}
+
+$totalProducts = 0;
+if ($res = $conn->query("SELECT COUNT(*) AS cnt FROM products")) { $r = $res->fetch_assoc(); $totalProducts = intval($r['cnt']); }
+
+$pendingCount = 0;
+if ($res = $conn->query("SELECT COUNT(*) AS cnt FROM pending_deliveries WHERE status = 'Pending'")) { $r = $res->fetch_assoc(); $pendingCount = intval($r['cnt']); }
+
+$notifCount = 0;
+if ($res = $conn->query("SELECT COUNT(*) AS cnt FROM notifications WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)")) { $r = $res->fetch_assoc(); $notifCount = intval($r['cnt']); }
+
+// Sales by month (last 12 months)
+$salesLabels = []; $salesData = [];
+$months_sql = "
+    SELECT DATE_FORMAT(created_at, '%Y-%m') AS ym, SUM(amount) AS total
+    FROM pending_deliveries
+    WHERE status = 'Completed' AND created_at >= DATE_SUB(CURDATE(), INTERVAL 11 MONTH)
+    GROUP BY ym
+    ORDER BY ym ASC
+";
+$monthMap = [];
+if ($res = $conn->query($months_sql)) {
+    while ($row = $res->fetch_assoc()) $monthMap[$row['ym']] = floatval($row['total']);
+}
+for ($i=11;$i>=0;$i--) {
+    $m = date('Y-m', strtotime("-$i months"));
+    $salesLabels[] = date('M Y', strtotime($m.'-01'));
+    $salesData[] = isset($monthMap[$m]) ? $monthMap[$m] : 0;
+}
+
+// Category distribution
+$catLabels = []; $catData = [];
+if ($res = $conn->query("SELECT category, COUNT(*) AS cnt FROM products GROUP BY category")) {
+    while ($r = $res->fetch_assoc()) { $catLabels[] = $r['category']; $catData[] = intval($r['cnt']); }
+}
+
+// Recent orders (last 8)
+$recentOrders = [];
+if ($res = $conn->query("SELECT id, username, amount, payment_method, status, created_at FROM pending_deliveries ORDER BY created_at DESC LIMIT 8")) {
+    while ($r = $res->fetch_assoc()) {
+        $recentOrders[] = $r;
+    }
+}
+
+// Products and pending lists for tables
+$products = []; if ($res = $conn->query("SELECT * FROM products ORDER BY id DESC LIMIT 200")) while ($r=$res->fetch_assoc()) $products[] = $r;
+$pendingDeliveries = []; if ($res = $conn->query("SELECT id, username, phone, location, payment_method, amount, status, created_at FROM pending_deliveries ORDER BY id DESC LIMIT 200")) while ($r=$res->fetch_assoc()) $pendingDeliveries[] = $r;
+
+// Notifications list
+$notifications = [];
+if ($res = $conn->query("SELECT id, user_id, message, created_at FROM notifications ORDER BY created_at DESC LIMIT 200")) {
+    while ($r = $res->fetch_assoc()) $notifications[] = $r;
+}
+
+// JSON for charts
+$salesLabelsJson = json_encode($salesLabels);
+$salesDataJson = json_encode($salesData);
+$catLabelsJson = json_encode($catLabels);
+$catDataJson = json_encode($catData);
 ?>
 
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard - Bugema CampusShop</title>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin Dashboard — CampusShop</title>
 
-        :root {
-            --primary-green: #091bbeff;
-            --secondary-green: #4591e7ff;
-            --accent-yellow: #facc15;
-            --light-gray: #f3f4f6;
-            --dark-gray: #111827;
-            --text-gray: #4b5563;
-            --white: #ffffff;
-            --error-red: #dc2626;
-            --success-green: #1059b9ff;
-            --low-stock: #ff9800;
-        }
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous"/>
 
-        body {
-            font-family: 'Poppins', sans-serif;
-            background: var(--light-gray);
-            color: var(--dark-gray);
-            line-height: 1.6;
-            position: relative;
-        }
+<style>
+:root{
+    --primary:#091bbe; --primary-2:#1231d1; --accent:#4591e7; --muted:#6b7280;
+    --bg:#f3f4f6; --card:#fff; --success:#1059b9; --danger:#dc2626;
+    --sidebar-width:260px; --base-font:16px;
+}
+*{box-sizing:border-box;font-family: 'Poppins', Arial, sans-serif}
+body{margin:0;background:var(--bg);color:#111827;font-size:var(--base-font)}
+a{color:inherit;text-decoration:none}
 
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 2rem 15px;
-        }
+/* Layout */
+.sidebar{
+    position:fixed; left:0; top:0; bottom:0; width:var(--sidebar-width);
+    background:linear-gradient(180deg,var(--primary),var(--primary-2));
+    color:#fff; padding:28px 18px; display:flex; flex-direction:column; gap:18px; z-index:1000;
+}
+.main-wrap{ margin-left:var(--sidebar-width); padding:28px 32px; min-height:100vh; transition:all .2s ease; }
 
-        header {
-            background: var(--primary-green);
-            color: var(--white);
-            padding: 1rem 0;
-            text-align: center;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
+/* Sidebar */
+.brand{ display:flex; gap:12px; align-items:center }
+.brand .logo{ width:52px;height:52px;background:#fff;color:var(--primary);border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px }
+.brand h1{margin:0;font-size:20px;font-weight:700}
+.brand p{margin:0;font-size:13px;opacity:0.95;color:#eaf3ff}
+/* Existing styles remain, add or modify these */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(2, 6, 23, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+}
 
-        header h1 {
-            font-size: 1.5rem;
-            font-weight: 600;
-        }
+.modal {
+    background: var(--card);
+    border-radius: 10px;
+    padding: 18px;
+    width: 560px;
+    max-width: 96%;
+    box-shadow: 0 10px 40px rgba(2, 6, 23, 0.2);
+    position: relative;
+}
 
-        .header-actions {
-            margin-top: 1rem;
-            display: flex;
-            justify-content: center;
-            gap: 1rem;
-        }
+body.dark .modal {
+    background: #071229;
+    border: 1px solid rgba(255, 255, 255, 0.03);
+}
 
-        .header-btn {
-            background: var(--accent-yellow);
-            color: var(--dark-gray);
-            padding: 8px 15px;
-            border-radius: 8px;
-            text-decoration: none;
-            font-weight: 500;
-            transition: background 0.3s ease;
-        }
+.modal-content {
+    /* Remove this class if not needed, as it's now part of .modal */
+    background: none;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+}
 
-        .header-btn:hover {
-            background: var(--secondary-green);
-            color: var(--white);
-        }
+.close {
+    /* If you want to reintroduce the close (×) button, add it back */
+    display: none; /* Removed for now, using the Close button instead */
+}
 
-        .dashboard-section {
-            background: var(--white);
-            padding: 1.5rem;
-            border-radius: 8px;
-            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
-            margin-bottom: 2rem;
-        }
+#closeNotifModal, #cancelEdit {
+    padding: 6px 12px;
+    font-size: 14px;
+}
 
-        .dashboard-section h2 {
-            color: var(--primary-green);
-            font-size: 1.3rem;
-            margin-bottom: 1rem;
-        }
 
-        .form-group {
-            margin-bottom: 1rem;
-        }
+.menu{ margin-top:6px; display:flex; flex-direction:column; gap:8px; }
+.menu a{ display:flex; align-items:center; gap:12px; padding:12px; border-radius:10px; font-weight:600; color:rgba(255,255,255,0.95); }
+.menu a:hover{ background:rgba(255,255,255,0.06); }
+.menu a.active{ background:rgba(255,255,255,0.08); }
 
-        .form-group label {
-            display: block;
-            font-weight: 500;
-            margin-bottom: 0.5rem;
-        }
+.sidebar .footer{ margin-top:auto; display:flex; align-items:center; gap:12px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.04) }
+.sidebar .footer .info{ font-size:14px }
+.sidebar .footer .info small{ display:block; color:#e6f0ff; opacity:0.9; font-weight:500 }
 
-        .form-group input,
-        .form-group textarea,
-        .form-group select {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid var(--text-gray);
-            border-radius: 8px;
-            font-size: 0.9rem;
-        }
+/* Topbar & content */
+.topbar{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:20px }
+.search{ display:flex; align-items:center; gap:10px; background:var(--card); padding:10px 14px; border-radius:12px; box-shadow:0 6px 18px rgba(17,24,39,0.06); width:66% }
+.search input{ border:0; outline:0; font-size:15px; width:100% }
+.top-actions{ display:flex; align-items:center; gap:10px }
 
-        .form-group input[type="date"] {
-            padding: 8px;
-        }
+.card-row{ display:grid; grid-template-columns: repeat(4, 1fr); gap:16px; margin-bottom:20px }
+.stat-card{ background:var(--card); padding:18px; border-radius:12px; box-shadow:0 6px 24px rgba(17,24,39,0.04) }
+.stat-label{ color:var(--muted); font-size:14px }
+.stat-value{ font-size:20px; font-weight:700; margin-top:6px }
 
-        .form-group textarea {
-            resize: vertical;
-            min-height: 80px;
-        }
+/* Grid and panels */
+.grid{ display:grid; grid-template-columns: 2fr 1fr; gap:16px; margin-bottom:18px }
+.panel{ background:var(--card); padding:18px; border-radius:12px; box-shadow:0 6px 24px rgba(17,24,39,0.04) }
 
-        .form-group input[type="file"] {
-            padding: 3px;
-        }
+table{ width:100%; border-collapse:collapse; font-size:14px }
+th, td{ padding:10px 12px; border-bottom:1px solid #f1f5f9; text-align:left; vertical-align:middle }
+th{ background: linear-gradient(90deg,var(--primary),var(--primary-2)); color:#fff; font-weight:700; }
+td img{ width:56px; height:56px; object-fit:cover; border-radius:8px }
 
-        button {
-            background: var(--accent-yellow);
-            color: var(--dark-gray);
-            border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            transition: background 0.3s ease, transform 0.3s ease;
-        }
+.btn{ display:inline-block; padding:8px 12px; border-radius:8px; background:var(--primary); color:#fff; font-weight:700 }
+.btn.secondary{ background:#eef3ff; color:var(--primary); font-weight:700 }
+.small{ font-size:0.85rem; padding:6px 8px; border-radius:6px }
 
-        button:hover {
-            background: var(--secondary-green);
-            color: var(--white);
-            transform: translateY(-2px);
-        }
+.modal-overlay{ position:fixed; inset:0; background:rgba(2,6,23,0.5); display:flex; align-items:center; justify-content:center; z-index:2000 }
+.modal{ background:var(--card); border-radius:10px; padding:18px; width:560px; max-width:96%; box-shadow:0 10px 40px rgba(2,6,23,0.2) }
 
-        .message {
-            text-align: center;
-            margin-bottom: 1rem;
-            font-size: 0.9rem;
-        }
+/* spacing/responsive */
+@media (max-width:1100px) {
+    .card-row{ grid-template-columns: repeat(2,1fr) }
+    .grid{ grid-template-columns: 1fr }
+    .search{ width:100% }
+}
+@media (max-width:700px) {
+    .sidebar{ display:none }
+    .main-wrap{ margin-left:0; padding:14px }
+}
 
-        .success { color: var(--success-green); }
-        .error { color: var(--error-red); }
-        .low-stock { color: var(--low-stock); font-weight: bold; }
+/* dark theme */
+body.dark{ background:#071029; color:#dbeafe }
+body.dark .panel, body.dark .stat-card, body.dark .search, body.dark .modal{ background:#071229; color:#e6f0ff; box-shadow:none; border:1px solid rgba(255,255,255,0.03) }
+body.dark th{ background: linear-gradient(90deg,#0b2b5b,#08306d) }
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 1rem;
-        }
+/* messages */
+.message{ padding:10px 12px; border-radius:8px; margin-bottom:12px }
+.success{ background: rgba(16,89,185,0.08); color:var(--success) }
+.error{ background: rgba(220,38,38,0.06); color:var(--danger) }
 
-        th, td {
-            padding: 10px;
-            text-align: left;
-            border-bottom: 1px solid var(--light-gray);
-        }
-
-        th {
-            background: var(--primary-green);
-            color: var(--white);
-        }
-
-        td img {
-            width: 50px;
-            height: 50px;
-            object-fit: cover;
-            border-radius: 4px;
-        }
-
-        .action-links a {
-            color: var(--primary-green);
-            text-decoration: none;
-            margin-right: 10px;
-        }
-
-        .action-links a:hover {
-            text-decoration: underline;
-        }
-
-        /* Modal Styles */
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 1000;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .modal {
-            background: var(--white);
-            padding: 2rem;
-            border-radius: 12px;
-            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
-            max-width: 500px;
-            width: 90%;
-            animation: fadeIn 0.3s ease-out;
-            position: relative;
-        }
-
-        .modal-close {
-            position: absolute;
-            top: 10px;
-            right: 15px;
-            font-size: 1.5rem;
-            color: var(--text-gray);
-            cursor: pointer;
-            transition: color 0.3s ease;
-        }
-
-        .modal-close:hover {
-            color: var(--error-red);
-        }
-
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        @media (max-width: 768px) {
-            .container {
-                max-width: 90%;
-            }
-
-            table {
-                font-size: 0.8rem;
-            }
-
-            td img {
-                width: 40px;
-                height: 40px;
-            }
-
-            .modal {
-                width: 95%;
-                padding: 1.5rem;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .container {
-                max-width: 100%;
-            }
-
-            .header-actions {
-                flex-direction: column;
-                gap: 0.5rem;
-            }
-
-            .form-group input,
-            .form-group textarea,
-            .form-group select {
-                font-size: 0.8rem;
-            }
-
-            button {
-                font-size: 0.8rem;
-            }
-
-            .modal h2 {
-                font-size: 1.2rem;
-            }
-        }
-    </style>
+</style>
 </head>
 <body>
-    <header>
-        <div class="container">
-            <h1>Admin Dashboard - Bugema CampusShop</h1>
-            <div class="header-actions">
-                <a href="index.php" class="header-btn">Back to Shop</a>
-                <a href="logout.php" class="header-btn">Logout</a>
+    <!-- SIDEBAR -->
+    <aside class="sidebar" role="navigation" aria-label="Main sidebar">
+        <div class="brand">
+            <div class="logo"><img src="images/download.png" style="height: 40px; width: 40px;" alt=""></div>
+            <div>
+                <h1>Bugema CampusShop</h1>
+                <p>Admin Dashboard</p>
             </div>
         </div>
-    </header>
 
-    <div class="container">
-        <!-- Add Product Form -->
-        <div class="dashboard-section">
-            <h2>Add New Product</h2>
-            <?php if (isset($message)): ?>
-                <p class="message <?php echo strpos($message, 'successfully') !== false ? 'success' : 'error'; ?>">
-                    <?php echo htmlspecialchars($message); ?>
-                </p>
-            <?php endif; ?>
-            <form method="POST" action="admin_dashboard.php" enctype="multipart/form-data">
-                <input type="hidden" name="action" value="add">
-                <div class="form-group">
-                    <label for="name">Product Name</label>
-                    <input type="text" name="name" required>
-                </div>
-                <div class="form-group">
-                    <label for="price">Price (UGX)</label>
-                    <input type="number" name="price" step="0.01" required>
-                </div>
-                <div class="form-group">
-                    <label for="stock">Stock Quantity</label>
-                    <input type="number" name="stock" required min="0">
-                </div>
-                <div class="form-group">
-                    <label for="category">Category</label>
-                    <select name="category" required>
-                        <option value="">Select Category</option>
-                        <option value="Textbooks">Textbooks</option>
-                        <option value="Branded Jumpers">Branded Jumpers</option>
-                        <option value="Bottles">Bottles</option>
-                        <option value="Pens">Pens</option>
-                        <option value="Note Books">Note Books</option>
-                        <option value="Wall Clocks">Wall Clocks</option>
-                        <option value="T-Shirts">T-Shirts</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="caption">Caption (Description)</label>
-                    <textarea name="caption" placeholder="Enter a brief product description"></textarea>
-                </div>
-                <div class="form-group">
-                    <label for="image">Product Image</label>
-                    <input type="file" name="image" accept="image/*">
-                </div>
-                <button type="submit">Add Product</button>
-            </form>
+        <nav class="menu" aria-label="Sidebar menu">
+            <a href="#" data-section="overview" class="active"><i class="fa fa-home"></i> Dashboard</a>
+            <a href="#" data-section="products"><i class="fa fa-box"></i> Products</a>
+            <a href="#" data-section="deliveries"><i class="fa fa-truck"></i> Deliveries</a>
+            <a href="#" data-section="reports"><i class="fa fa-chart-line"></i> Reports</a>
+            <a href="#" data-section="notifications"><i class="fa fa-bell"></i> Notifications</a>
+            <a href="logout.php"><i class="fa fa-sign-out-alt"></i> Log Out</a>
+        </nav>
+
+        <div class="footer">
+            <div class="info">
+                <strong><?php echo htmlspecialchars($_SESSION['username']); ?></strong>
+                <small>Administrator</small>
+            </div>
+            <div style="margin-left:auto; width:46px; height:46px; border-radius:8px; background:#fff; display:flex; align-items:center; justify-content:center; color:var(--primary)">A</div>
         </div>
+    </aside>
 
-        <!-- Send Notification Form -->
-        <div class="dashboard-section">
-            <h2>Send Notification</h2>
-            <form method="POST" action="admin_dashboard.php">
-                <div class="form-group">
-                    <label for="message">Notification Message</label>
-                    <textarea name="message" required placeholder="Enter notification message (e.g., New stock available!)"></textarea>
+    <!-- MAIN -->
+    <div class="main-wrap" id="mainWrap">
+        <!-- topbar -->
+        <div class="topbar">
+            <div class="search" role="search" aria-label="Search products and orders">
+                <i class="fa fa-search" style="color:var(--muted)"></i>
+                <input id="searchInput" placeholder="Search products, orders, notifications..." aria-label="Search input" />
+            </div>
+
+            <div class="top-actions">
+                <button id="themeToggle" title="Toggle theme" class="btn secondary" aria-pressed="false"><i class="fa fa-moon"></i></button>
+                <div style="background:var(--card); padding:10px 12px; border-radius:10px; display:flex; align-items:center; gap:8px;">
+                    <i class="fa fa-bell"></i> <strong style="margin-left:6px;"><?php echo $notifCount; ?></strong>
                 </div>
-                <button type="submit" name="send_notification">Send Notification</button>
-            </form>
-        </div>
-
-        <!-- Product List (with Inventory) -->
-        <div class="dashboard-section">
-            <h2>Manage Products</h2>
-            <table>
-                <tr>
-                    <th>ID</th>
-                    <th>Name</th>
-                    <th>Price (UGX)</th>
-                    <th>Stock</th>
-                    <th>Category</th>
-                    <th>Caption</th>
-                    <th>Image</th>
-                    <th>Actions</th>
-                </tr>
-                <?php
-                $sql = "SELECT * FROM products";
-                $result = $conn->query($sql);
-                if ($result === false) {
-                    echo "<tr><td colspan='8'>Error fetching products: " . htmlspecialchars($conn->error) . "</td></tr>";
-                    error_log("Product list query failed: " . $conn->error);
-                } elseif ($result->num_rows > 0) {
-                    while ($row = $result->fetch_assoc()) {
-                        $image_path = !empty($row['image_path']) ? htmlspecialchars($row['image_path']) : 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+A8AAQAB3gB4cAAAAABJRU5ErkJggg==';
-                        $stock_class = $row['stock'] <= 10 ? 'low-stock' : '';
-                        echo "<tr>";
-                        echo "<td>" . htmlspecialchars($row['id']) . "</td>";
-                        echo "<td>" . htmlspecialchars($row['name']) . "</td>";
-                        echo "<td>" . number_format($row['price']) . "</td>";
-                        echo "<td class='$stock_class'>" . htmlspecialchars($row['stock']) . "</td>";
-                        echo "<td>" . (isset($row['category']) && !empty($row['category']) ? htmlspecialchars($row['category']) : 'N/A') . "</td>";
-                        echo "<td>" . (empty($row['caption']) ? 'N/A' : htmlspecialchars($row['caption'])) . "</td>";
-                        echo "<td><img src='$image_path' alt='" . htmlspecialchars($row['name']) . "'></td>";
-                        echo "<td class='action-links'>";
-                        echo "<a href='admin_dashboard.php?edit=" . htmlspecialchars($row['id']) . "'>Edit</a>";
-                        echo "<a href='admin_dashboard.php?delete=" . htmlspecialchars($row['id']) . "' onclick='return confirm(\"Are you sure you want to delete this product?\")'>Delete</a>";
-                        echo "</td>";
-                        echo "</tr>";
-                    }
-                } else {
-                    echo "<tr><td colspan='8'>No products found.</td></tr>";
-                }
-                ?>
-            </table>
-        </div>
-
-        <!-- Pending Deliveries -->
-        <div class="dashboard-section">
-            <h2>Pending Deliveries</h2>
-            <table>
-                <tr>
-                    <th>ID</th>
-                    <th>Username</th>
-                    <th>Phone Number</th>
-                    <th>Location</th>
-                    <th>Payment Method</th>
-                    <th>Amount (UGX)</th>
-                    <th>Actions</th>
-                </tr>
-                <?php
-                $sql = "SHOW TABLES LIKE 'pending_deliveries'";
-                $table_check = $conn->query($sql);
-                if ($table_check->num_rows === 0) {
-                    echo "<tr><td colspan='7'>Error: 'pending_deliveries' table does not exist.</td></tr>";
-                    error_log("Error: 'pending_deliveries' table does not exist.");
-                } else {
-                    $sql = "SELECT id, username, phone, location, payment_method, amount FROM pending_deliveries WHERE status = 'Pending'";
-                    $result = $conn->query($sql);
-                    if ($result === false) {
-                        echo "<tr><td colspan='7'>Error fetching pending deliveries: " . htmlspecialchars($conn->error) . "</td></tr>";
-                        error_log("Pending deliveries query failed: " . $conn->error);
-                    } elseif ($result->num_rows > 0) {
-                        while ($row = $result->fetch_assoc()) {
-                            echo "<tr>";
-                            echo "<td>" . htmlspecialchars($row['id']) . "</td>";
-                            echo "<td>" . htmlspecialchars($row['username']) . "</td>";
-                            echo "<td>" . htmlspecialchars($row['phone']) . "</td>";
-                            echo "<td>" . (isset($row['location']) && !empty($row['location']) ? htmlspecialchars($row['location']) : 'N/A') . "</td>";
-                            echo "<td>" . htmlspecialchars($row['payment_method']) . "</td>";
-                            echo "<td>" . ($row['amount'] ? number_format($row['amount']) : 'N/A') . "</td>";
-                            echo "<td class='action-links'>";
-                            echo "<a href='admin_dashboard.php?complete_delivery=" . htmlspecialchars($row['id']) . "' onclick='return confirm(\"Mark this delivery as completed?\")'>Complete</a>";
-                            echo "</td>";
-                            echo "</tr>";
-                        }
-                    } else {
-                        echo "<tr><td colspan='7'>No pending deliveries found.</td></tr>";
-                    }
-                }
-                ?>
-            </table>
-        </div>
-
-        <!-- Sales Report -->
-        <div class="dashboard-section">
-            <h2>Sales Report</h2>
-            <form method="POST" action="admin_dashboard.php">
-                <div class="form-group" style="display: flex; gap: 1rem;">
-                    <div>
-                        <label for="start_date">Start Date</label>
-                        <input type="date" name="start_date" value="<?php echo htmlspecialchars($start_date); ?>" required>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <div style="text-align:right;">
+                        <div style="font-weight:800;"><?php echo htmlspecialchars($_SESSION['username']); ?></div>
+                        <div style="font-size:13px; color:var(--muted);">Administrator</div>
                     </div>
-                    <div>
-                        <label for="end_date">End Date</label>
-                        <input type="date" name="end_date" value="<?php echo htmlspecialchars($end_date); ?>" required>
-                    </div>
-                    <button type="submit" style="align-self: flex-end;">Filter</button>
+                    <div style="width:46px; height:46px; background:#eef3ff; border-radius:10px; display:flex; align-items:center; justify-content:center; color:var(--primary)"><i class="fa fa-user"></i></div>
                 </div>
-            </form>
-            <table>
-                <tr>
-                    <th>ID</th>
-                    <th>Username</th>
-                    <th>Phone Number</th>
-                    <th>Location</th>
-                    <th>Payment Method</th>
-                    <th>Amount (UGX)</th>
-                    <th>Date</th>
-                </tr>
-                <?php
-                $sql = "SELECT id, username, phone, location, payment_method, amount, created_at 
-                        FROM pending_deliveries 
-                        WHERE status = 'Completed' AND created_at BETWEEN ? AND ? ORDER BY created_at DESC";
-                $stmt = $conn->prepare($sql);
-                $end_date_plus_one = date('Y-m-d', strtotime($end_date . ' +1 day')); // Include end date
-                $stmt->bind_param("ss", $start_date, $end_date_plus_one);
-                $stmt->execute();
-                $result = $stmt->get_result();
-                if ($result === false) {
-                    echo "<tr><td colspan='7'>Error fetching sales: " . htmlspecialchars($conn->error) . "</td></tr>";
-                    error_log("Sales report query failed: " . $conn->error);
-                } elseif ($result->num_rows > 0) {
-                    while ($row = $result->fetch_assoc()) {
-                        $total_revenue += $row['amount'];
-                        echo "<tr>";
-                        echo "<td>" . htmlspecialchars($row['id']) . "</td>";
-                        echo "<td>" . htmlspecialchars($row['username']) . "</td>";
-                        echo "<td>" . htmlspecialchars($row['phone']) . "</td>";
-                        echo "<td>" . (isset($row['location']) && !empty($row['location']) ? htmlspecialchars($row['location']) : 'N/A') . "</td>";
-                        echo "<td>" . htmlspecialchars($row['payment_method']) . "</td>";
-                        echo "<td>" . ($row['amount'] ? number_format($row['amount']) : 'N/A') . "</td>";
-                        echo "<td>" . htmlspecialchars(date('Y-m-d H:i', strtotime($row['created_at']))) . "</td>";
-                        echo "</tr>";
-                    }
-                } else {
-                    echo "<tr><td colspan='7'>No sales found for the selected period.</td></tr>";
-                }
-                $stmt->close();
-                ?>
-            </table>
-            <p style="margin-top: 1rem; font-weight: bold;">
-                Total Revenue: UGX <?php echo number_format($total_revenue); ?>
-            </p>
+            </div>
         </div>
 
-        <!-- Edit Product Modal -->
-        <?php
-        if (isset($_GET['edit'])) {
-            $id = intval($_GET['edit']);
-            error_log("Edit requested for product ID: $id");
-            if ($id <= 0) {
-                $message = "Invalid product ID.";
-            } else {
-                $sql = "SELECT * FROM products WHERE id = ?";
-                $stmt = $conn->prepare($sql);
-                $stmt->bind_param("i", $id);
-                $stmt->execute();
-                $result = $stmt->get_result();
-                if ($result === false) {
-                    $message = "Error fetching product: " . $conn->error;
-                    error_log("Edit query failed: " . $conn->error);
-                } elseif ($result->num_rows > 0) {
-                    $row = $result->fetch_assoc();
-                    $image_path = !empty($row['image_path']) ? htmlspecialchars($row['image_path']) : 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+A8AAQAB3gB4cAAAAABJRU5ErkJggg==';
-        ?>
-            <div class="modal-overlay">
-                <div class="modal">
-                    <span class="modal-close" onclick="window.location.href='admin_dashboard.php'">&times;</span>
-                    <h2>Edit Product (ID: <?php echo htmlspecialchars($row['id']); ?>)</h2>
-                    <form method="POST" action="admin_dashboard.php" enctype="multipart/form-data">
-                        <input type="hidden" name="action" value="edit">
-                        <input type="hidden" name="id" value="<?php echo htmlspecialchars($row['id']); ?>">
-                        <div class="form-group">
-                            <label for="name">Product Name</label>
-                            <input type="text" name="name" value="<?php echo htmlspecialchars($row['name']); ?>" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="price">Price (UGX)</label>
-                            <input type="number" name="price" step="0.01" value="<?php echo htmlspecialchars($row['price']); ?>" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="stock">Stock Quantity</label>
-                            <input type="number" name="stock" value="<?php echo htmlspecialchars($row['stock']); ?>" required min="0">
-                        </div>
-                        <div class="form-group">
-                            <label for="category">Category</label>
-                            <select name="category" required>
-                                <option value="">Select Category</option>
-                                <option value="Textbooks" <?php echo $row['category'] === 'Textbooks' ? 'selected' : ''; ?>>Textbooks</option>
-                                <option value="Branded Jumpers" <?php echo $row['category'] === 'Branded Jumpers' ? 'selected' : ''; ?>>Branded Jumpers</option>
-                                <option value="Bottles" <?php echo $row['category'] === 'Bottles' ? 'selected' : ''; ?>>Bottles</option>
-                                <option value="Pens" <?php echo $row['category'] === 'Pens' ? 'selected' : ''; ?>>Pens</option>
-                                <option value="Note Books" <?php echo $row['category'] === 'Note Books' ? 'selected' : ''; ?>>Note Books</option>
-                                <option value="Wall Clocks" <?php echo $row['category'] === 'Wall Clocks' ? 'selected' : ''; ?>>Wall Clocks</option>
-                                <option value="T-Shirts" <?php echo $row['category'] === 'T-Shirts' ? 'selected' : ''; ?>>T-Shirts</option>
+        <!-- show message if exists -->
+        <?php if (isset($message) && $message): ?>
+            <div class="message <?php echo (stripos($message,'success')!==false || stripos($message,'added')!==false) ? 'success' : 'error'; ?>">
+                <?php echo htmlspecialchars($message); ?>
+            </div>
+        <?php endif; ?>
+
+        <!-- Overview (default) -->
+        <section id="overviewSection">
+            <div class="card-row">
+                <div class="stat-card">
+                    <div class="stat-label">Total Sales</div>
+                    <div class="stat-value">UGX <?php echo number_format($totalSales); ?></div>
+                    <div style="color:var(--muted); margin-top:8px; font-size:13px;">Completed sales</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Products</div>
+                    <div class="stat-value"><?php echo $totalProducts; ?></div>
+                    <div style="color:var(--muted); margin-top:8px; font-size:13px;">Items in catalog</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Pending Deliveries</div>
+                    <div class="stat-value"><?php echo $pendingCount; ?></div>
+                    <div style="color:var(--muted); margin-top:8px; font-size:13px;">Awaiting completion</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Notifications (30d)</div>
+                    <div class="stat-value"><?php echo $notifCount; ?></div>
+                    <div style="color:var(--muted); margin-top:8px; font-size:13px;">Recent messages</div>
+                </div>
+            </div>
+
+            <div class="grid">
+                <div class="panel">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                        <h2 style="margin:0; font-size:18px;">Summary Sales</h2>
+                        <div>
+                            <select id="rangeSelect" style="padding:8px; border-radius:8px;">
+                                <option selected>Last 12 months</option>
+                                <option>Last 6 months</option>
+                                <option>Last 30 days</option>
                             </select>
                         </div>
-                        <div class="form-group">
-                            <label for="caption">Caption (Description)</label>
-                            <textarea name="caption"><?php echo htmlspecialchars($row['caption'] ?? ''); ?></textarea>
+                    </div>
+                    <canvas id="salesChart" height="140" aria-label="Sales chart"></canvas>
+                </div>
+
+                <div style="display:flex; flex-direction:column; gap:12px;">
+                    <div class="panel">
+                        <h4 style="margin:0 0 10px 0;">Active Balance</h4>
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <div>
+                                <div style="font-size:20px; font-weight:800;">UGX <?php echo number_format($totalSales * 0.12, 2); ?></div>
+                                <div style="color:var(--muted); font-size:13px;">Estimated available balance</div>
+                            </div>
+                            <div>
+                                <button id="addCardBtn" class="btn">Add Virtual Card</button>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label for="image">Update Image</label>
-                            <input type="file" name="image" accept="image/*">
-                            <p>Current Image: <img src="<?php echo $image_path; ?>" alt="<?php echo htmlspecialchars($row['name']); ?>" style="width: 50px; height: 50px;"></p>
+                        <hr style="margin:12px 0;">
+                        <div style="color:var(--muted); font-size:13px;">
+                            <div>Incomes: UGX <?php echo number_format($totalSales); ?></div>
+                            <div>Expenses: UGX <?php echo number_format($totalSales * 0.2); ?></div>
+                            <div>Taxes: UGX <?php echo number_format($totalSales * 0.05); ?></div>
                         </div>
-                        <button type="submit">Update Product</button>
-                    </form>
+                    </div>
+
+                    <div class="panel">
+                        <h4 style="margin:0 0 10px 0;">Category Distribution</h4>
+                        <canvas id="catChart" height="180"></canvas>
+                    </div>
+
+                    <div class="panel">
+                        <h4 style="margin:0 0 10px 0;">Upcoming Payments</h4>
+                        <ul style="padding:0; list-style:none; margin:0;">
+                            <li style="padding:8px 0; border-bottom:1px dashed #f1f5f9;">Payonner — UGX 1,200,000</li>
+                            <li style="padding:8px 0; border-bottom:1px dashed #f1f5f9;">Easy Pay — UGX 822,823</li>
+                            <li style="padding:8px 0;">FastSpring — UGX 421,038</li>
+                        </ul>
+                    </div>
                 </div>
             </div>
-        <?php
-                } else {
-                    $message = "Product not found for ID: $id";
-                    error_log("Product not found for ID: $id");
-                }
-                $stmt->close();
-            }
-        }
-        ?>
+        </section>
+
+        <!-- Products Section -->
+        <section id="productsSection" style="display:none;">
+            <div class="panel" style="margin-bottom:16px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h3 style="margin:0;">Manage Products</h3>
+                    <div>
+                        <button class="btn secondary small" id="addNewBtn">Add New</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <table>
+                    <thead>
+                        <tr><th>ID</th><th>Image</th><th>Name</th><th>Price</th><th>Stock</th><th>Category</th><th>Actions</th></tr>
+                    </thead>
+                    <tbody id="productTable">
+                        <?php if (count($products) === 0): ?>
+                            <tr><td colspan="7">No products found.</td></tr>
+                        <?php else: foreach ($products as $p):
+                            $image_path = !empty($p['image_path']) ? htmlspecialchars($p['image_path']) : '';
+                        ?>
+                        <tr>
+                            <td><?php echo htmlspecialchars($p['id']); ?></td>
+                            <td><?php if($image_path): ?><img src="<?php echo $image_path; ?>" alt="img"><?php else: ?><div style="width:56px;height:56px;background:#eef3ff;border-radius:8px"></div><?php endif; ?></td>
+                            <td><?php echo htmlspecialchars($p['name']); ?></td>
+                            <td>UGX <?php echo number_format($p['price']); ?></td>
+                            <td><?php echo htmlspecialchars($p['stock']); ?></td>
+                            <td><?php echo htmlspecialchars($p['category']); ?></td>
+                            <td>
+                                <a class="small btn secondary" href="#edit" onclick="openEditProduct(<?php echo $p['id'];?>)">Edit</a>
+                                <a class="small btn" style="background:#ff5b5b" href="?delete_product=<?php echo $p['id'];?>" onclick="return confirm('Delete product?')">Delete</a>
+                            </td>
+                        </tr>
+                        <?php endforeach; endif; ?>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Quick Add (scroll target for 'Add New') -->
+            <div class="panel" id="add-section" style="margin-top:16px;">
+                <h4 style="margin:0 0 8px 0;">Add Product</h4>
+                <form id="addProductForm" method="POST" action="admin_dashboard.php" enctype="multipart/form-data">
+                    <input type="hidden" name="action" value="add">
+                    <div style="display:flex; flex-direction:column; gap:10px;">
+                        <input name="name" placeholder="Product name" required style="padding:10px; border-radius:8px; border:1px solid #e6eefc;" />
+                        <input type="number" step="0.01" name="price" placeholder="Price (UGX)" required style="padding:10px; border-radius:8px; border:1px solid #e6eefc;" />
+                        <input type="number" name="stock" placeholder="Stock qty" value="0" min="0" required style="padding:10px; border-radius:8px; border:1px solid #e6eefc;" />
+                        <select name="category" required style="padding:10px; border-radius:8px; border:1px solid #e6eefc;">
+                            <option value="">Category</option>
+                            <?php foreach ($valid_categories as $cat): ?>
+                                <option value="<?php echo htmlspecialchars($cat); ?>"><?php echo htmlspecialchars($cat); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <input type="file" name="image" accept="image/*" />
+                        <textarea name="caption" placeholder="Short caption" style="padding:10px; border-radius:8px; border:1px solid #e6eefc;"></textarea>
+                        <div style="display:flex; gap:10px;">
+                            <button class="btn" type="submit">Add Product</button>
+                            <button type="button" id="clearAdd" class="btn secondary">Clear</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <!-- Deliveries Section -->
+        <section id="deliveriesSection" style="display:none;">
+            <div class="panel">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h3 style="margin:0;">Pending Deliveries</h3>
+                    <div><a href="#deliveries" class="btn secondary small" onclick="document.querySelector('#deliveriesSection').scrollIntoView({behavior:'smooth'})">View All</a></div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <table>
+                    <thead><tr><th>ID</th><th>User</th><th>Phone</th><th>Location</th><th>Payment</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead>
+                    <tbody id="pendingTable">
+                        <?php if (count($pendingDeliveries) === 0): ?>
+                            <tr><td colspan="8">No pending deliveries.</td></tr>
+                        <?php else: foreach ($pendingDeliveries as $p): ?>
+                            <tr>
+                                <td><?php echo htmlspecialchars($p['id']); ?></td>
+                                <td><?php echo htmlspecialchars($p['username']); ?></td>
+                                <td><?php echo htmlspecialchars($p['phone'] ?? 'N/A'); ?></td>
+                                <td><?php echo htmlspecialchars($p['location'] ?? 'N/A'); ?></td>
+                                <td><?php echo htmlspecialchars($p['payment_method'] ?? 'N/A'); ?></td>
+                                <td><?php echo $p['amount'] ? 'UGX '.number_format($p['amount']):'N/A'; ?></td>
+                                <td><?php echo htmlspecialchars($p['status']); ?></td>
+                                <td>
+                                    <?php if ($p['status'] === 'Pending'): ?>
+                                        <a class="small btn secondary" href="?complete_delivery=<?php echo $p['id'];?>" onclick="return confirm('Mark completed?')">Complete</a>
+                                    <?php endif; ?>
+                                    <a class="small btn" style="background:#ff5b5b" href="?delete_delivery=<?php echo $p['id'];?>" onclick="return confirm('Delete delivery?')">Delete</a>
+                                </td>
+                            </tr>
+                        <?php endforeach; endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Reports Section -->
+        <section id="reportsSection" style="display:none;">
+            <div class="panel">
+                <h3 style="margin:0 0 10px 0;">Sales Reports</h3>
+                <p style="color:var(--muted)">Sales summary and category distribution.</p>
+                <div style="display:flex; gap:16px; margin-top:12px; flex-wrap:wrap;">
+                    <div style="flex:1; min-width:350px; background:var(--card); padding:12px; border-radius:8px;">
+                        <canvas id="salesChart2" height="140"></canvas>
+                    </div>
+                    <div style="width:320px; background:var(--card); padding:12px; border-radius:8px;">
+                        <canvas id="catChart2" height="140"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+       <!-- Notifications Section -->
+<section id="notificationsSection" style="display:none;">
+    <div class="panel" style="margin-bottom:12px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3 style="margin:0;">Notifications</h3>
+            <div><a href="#notifications" class="btn secondary small" onclick="document.querySelector('#notificationsSection').scrollIntoView({behavior:'smooth'})">View All</a></div>
+        </div>
     </div>
+
+    <div class="panel" style="margin-bottom:12px;">
+        <h4 style="margin:0 0 8px 0;">Send New Notification</h4>
+        <form method="POST" action="admin_dashboard.php">
+            <textarea name="message" placeholder="Message to users" required style="width:100%; min-height:80px; padding:10px; border-radius:8px; border:1px solid #e6eefc;"></textarea>
+            <div style="margin-top:8px; text-align:right;">
+                <button class="btn" type="submit" name="send_notification">Send</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="panel">
+        <h4 style="margin:0 0 8px 0;">Recent Notifications</h4>
+        <table>
+            <thead><tr><th>ID</th><th>Message</th><th>Date</th><th>Actions</th></tr></thead>
+            <tbody>
+                <?php if (count($notifications) === 0): ?>
+                    <tr><td colspan="5">No notifications found.</td></tr>
+                <?php else: foreach ($notifications as $n): ?>
+                    <tr>
+                        <td><?php echo htmlspecialchars($n['id']); ?></td>
+                        <td><?php echo htmlspecialchars($n['message']); ?></td>
+                        <td><?php echo htmlspecialchars(date('Y-m-d H:i', strtotime($n['created_at']))); ?></td>
+                        <td>
+                            <button class="small btn secondary edit-btn" data-id="<?php echo $n['id']; ?>" data-message="<?php echo htmlspecialchars($n['message']); ?>">Edit</button>
+                            <a class="small btn" style="background:#ff5b5b" href="?delete_notification=<?php echo $n['id'];?>" onclick="return confirm('Delete notification?')">Delete</a>
+                        </td>
+                    </tr>
+                <?php endforeach; endif; ?>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- Edit Notification Modal -->
+<div id="editNotificationModal" style="display:none;">
+    <div class="modal-overlay" id="notifOverlay">
+        <div class="modal" role="dialog" aria-modal="true" aria-label="Edit notification">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3>Edit Notification</h3>
+                <button class="btn secondary" id="closeNotifModal">Close</button>
+            </div>
+            <form id="editForm" method="POST" action="admin_dashboard.php">
+                <input type="hidden" name="edit_notification" value="1">
+                <input type="hidden" id="notif_id" name="nid">
+                <label for="notif_message">Message:</label>
+                <textarea id="notif_message" name="nmessage" rows="4" required style="width:100%; padding:10px; border-radius:8px; border:1px solid #e6eefc; margin-top:10px;"></textarea>
+                <div style="text-align:right; margin-top:10px;">
+                    <button type="submit" class="save-btn">Save Changes</button>
+                    <button type="button" class="btn secondary" id="cancelEdit">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Virtual Card Modal (client demo) -->
+<div id="cardModal" style="display:none;">
+    <div class="modal-overlay" id="cardOverlay">
+        <div class="modal" role="dialog" aria-modal="true" aria-label="Add virtual card">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3>Create Virtual Card</h3>
+                <button class="btn secondary" id="closeCardModal">Close</button>
+            </div>
+            <form id="virtualCardForm" style="margin-top:10px;">
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <input name="card_name" placeholder="Card name" required style="padding:10px;border-radius:8px;border:1px solid #e6eefc;">
+                    <input name="limit" type="number" placeholder="Limit (UGX)" required style="padding:10px;border-radius:8px;border:1px solid #e6eefc;">
+                    <div style="text-align:right;">
+                        <button class="btn" type="submit">Create</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ------------------
+    // Client-side JS
+    // ------------------
+
+    // Section navigation (sidebar)
+    const menuLinks = document.querySelectorAll('.menu a[data-section]');
+    const sections = {
+        overview: document.getElementById('overviewSection'),
+        products: document.getElementById('productsSection'),
+        deliveries: document.getElementById('deliveriesSection'),
+        reports: document.getElementById('reportsSection'),
+        notifications: document.getElementById('notificationsSection'),
+    };
+
+    function showSection(name) {
+        Object.values(sections).forEach(s => { if (s) s.style.display = 'none'; });
+        menuLinks.forEach(a => a.classList.remove('active'));
+        if (sections[name]) sections[name].style.display = '';
+        menuLinks.forEach(a => { if (a.dataset.section === name) a.classList.add('active'); });
+        document.getElementById('mainWrap').scrollTop = 0;
+    }
+
+    menuLinks.forEach(a => {
+        a.addEventListener('click', e => {
+            e.preventDefault();
+            const name = a.dataset.section;
+            showSection(name);
+        });
+    });
+
+    showSection('overview');
+
+    // Search functionality
+    document.getElementById('searchInput').addEventListener('input', function(e) {
+        const q = e.target.value.toLowerCase().trim();
+        document.querySelectorAll('#productTable tr').forEach(r => {
+            const txt = r.innerText.toLowerCase();
+            r.style.display = txt.includes(q) ? '' : 'none';
+        });
+        document.querySelectorAll('#pendingTable tr').forEach(r => {
+            const txt = r.innerText.toLowerCase();
+            r.style.display = txt.includes(q) ? '' : 'none';
+        });
+        document.querySelectorAll('#notificationsSection table tbody tr').forEach(r => {
+            const txt = r.innerText.toLowerCase();
+            r.style.display = txt.includes(q) ? '' : 'none';
+        });
+    });
+
+    // Theme toggle
+    const themeToggle = document.getElementById('themeToggle');
+    function applyTheme() {
+        const t = localStorage.getItem('campus_theme') || 'light';
+        if (t === 'dark') { document.body.classList.add('dark'); themeToggle.innerHTML = '<i class="fa fa-sun"></i>'; themeToggle.setAttribute('aria-pressed', 'true'); }
+        else { document.body.classList.remove('dark'); themeToggle.innerHTML = '<i class="fa fa-moon"></i>'; themeToggle.setAttribute('aria-pressed', 'false'); }
+    }
+    themeToggle.addEventListener('click', function() {
+        const cur = document.body.classList.contains('dark') ? 'dark' : 'light';
+        const next = cur === 'dark' ? 'light' : 'dark';
+        localStorage.setItem('campus_theme', next);
+        applyTheme();
+    });
+    applyTheme();
+
+    // Add virtual card modal (demo)
+    document.getElementById('addCardBtn').addEventListener('click', function() {
+        document.getElementById('cardModal').style.display = 'block';
+    });
+    document.getElementById('closeCardModal').addEventListener('click', function() {
+        document.getElementById('cardModal').style.display = 'none';
+    });
+    document.getElementById('virtualCardForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        alert('Virtual card created (demo). Implement backend to persist cards.');
+        document.getElementById('cardModal').style.display = 'none';
+    });
+
+    // Add New scrolls
+    document.getElementById('addNewBtn').addEventListener('click', function() {
+        document.getElementById('add-section').scrollIntoView({behavior:'smooth', block:'center'});
+    });
+
+    // Clear Add form
+    document.getElementById('clearAdd').addEventListener('click', function() {
+        document.getElementById('addProductForm').reset();
+    });
+
+    // Edit Product
+    function openEditProduct(id) {
+        fetch('admin_dashboard.php?fetch_product=' + encodeURIComponent(id))
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { alert(data.error); return; }
+            document.getElementById('editProductId').value = data.id;
+            document.getElementById('editName').value = data.name;
+            document.getElementById('editPrice').value = data.price;
+            document.getElementById('editStock').value = data.stock;
+            document.getElementById('editCategory').value = data.category;
+            document.getElementById('editCaption').value = data.caption;
+            document.getElementById('editCurrentImage').innerHTML = data.image_path ? '<img src="' + data.image_path + '" style="width:100px;height:100px;object-fit:cover;border-radius:8px">' : 'No image';
+            document.getElementById('editProductModal').style.display = 'block';
+        })
+        .catch(err => { console.error(err); alert('Could not fetch product info'); });
+    }
+    function closeEditProduct() { document.getElementById('editProductModal').style.display = 'none'; }
+
+    // Edit Notification
+    const editNotificationModal = document.getElementById('editNotificationModal');
+    const closeNotifModal = document.getElementById('closeNotifModal');
+    const cancelEdit = document.getElementById('cancelEdit');
+    const editForm = document.getElementById('editForm');
+    const editBtns = document.querySelectorAll('.edit-btn');
+
+    editBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-id');
+            const message = btn.getAttribute('data-message');
+            document.getElementById('notif_id').value = id;
+            document.getElementById('notif_message').value = message;
+            editNotificationModal.style.display = 'block';
+        });
+    });
+
+    closeNotifModal.addEventListener('click', () => editNotificationModal.style.display = 'none');
+    cancelEdit.addEventListener('click', () => editNotificationModal.style.display = 'none');
+    window.addEventListener('click', (e) => { if (e.target === editNotificationModal) editNotificationModal.style.display = 'none'; });
+
+    editForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const id = document.getElementById('notif_id').value;
+        const message = document.getElementById('notif_message').value;
+
+        fetch('admin_dashboard.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `edit_notification=1&nid=${id}&nmessage=${encodeURIComponent(message)}`
+        })
+        .then(res => res.text())
+        .then(data => {
+            alert(data);
+            editNotificationModal.style.display = 'none';
+            location.reload(); // Refresh to update the table
+        })
+        .catch(err => alert('Error updating notification'));
+    });
+
+    // Sales charts
+    const salesLabels = <?php echo $salesLabelsJson; ?>;
+    const salesData = <?php echo $salesDataJson; ?>;
+    const catLabels = <?php echo $catLabelsJson; ?>;
+    const catData = <?php echo $catDataJson; ?>;
+
+    const salesCtx = document.getElementById('salesChart').getContext('2d');
+    const salesChart = new Chart(salesCtx, {
+        type: 'line', data: { labels: salesLabels, datasets: [{ label: 'Revenue (UGX)', data: salesData, borderColor: '#0b63ff', backgroundColor: 'rgba(11,99,255,0.08)', tension: 0.25, fill: true, pointRadius: 3 }] },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: v => Number(v).toLocaleString() } } } }
+    });
+    const salesCtx2 = document.getElementById('salesChart2') ? document.getElementById('salesChart2').getContext('2d') : null;
+    if (salesCtx2) {
+        new Chart(salesCtx2, {
+            type: 'bar', data: { labels: salesLabels, datasets: [{ label: 'Revenue (UGX)', data: salesData, backgroundColor: '#0b63ff' }] },
+            options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: v => Number(v).toLocaleString() } } } }
+        });
+    }
+
+    const catCtx = document.getElementById('catChart').getContext('2d');
+    new Chart(catCtx, { type: 'doughnut', data: { labels: catLabels, datasets: [{ data: catData, backgroundColor: ['#60a5fa', '#93c5fd', '#fca5a5', '#fbbf24', '#34d399', '#c084fc'] }] }, options: { responsive: true, plugins: { legend: { position: 'bottom' } } } });
+    const catCtx2 = document.getElementById('catChart2') ? document.getElementById('catChart2').getContext('2d') : null;
+    if (catCtx2) { new Chart(catCtx2, { type: 'doughnut', data: { labels: catLabels, datasets: [{ data: catData, backgroundColor: ['#60a5fa', '#93c5fd', '#fca5a5', '#fbbf24', '#34d399', '#c084fc'] }] }, options: { responsive: true, plugins: { legend: { position: 'bottom' } } } }); }
+</script>
+
+<?php
+// Lightweight JSON endpoint for product fetch (used by openEditProduct)
+if (isset($_GET['fetch_product'])) {
+    $pid = intval($_GET['fetch_product']);
+    header('Content-Type: application/json');
+    if ($pid <= 0) {
+        echo json_encode(['error'=>'Invalid product id']);
+        exit;
+    }
+    $stmt = $conn->prepare("SELECT id, name, price, stock, category, caption, image_path FROM products WHERE id = ?");
+    $stmt->bind_param("i",$pid);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    if ($res && ($row = $res->fetch_assoc())) {
+        // return fields
+        echo json_encode([
+            'id' => (int)$row['id'],
+            'name' => $row['name'],
+            'price' => $row['price'],
+            'stock' => (int)$row['stock'],
+            'category' => $row['category'],
+            'caption' => $row['caption'],
+            'image_path' => $row['image_path']
+        ]);
+    } else {
+        echo json_encode(['error'=>'Product not found']);
+    }
+    $stmt->close();
+    $conn->close();
+    exit;
+}
+?>
+
 </body>
 </html>
 
 <?php
+// close DB connection
 $conn->close();
 ?>
