@@ -473,13 +473,6 @@ $stmt->close();
             background: var(--primary-green);
         }
 
-        /* Modified Profile Styles */
-        .profile-container {
-            max-width: 1000px;
-            margin: 3rem auto;
-            padding: 0 15px;
-        }
-
         .profile-header {
             text-align: center;
             margin-bottom: 2rem;
@@ -672,6 +665,365 @@ $stmt->close();
 
         .account-settings a:hover {
             text-decoration: underline;
+        }
+        /* Profile Container */
+        .profile-container {
+            display: flex;
+            min-height: calc(100vh - 70px);
+            gap: 20px;
+        }
+
+        /* Left Side (Profile Panel) - Professional Styling */
+.profile-left {
+    width: 30%;
+    background-color: var(--white);
+    padding: 30px;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    max-height: calc(100vh - 150px); /* Adjusted for navbar (70px) and footer (80px) */
+    margin-left: 30px;
+    margin-bottom: 30px;
+    overflow-y: auto;
+    position: fixed;
+    margin-top: 30px;
+}
+
+.profile-left img {
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin: 0 auto 20px;
+    border: 4px solid var(--light-gray);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.profile-left h2 {
+    font-size: 1.8rem;
+    font-weight: 600;
+    text-align: center;
+    color: var(--primary-green);
+    margin-bottom: 25px;
+}
+
+.profile-left form {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.profile-left label {
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--dark-gray);
+    margin-bottom: 5px;
+}
+
+.profile-left input[type="text"],
+.profile-left input[type="file"] {
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 0.95rem;
+    color: var(--dark-gray);
+    transition: border-color 0.3s ease;
+}
+
+.profile-left input[type="text"]:focus,
+.profile-left input[type="file"]:focus {
+    border-color: var(--secondary-green);
+    outline: none;
+    box-shadow: 0 0 5px rgba(69, 145, 231, 0.3);
+}
+
+.profile-left button {
+    padding: 12px;
+    background-color: var(--primary-green);
+    color: var(--white);
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.profile-left button:hover {
+    background-color: var(--secondary-green);
+    transform: translateY(-2px);
+}
+
+        /* Right Side (Content Panel) - Professional Styling */
+        .profile-right {
+            flex: 1;
+            margin-left: 32%;
+            padding: 30px;
+        }
+
+        .section {
+            background: var(--white);
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s ease;
+        }
+
+        .section:hover {
+            transform: translateY(-2px);
+        }
+
+        .section h3 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--primary-green);
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--secondary-green);
+        }
+
+        /* Notifications */
+        .notification {
+            padding: 15px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .notification:last-child {
+            border-bottom: none;
+        }
+
+        .notification p {
+            font-size: 1rem;
+            color: var(--dark-gray);
+            margin-bottom: 8px;
+        }
+
+        .notification small {
+            font-size: 0.85rem;
+            color: var(--text-gray);
+            font-style: italic;
+        }
+
+        /* Order History Table */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            background: var(--white);
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.95rem;
+        }
+
+        th {
+            background-color: var(--light-gray);
+            color: var(--primary-green);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        td {
+            color: var(--dark-gray);
+        }
+
+        tr:hover {
+            background-color: var(--light-gray);
+        }
+
+        /* Payment Options */
+        .payment-options {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .payment-option {
+            text-align: center;
+            padding: 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .payment-option:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .payment-option img {
+            width: 60px;
+            height: auto;
+            margin-bottom: 10px;
+            filter: grayscale(0);
+            transition: filter 0.3s ease;
+        }
+
+        .payment-option:hover img {
+            filter: grayscale(0);
+        }
+
+        .payment-option p {
+            font-size: 0.95rem;
+            color: var(--dark-gray);
+            font-weight: 500;
+        }
+
+        /* Help Center */
+        .help-center {
+            text-align: center;
+            padding: 20px 0;
+        }
+
+        .help-center p {
+            font-size: 1rem;
+            color: var(--text-gray);
+            margin-bottom: 15px;
+        }
+
+        .help-center .chatbot-btn {
+            padding: 12px 25px;
+            margin-bottom: 10px;
+            font-size: 1rem;
+        }
+
+        .help-center a {
+            color: var(--secondary-green);
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 1rem;
+            display: inline-block;
+            padding: 8px 15px;
+            border: 1px solid var(--secondary-green);
+            border-radius: 8px;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .help-center a:hover {
+            background-color: var(--secondary-green);
+            color: var(--white);
+        }
+
+        /* Account Settings */
+        .account-settings {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .account-settings a {
+            color: var(--secondary-green);
+            text-decoration: none;
+            font-size: 1rem;
+            font-weight: 500;
+            padding: 10px 15px;
+            border: 1px solid var(--secondary-green);
+            width: 20%;
+            border-radius: 8px;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .account-settings a:hover {
+            background-color: var(--secondary-green);
+            color: var(--white);
+        }
+
+        /* Messages */
+        .message {
+            font-size: 0.95rem;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            max-width: 400px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .message.success {
+            background: var(--success-green);
+            color: var(--white);
+        }
+
+        .message.error {
+            background: var(--error-red);
+            color: var(--white);
+        }
+        @media (max-width: 900px) {
+            .profile-container {
+                flex-direction: column;
+            }
+            .profile-left {
+                width: 100%;
+                position: relative;
+                top: 0;
+                max-height: none;
+                margin-bottom: 20px;
+            }
+            .profile-right {
+                margin-left: 0;
+                padding: 20px;
+            }
+            .section {
+                padding: 15px;
+            }
+            .payment-options {
+                grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            }
+        }
+
+        @media (max-width: 480px) {
+            .profile-left {
+                padding: 20px;
+                margin-left: 0;
+            }
+            .profile-left .profile-image {
+                width: 120px;
+                height: 120px;
+            }
+            .profile-left h2 {
+                font-size: 1.5rem;
+            }
+            .profile-left input[type="text"],
+            .profile-left input[type="file"] {
+                font-size: 0.9rem;
+                padding: 10px;
+            }
+            .profile-left button {
+                font-size: 0.9rem;
+                padding: 10px;
+            }
+            .section h3 {
+                font-size: 1.2rem;
+            }
+            th, td {
+                font-size: 0.85rem;
+                padding: 8px;
+            }
+            .payment-option img {
+                width: 50px;
+            }
+            .payment-option p {
+                font-size: 0.9rem;
+            }
+            .account-settings a {
+            color: var(--secondary-green);
+            text-decoration: none;
+            font-size: 1rem;
+            font-weight: 500;
+            padding: 10px 15px;
+            border: 1px solid var(--secondary-green);
+            width: 50%;
+            border-radius: 8px;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
         }
 
         /* Unchanged Bottom Bar and Footer Styles */
@@ -1275,9 +1627,22 @@ $stmt->close();
     </div>
 
     <section class="profile-container">
-        <div class="profile-header">
-            <img src="<?php echo $user['profile_picture'] ?: 'images/default_profile.png'; ?>" alt="Profile Picture" class="profile-picture">
-            <h1><?php echo htmlspecialchars($username); ?></h1>
+        <!-- Left Side -->
+        <div class="profile-left">
+            <center>
+                <img src="<?= htmlspecialchars($user['profile_picture'] ?? 'default-avatar.png'); ?>" alt="Profile Picture">
+                <h2><?= htmlspecialchars($user['username']); ?></h2>
+            </center>
+
+            <form method="POST" enctype="multipart/form-data">
+                <label for="username">Edit Username:</label>
+                <input type="text" name="username" id="username" value="<?= htmlspecialchars($user['username']); ?>">
+
+                <label for="profile_picture">Change Profile Picture:</label>
+                <input type="file" name="profile_picture" id="profile_picture" accept="image/*">
+
+                <button type="submit" name="update_profile">Update Profile</button>
+            </form>
         </div>
 
         <?php if (isset($success)): ?>
@@ -1286,129 +1651,97 @@ $stmt->close();
         <?php if (isset($error)): ?>
             <div class="message error"><?php echo htmlspecialchars($error); ?></div>
         <?php endif; ?>
+        <!-- Right Side -->
+        <div class="profile-right">
+            <!-- Notifications -->
+            <div class="section">
+                <h3>Recent Notifications</h3>
+                <?php if (!empty($notifications)): ?>
+                    <?php foreach ($notifications as $note): ?>
+                        <div class="notification">
+                            <p><?= htmlspecialchars($note['message']); ?></p>
+                            <small><?= htmlspecialchars($note['created_at']); ?></small>
+                        </div>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <p>No notifications found.</p>
+                <?php endif; ?>
+            </div>
 
-        <div class="profile-content">
-            <div class="profile-left">
-                <div class="profile-section">
-                    <h2>Edit Profile</h2>
-                    <form class="profile-form" method="POST" enctype="multipart/form-data">
-                        <label for="username">Username</label>
-                        <input type="text" id="username" name="username" value="<?php echo htmlspecialchars($username); ?>" required>
-                        <label for="profile_picture">Profile Picture</label>
-                        <input type="file" id="profile_picture" name="profile_picture" accept="image/*">
-                        <button type="submit" name="update_profile">Update Profile</button>
-                    </form>
-                </div>
-
-                <div class="profile-section">
-                    <h2>Notifications</h2>
-                    <ul class="notifications-list">
-                        <?php if (count($notifications) > 0): ?>
-                            <?php foreach ($notifications as $notification): ?>
-                                <li class="notification-item">
-                                    <p><?php echo htmlspecialchars($notification['message']); ?></p>
-                                    <p><small><?php echo date('F j, Y, g:i a', strtotime($notification['created_at'])); ?></small></p>
-                                </li>
-                            <?php endforeach; ?>
-                        <?php else: ?>
-                            <li class="notification-item">No notifications available.</li>
-                        <?php endif; ?>
-                    </ul>
-                </div>
-
-                <div class="profile-section">
-                    <h2>Order History</h2>
-                    <ul class="orders-list">
-                        <?php if (count($orders) > 0): ?>
+            <!-- Order History -->
+            <div class="section">
+                <h3>Order History</h3>
+                <?php if (!empty($orders)): ?>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Date</th>
+                                <th>Total (UGX)</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
                             <?php foreach ($orders as $order): ?>
-                                <li class="order-item">
-                                    <p><strong>Order #<?php echo $order['id']; ?></strong></p>
-                                    <p>Date: <?php echo date('F j, Y', strtotime($order['order_date'])); ?></p>
-                                    <p>Total: UGX <?php echo number_format($order['total_amount']); ?></p>
-                                    <p class="status">Status: <?php echo htmlspecialchars($order['status']); ?></p>
-                                </li>
+                                <tr>
+                                    <td><?= htmlspecialchars($order['id']); ?></td>
+                                    <td><?= htmlspecialchars($order['order_date']); ?></td>
+                                    <td><?= htmlspecialchars(number_format($order['total_amount'], 0)); ?></td>
+                                    <td><?= htmlspecialchars($order['status']); ?></td>
+                                </tr>
                             <?php endforeach; ?>
-                        <?php else: ?>
-                            <li class="order-item">No orders found.</li>
-                        <?php endif; ?>
-                    </ul>
+                        </tbody>
+                    </table>
+                <?php else: ?>
+                    <p>No orders found.</p>
+                <?php endif; ?>
+            </div>
+
+            <!-- Payment Options -->
+            <div class="section">
+                <h2>Payment Options</h2>
+                <div class="payment-options">
+                    <div class="payment-option">
+                        <img src="images/mobile money.png" alt="Mobile Money">
+                        <p>Mobile Money</p>
+                    </div>
+                    <div class="payment-option">
+                        <img src="images/paypal.png" alt="Bank Card">
+                        <p>Bank Card</p>
+                    </div>
+                    <div class="payment-option">
+                        <img src="images/visa.png" alt="Bank Card">
+                        <p>Bank Card</p>
+                    </div>
+                    <div class="payment-option">
+                        <img src="images/pay on delivery.jpeg" alt="Cash on Delivery">
+                        <p>Cash on Delivery</p>
+                    </div>
                 </div>
             </div>
 
-            <div class="profile-right">
-                <div class="profile-section">
-                    <h2>Payment Options</h2>
-                    <div class="payment-options">
-                        <div class="payment-option">
-                            <img src="images/mobile money.png" alt="Mobile Money">
-                            <p>Mobile Money</p>
-                        </div>
-                        <div class="payment-option">
-                            <img src="images/paypal.png" alt="Bank Card">
-                            <p>Bank Card</p>
-                        </div>
-                        <div class="payment-option">
-                            <img src="images/visa.png" alt="Bank Card">
-                            <p>Bank Card</p>
-                        </div>
-                        <div class="payment-option">
-                            <img src="images/pay on delivery.jpeg" alt="Cash on Delivery">
-                            <p>Cash on Delivery</p>
-                        </div>
-                    </div>
+            <!-- Help Center -->
+            <div class="section">
+                <h2>Help Center</h2>
+                <div class="help-center">
+                    <p>Need assistance? Chat with our support bot or contact us via WhatsApp.</p>
+                    <button class="chatbot-btn" id="chatbot-btn">💬 Chat with Us</button>
+                    <a href="https://wa.me/+256755087665" target="_blank">📞 Contact Support via WhatsApp</a>
                 </div>
+            </div>
 
-                <div class="profile-section">
-                    <h2>Help Center</h2>
-                    <div class="help-center">
-                        <p>Need assistance? Chat with our support bot or contact us via WhatsApp.</p>
-                        <button class="chatbot-btn" id="chatbot-btn">💬 Chat with Us</button>
-                        <a href="https://wa.me/+256755087665" target="_blank">📞 Contact Support via WhatsApp</a>
-                    </div>
-                </div>
-
-                <div class="profile-section">
-                    <h2>Account Settings</h2>
-                    <div class="account-settings">
-                        <a href="change_password.php">Change Password</a>
-                        <a href="delete_account.php">Delete Account</a>
-                    </div>
+            <!-- Account Settings -->
+            <div class="section">
+                <h2>Account Settings</h2>
+                <div class="account-settings">
+                    <a href="change_password.php">Change Password</a>
+                    <a href="delete_account.php">Delete Account</a>
                 </div>
             </div>
         </div>
     </section>
 
-    <footer>
-        <div class="container">
-            <div class="footer-content">
-                <div class="footer-section">
-                    <h3>Bugema CampusShop</h3>
-                    <p>Your official Bugema University online store, serving students with quality products and exceptional service.</p>
-                </div>
-                <div class="footer-section">
-                    <h3>Quick Links</h3>
-                    <ul>
-                        <li><a href="https://wa.me/+256755087665" target="_blank">Contact</a></li>
-                        <li><a href="#">FAQs</a></li>
-                        <li><a href="Bottles.php">Bottles</a></li>
-                        <li><a href="favorites.php">Favorites</a></li>
-                    </ul>
-                </div>
-                <div class="footer-section">
-                    <h3>Connect</h3>
-                    <ul>
-                        <li><a href="#">📧 campusshop@bugemauniv.ac.ug</a></li>
-                        <li><a href="https://wa.me/+256755087665" target="_blank">📞 +256 7550 87665</a></li>
-                        <li><a href="#">📍 Bugema University</a></li>
-                        <li><a href="#">🕒 Mon-Fri 8AM-6PM</a></li>
-                    </ul>
-                </div>
-            </div>
-            <div class="footer-bottom">
-                <p>&copy; 2025 Bugema CampusShop - Bugema University. All rights reserved.</p>
-            </div>
-        </div>
-    </footer>
+    
 
     <script>
 document.addEventListener('DOMContentLoaded', function() {

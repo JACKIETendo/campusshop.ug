@@ -1239,6 +1239,7 @@ footer {
     background: var(--dark-gray);
     color: var(--white);
     padding: 2rem 0;
+    margin-bottom: 0;
 }
 
 .footer-content {
