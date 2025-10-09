@@ -105,6 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_favorite'])) {
 
 // Handle feedback submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
+    // Ensure database connection is valid
     if (!$conn || $conn->connect_error) {
         $response = ['success' => false, 'message' => 'Database connection failed.'];
         header('Content-Type: application/json');
@@ -117,9 +118,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
     $message = trim($_POST['feedback_message']);
     $user_id = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
 
+    // Basic validation
     if (empty($name) || empty($email) || empty($message)) {
         $response = ['success' => false, 'message' => 'All fields are required.'];
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    } elseif (!preg_match("/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$/", $email)) {
         $response = ['success' => false, 'message' => 'Invalid email format.'];
     } elseif (strlen($name) > 255 || strlen($email) > 255) {
         $response = ['success' => false, 'message' => 'Name or email exceeds maximum length.'];
@@ -1557,7 +1559,7 @@ $user_email = '';
         </div>
     </div>
 
-    <div class="modal" id="image-modal" role="dialog" aria-labelledby="modal-title" aria-modal="true">
+    <div class="modal" id="image-modal">
         <div class="modal-content image-modal-content">
             <button class="modal-close" id="image-modal-close" aria-label="Close product modal">&times;</button>
             <div class="image-modal-grid">
@@ -1568,7 +1570,7 @@ $user_email = '';
                     <h4 id="modal-title"></h4>
                     <p class="caption" id="modal-caption"></p>
                     <p class="price" id="modal-price"></p>
-                    <form method="POST" action="Wall Clocks.php" id="modal-form" class="modal-form">
+                    <form method="POST" action="index.php" id="modal-form" class="modal-form">
                         <input type="hidden" name="product_id" id="modal-product-id">
                         <div class="form-group">
                             <label for="modal-quantity" class="sr-only">Quantity</label>
@@ -1580,10 +1582,10 @@ $user_email = '';
                     <div class="share-section">
                         <h5>Share This Product</h5>
                         <div class="share-buttons">
-                            <a href="#" class="share-btn whatsapp" data-platform="WhatsApp" target="_blank" aria-label="Share on WhatsApp"><img src="images/whatsapp2.png" style="height: 25px; width:25px;" alt=""></a>
-                            <a href="#" class="share-btn facebook" data-platform="Facebook" target="_blank" aria-label="Share on Facebook"><img src="images/facebook.png" style="height: 25px; width:25px;" alt=""></a>
-                            <a href="#" class="share-btn x" data-platform="X" target="_blank" aria-label="Share on X"><img src="images/xicon.png" style="height: 25px; width:25px;" alt=""></a>
-                            <a href="#" class="share-btn telegram" data-platform="Telegram" target="_blank" aria-label="Share on Telegram"><img src="images/telegram.png" style="height: 25px; width:25px;" alt=""></a>
+                            <a href="#" class="share-btn whatsapp" data-platform="whatsapp" target="_blank" aria-label="Share on WhatsApp"><img src="images/whatsapp2.png" style="height: 25px; width:25px;" alt=""></a>
+                            <a href="#" class="share-btn facebook" data-platform="facebook" target="_blank" aria-label="Share on Facebook"><img src="images/facebook.png" style="height: 25px; width:25px;" alt=""></a>
+                            <a href="#" class="share-btn x" data-platform="x" target="_blank" aria-label="Share on X"><img src="images/xicon.png" style="height: 25px; width:25px;" alt=""></a>
+                            <a href="#" class="share-btn telegram" data-platform="telegram" target="_blank" aria-label="Share on Telegram"><img src="images/telegram.png" style="height: 25px; width:25px;" alt=""></a>
                         </div>
                     </div>
                 </div>
@@ -1868,150 +1870,163 @@ $user_email = '';
             });
 
             // Chatbot functionality
-            function openChatbotModal() {
-                chatbotModal.style.display = 'flex';
-                chatbotInput.focus();
-                scrollToBottom();
+        function openChatbotModal() {
+            chatbotModal.style.display = 'flex';
+            chatbotInput.focus();
+            scrollToBottom();
+        }
+
+        function closeChatbotModal() {
+            chatbotModal.style.display = 'none';
+            chatbotInput.value = '';
+        }
+
+        function scrollToBottom() {
+            chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
+        }
+
+        function addMessage(content, sender) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('chatbot-message', sender);
+            messageDiv.innerHTML = `<p>${content}</p>`;
+            chatbotMessages.appendChild(messageDiv);
+            scrollToBottom();
+        }
+
+        const responses = {
+            'hello': 'Hi! How can I assist you today?',
+            'delivery': 'We offer fast campus delivery within 24 hours to your dorm or a campus pickup point. Would you like more details on delivery options?',
+            'discount': 'Bugema University students with a valid student ID can enjoy exclusive discounts. Verify your ID at checkout to apply them!',
+            'products': 'We offer textbooks, branded jumpers, pens, wall clocks, notebooks, T-shirts, and bottles. Browse categories via the "Browse Categories" button!',
+            'contact': 'You can reach us at campusshop@bugemauniv.ac.ug or via WhatsApp at +256 7550 87665. Want to call now?',
+            'help': 'I’m here to assist! Ask about delivery, discounts, products, or anything else.',
+            'default': 'Sorry, I didn’t understand that. Try asking about delivery, discounts, products, or contact info!'
+        };
+
+        chatbotBtn.addEventListener('click', openChatbotModal);
+        if (mobileChatbotBtn) mobileChatbotBtn.addEventListener('click', openChatbotModal);
+
+        chatbotModalClose.addEventListener('click', closeChatbotModal);
+
+        chatbotModal.addEventListener('click', function(e) {
+            if (e.target === chatbotModal) {
+                closeChatbotModal();
+            }
+        });
+
+        chatbotForm.addEventListener('submit', function(e) {
+            e.preventDefault(); // Prevent form submission and page refresh
+            const message = chatbotInput.value.trim();
+            if (!message) {
+                addMessage('Please enter a message.', 'bot');
+                return;
             }
 
-            function closeChatbotModal() {
-                chatbotModal.style.display = 'none';
-                chatbotInput.value = '';
-            }
+            // Add user message
+            addMessage(message, 'user');
 
-            function scrollToBottom() {
-                chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
-            }
-
-            function addMessage(content, sender) {
-                const messageDiv = document.createElement('div');
-                messageDiv.classList.add('chatbot-message', sender);
-                messageDiv.innerHTML = `<p>${content}</p>`;
-                chatbotMessages.appendChild(messageDiv);
-                scrollToBottom();
-            }
-
-            const responses = {
-                'hello': 'Hi! How can I assist you today?',
-                'delivery': 'We offer fast campus delivery within 24 hours to your dorm or a campus pickup point. Would you like more details on delivery options?',
-                'discount': 'Bugema University students with a valid student ID can enjoy exclusive discounts. Verify your ID at checkout to apply them!',
-                'products': 'We offer textbooks, branded jumpers, pens, wall clocks, notebooks, T-shirts, and bottles. Browse categories via the navigation menu!',
-                'contact': 'You can reach us at campusshop@bugemauniv.ac.ug or via WhatsApp at +256 7550 87665. Want to call now?',
-                'help': 'I’m here to assist! Ask about delivery, discounts, products, or anything else.',
-                'default': 'Sorry, I didn’t understand that. Try asking about delivery, discounts, products, or contact info!'
-            };
-
-            chatbotBtn.addEventListener('click', openChatbotModal);
-            mobileChatbotBtn.addEventListener('click', openChatbotModal);
-
-            chatbotModalClose.addEventListener('click', closeChatbotModal);
-
-            chatbotModal.addEventListener('click', function(e) {
-                if (e.target === chatbotModal) {
-                    closeChatbotModal();
+            // Get bot response
+            const lowerMessage = message.toLowerCase();
+            let response = responses['default'];
+            for (const key in responses) {
+                if (lowerMessage.includes(key)) {
+                    response = responses[key];
+                    break;
                 }
-            });
+            }
 
-            chatbotForm.addEventListener('submit', function(e) {
+            // Add bot response
+            setTimeout(() => {
+                addMessage(response, 'bot');
+            }, 500);
+
+            chatbotInput.value = '';
+            chatbotInput.focus();
+        });
+
+        chatbotInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                const message = chatbotInput.value.trim();
-                if (!message) return;
+                chatbotForm.dispatchEvent(new Event('submit'));
+            }
+        });
 
-                // Add user message
-                addMessage(message, 'user');
+        // Image modal functionality with debugging
+        document.querySelectorAll('.product-card img').forEach(img => {
+            img.addEventListener('click', function() {
+                console.log('Image clicked', this); // Debug log
+                const productId = this.getAttribute('data-product-id');
+                const title = this.getAttribute('data-title');
+                const caption = this.getAttribute('data-caption');
+                const price = this.getAttribute('data-price');
+                const favorited = this.getAttribute('data-favorited') === 'true';
 
-                // Get bot response
-                const lowerMessage = message.toLowerCase();
-                let response = responses['default'];
-                for (const key in responses) {
-                    if (lowerMessage.includes(key)) {
-                        response = responses[key];
-                        break;
-                    }
+                if (!productId || !title || !price) {
+                    console.error('Missing data attributes', { productId, title, price });
+                    return;
                 }
 
-                // Add bot response
-                setTimeout(() => {
-                    addMessage(response, 'bot');
-                }, 500);
+                modalImage.src = this.src;
+                modalImage.alt = title;
+                modalTitle.textContent = title;
+                modalCaption.textContent = caption || 'No description available';
+                modalPrice.textContent = price;
+                modalProductId.value = productId;
+                modalFavoriteBtn.classList.toggle('favorited', favorited);
 
-                chatbotInput.value = '';
-                chatbotInput.focus();
-            });
+                // Update share links
+                const shareUrl = `${window.location.origin}/product.php?id=${productId}`;
+                const encodedUrl = encodeURIComponent(shareUrl);
+                const encodedText = encodeURIComponent(`Check out this product from Bugema CampusShop: ${title} - ${shareUrl}`);
 
-            chatbotInput.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    chatbotForm.dispatchEvent(new Event('submit'));
-                }
-            });
+                const shareLinks = {
+                    whatsapp: `https://api.whatsapp.com/send?text=${encodedText}`,
+                    facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`,
+                    x: `https://x.com/intent/tweet?text=${encodedText}`,
+                    telegram: `https://t.me/share/url?url=${encodedUrl}&text=${encodedText}`
+                };
 
-            // Image modal and share functionality
-            document.querySelectorAll('.product-card img').forEach(img => {
-                img.addEventListener('click', function() {
-                    const productId = this.getAttribute('data-product-id');
-                    const title = this.getAttribute('data-title');
-                    const caption = this.getAttribute('data-caption');
-                    const price = this.getAttribute('data-price');
-                    const favorited = this.getAttribute('data-favorited') === 'true';
-
-                    modalImage.src = this.src;
-                    modalImage.alt = title;
-                    modalTitle.textContent = title;
-                    modalCaption.textContent = caption;
-                    modalPrice.textContent = price;
-                    modalProductId.value = productId;
-                    modalFavoriteBtn.classList.toggle('favorited', favorited);
-
-                    // Update share links
-                    const shareUrl = `${window.location.origin}/product.php?id=${productId}`;
-                    const encodedUrl = encodeURIComponent(shareUrl);
-                    const encodedText = encodeURIComponent(`Check out this product from Bugema CampusShop: ${title} - ${shareUrl}`);
-
-                    const shareLinks = {
-                        whatsapp: `https://api.whatsapp.com/send?text=${encodedText}`,
-                        facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`,
-                        x: `https://x.com/intent/tweet?text=${encodedText}`,
-                        telegram: `https://t.me/share/url?url=${encodedUrl}&text=${encodedText}`
-                    };
-
-                    document.querySelectorAll('.share-btn').forEach(btn => {
-                        const platform = btn.getAttribute('data-platform').toLowerCase();
-                        btn.href = shareLinks[platform];
-                    });
-
-                    imageModal.style.display = 'flex';
+                document.querySelectorAll('.share-btn').forEach(btn => {
+                    const platform = btn.getAttribute('data-platform');
+                    btn.href = shareLinks[platform];
                 });
-            });
 
-            imageModalClose.addEventListener('click', function() {
+                imageModal.style.display = 'flex';
+                console.log('Modal displayed', imageModal); // Debug log
+            });
+        });
+
+        imageModalClose.addEventListener('click', function() {
+            imageModal.style.display = 'none';
+        });
+
+        imageModal.addEventListener('click', function(e) {
+            if (e.target === imageModal) {
                 imageModal.style.display = 'none';
-            });
+            }
+        });
 
-            imageModal.addEventListener('click', function(e) {
-                if (e.target === imageModal) {
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                if (categoriesModal.style.display === 'flex') {
+                    categoriesModal.style.display = 'none';
+                }
+                if (feedbackModal.style.display === 'flex') {
+                    feedbackModal.style.display = 'none';
+                    feedbackForm.reset();
+                    feedbackMessage.style.display = 'none';
+                }
+                if (imageModal.style.display === 'flex') {
                     imageModal.style.display = 'none';
                 }
-            });
-
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape') {
-                    if (feedbackModal.style.display === 'flex') {
-                        feedbackModal.style.display = 'none';
-                        feedbackForm.reset();
-                        feedbackMessage.style.display = 'none';
-                    }
-                    if (imageModal.style.display === 'flex') {
-                        imageModal.style.display = 'none';
-                    }
-                    if (chatbotModal.style.display === 'flex') {
-                        closeChatbotModal();
-                    }
-                    if (mobileMenu.classList.contains('active')) {
-                        mobileMenu.classList.remove('active');
-                    }
+                if (chatbotModal.style.display === 'flex') {
+                    closeChatbotModal();
                 }
-            });
+                if (mobileMenu.classList.contains('active')) {
+                    mobileMenu.classList.remove('active');
+                }
+            }
+        });
 
             feedbackForm.addEventListener('submit', function(e) {
                 e.preventDefault();
@@ -2047,7 +2062,6 @@ $user_email = '';
                 });
             });
 
-            // Screen reader only class for accessibility
             const style = document.createElement('style');
             style.textContent = `
                 .sr-only {

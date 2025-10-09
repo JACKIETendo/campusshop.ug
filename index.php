@@ -1865,7 +1865,7 @@ footer {
         width: 20px;
     }
 }
-</style>
+    </style>
 </head>
 <body>
     <header>
@@ -2058,7 +2058,7 @@ footer {
         </div>
     </div>
 
-   <div class="modal" id="image-modal" role="dialog" aria-labelledby="modal-title" aria-modal="true">
+    <div class="modal" id="image-modal">
         <div class="modal-content image-modal-content">
             <button class="modal-close" id="image-modal-close" aria-label="Close product modal">&times;</button>
             <div class="image-modal-grid">
@@ -2204,7 +2204,7 @@ footer {
         </div>
     </footer>
 
-   <script>
+    <script>
     document.addEventListener('DOMContentLoaded', function() {
         const observerOptions = {
             threshold: 0.1,
@@ -2448,7 +2448,7 @@ footer {
         };
 
         chatbotBtn.addEventListener('click', openChatbotModal);
-        mobileChatbotBtn.addEventListener('click', openChatbotModal);
+        if (mobileChatbotBtn) mobileChatbotBtn.addEventListener('click', openChatbotModal);
 
         chatbotModalClose.addEventListener('click', closeChatbotModal);
 
@@ -2459,9 +2459,12 @@ footer {
         });
 
         chatbotForm.addEventListener('submit', function(e) {
-            e.preventDefault();
+            e.preventDefault(); // Prevent form submission and page refresh
             const message = chatbotInput.value.trim();
-            if (!message) return;
+            if (!message) {
+                addMessage('Please enter a message.', 'bot');
+                return;
+            }
 
             // Add user message
             addMessage(message, 'user');
@@ -2492,19 +2495,25 @@ footer {
             }
         });
 
-        // Image modal and share functionality
+        // Image modal functionality with debugging
         document.querySelectorAll('.product-card img').forEach(img => {
             img.addEventListener('click', function() {
+                console.log('Image clicked', this); // Debug log
                 const productId = this.getAttribute('data-product-id');
                 const title = this.getAttribute('data-title');
                 const caption = this.getAttribute('data-caption');
                 const price = this.getAttribute('data-price');
                 const favorited = this.getAttribute('data-favorited') === 'true';
 
+                if (!productId || !title || !price) {
+                    console.error('Missing data attributes', { productId, title, price });
+                    return;
+                }
+
                 modalImage.src = this.src;
                 modalImage.alt = title;
                 modalTitle.textContent = title;
-                modalCaption.textContent = caption;
+                modalCaption.textContent = caption || 'No description available';
                 modalPrice.textContent = price;
                 modalProductId.value = productId;
                 modalFavoriteBtn.classList.toggle('favorited', favorited);
@@ -2527,6 +2536,7 @@ footer {
                 });
 
                 imageModal.style.display = 'flex';
+                console.log('Modal displayed', imageModal); // Debug log
             });
         });
 
