@@ -163,8 +163,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             font-size: 1.8rem;
         }
 
-        .form-group {
-            margin-bottom: 1rem;
+        .form-group { 
+            margin-bottom: 1rem; 
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
 
         label {
@@ -172,11 +176,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             font-weight: 500;
             margin-bottom: 0.5rem;
             color: var(--text-gray);
-            text-align: left;
-            padding-left: 60px;
+            align-self: flex-start;
+            margin-left: 60px;
         }
 
-        input {
+        input, select {
             width: 80%;
             padding: 12px;
             border: 1px solid var(--text-gray);
@@ -185,10 +189,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             transition: border-color 0.3s ease;
         }
 
-        input:focus {
+        input:focus, select:focus {
             border-color: var(--primary-green);
             outline: none;
             box-shadow: 0 0 5px rgba(9, 27, 190, 0.3);
+        }
+        .eye-icon {
+            position: absolute;
+            right: 70px;
+            top: 44px;
+            cursor: pointer;
+            width: 25px;
+            height: 25px;
+            opacity: 0.7;
         }
 
         button {
@@ -234,6 +247,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         .register-link a:hover {
             text-decoration: underline;
+        }
+
+        /* Social Login Buttons */
+        .social-login {
+            margin-top: 1rem;
+            text-align: center;
+        }
+
+        .social-login p {
+            color: var(--text-gray);
+            margin-bottom: 0.5rem;
+        }
+
+        .social-buttons a {
+            display: inline-block;
+            margin: 0 10px;
+            transition: transform 0.2s ease;
+        }
+
+        .social-buttons a img {
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .social-buttons a:hover {
+            transform: scale(1.1);
         }
 
         @media (max-width: 768px) {
@@ -321,20 +362,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 <div class="form-group">
                     <label for="password">Password</label>
-                    <input type="password" name="password" id="password" required>
+                    <input type="password" name="password" id="password" required >
+                    <img src="images/eye-close.png" alt="Toggle" class="eye-icon" id="togglePassword">
                 </div>
                 <button type="submit">Login</button>
+
+                <!-- Social Login Section -->
+                <div class="social-login">
+                    <p>OR</p>
+                    <div class="social-buttons">
+                        <a href="#"><img src="images/facebook.png" alt="Facebook Login"></a>
+                        <a href="#"><img src="images/xicon.png" alt="X Login"></a>
+                        <a href="#"><img src="images/instagram.png" alt="Instagram Login"></a>
+                    </div>
+                </div>
             </form>
+
             <div class="register-link">
                 <p>Don't have an account? <a href="register.php">Register here</a></p>
+                <p><a href="forgot_password.php" style="color: var(--primary-green); text-decoration: none;">Forgot Password?</a></p>
             </div>
         </div>
+
         <div class="image-side">
             <div class="caption">Explore Campus Shopping!</div>
         </div>
     </div>
 </body>
 </html>
+<script>
+    // Show/Hide Password for both fields
+        const togglePassword = document.getElementById("togglePassword");
+        const passwordField = document.getElementById("password");
+
+        togglePassword.addEventListener("click", () => {
+            const type = passwordField.type === "password" ? "text" : "password";
+            passwordField.type = type;
+            togglePassword.src = type === "password" ? "images/eye-close.png" : "images/eye-open.png";
+        });
+</script>
 
 <?php
 $conn->close();

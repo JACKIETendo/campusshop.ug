@@ -21,6 +21,48 @@ if (!isset($_SESSION['username']) || $_SESSION['role'] !== 'admin') {
     header("Location: index.php");
     exit;
 }
+// Lightweight JSON endpoint for product fetch (used by openEditProduct)
+if (isset($_GET['fetch_product'])) {
+    $pid = intval($_GET['fetch_product']);
+    header('Content-Type: application/json');
+    
+    if ($pid <= 0) {
+        echo json_encode(['error' => 'Invalid product ID']);
+        exit;
+    }
+
+    try {
+        $stmt = $conn->prepare("SELECT id, name, price, stock, category, caption, image_path FROM products WHERE id = ?");
+        if (!$stmt) {
+            throw new Exception('Database preparation failed: ' . $conn->error);
+        }
+        $stmt->bind_param("i", $pid);
+        if (!$stmt->execute()) {
+            throw new Exception('Database execution failed: ' . $stmt->error);
+        }
+        $res = $stmt->get_result();
+        if ($res && ($row = $res->fetch_assoc())) {
+            echo json_encode([
+                'id' => (int)$row['id'],
+                'name' => $row['name'],
+                'price' => (float)$row['price'],
+                'stock' => (int)$row['stock'],
+                'category' => $row['category'],
+                'caption' => $row['caption'],
+                'image_path' => $row['image_path']
+            ]);
+        } else {
+            echo json_encode(['error' => 'Product not found']);
+        }
+    } catch (Exception $e) {
+        $errorMsg = 'Error fetching product: ' . $e->getMessage();
+        error_log($errorMsg . ' at ' . date('Y-m-d H:i:s'));
+        echo json_encode(['error' => $errorMsg]);
+    } finally {
+        if (isset($stmt)) $stmt->close();
+    }
+    exit; // Ensure no further code executes
+}
 
 // Global categories
 $valid_categories = ['Textbooks', 'Branded Jumpers', 'Bottles', 'Pens', 'Note Books', 'Wall Clocks', 'T-Shirts'];
@@ -41,6 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && in_array
     $stock = intval(post_val('stock', 0));
     $category = $conn->real_escape_string(post_val('category'));
     $caption = $conn->real_escape_string(post_val('caption', ''));
+    $id = intval(post_val('id', 0)); // For edit
     $image_path = null;
 
     // Basic validation
@@ -52,9 +95,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && in_array
         $message = "Stock cannot be negative.";
     } elseif (strlen($caption) > 255) {
         $message = "Caption must be 255 characters or less.";
+    } elseif ($action === 'edit' && $id <= 0) {
+        $message = "Invalid product ID for editing.";
     } else {
 
-        // Image upload (optional)
+        // Image upload (optional for add, update for edit)
         if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
             $image = $_FILES['image'];
             $image_info = getimagesize($image['tmp_name']);
@@ -62,9 +107,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && in_array
             if ($image_info && in_array($image_info['mime'], $allowed)) {
                 if (!is_dir('images')) mkdir('images', 0755, true);
                 $fn = time() . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '_', basename($image['name']));
-                $path = 'images/' . $fn;
-                if (move_uploaded_file($image['tmp_name'], $path)) $image_path = $path;
-                else $message = "Failed to upload image.";
+                $new_path = 'images/' . $fn;
+                if (move_uploaded_file($image['tmp_name'], $new_path)) {
+                    $image_path = $new_path;
+                    // Delete old image if editing
+                    if ($action === 'edit') {
+                        $stmt = $conn->prepare("SELECT image_path FROM products WHERE id = ?");
+                        $stmt->bind_param("i", $id);
+                        $stmt->execute();
+                        $result = $stmt->get_result();
+                        if ($old_row = $result->fetch_assoc()) {
+                            if (!empty($old_row['image_path']) && file_exists($old_row['image_path'])) {
+                                @unlink($old_row['image_path']);
+                            }
+                        }
+                        $stmt->close();
+                    }
+                } else {
+                    $message = "Failed to upload image.";
+                }
             } else {
                 $message = "Invalid image format. Use JPEG or PNG.";
             }
@@ -75,35 +136,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && in_array
                 $sql = "INSERT INTO products (name, price, stock, category, caption, image_path) VALUES (?, ?, ?, ?, ?, ?)";
                 $stmt = $conn->prepare($sql);
                 $stmt->bind_param("sdisss", $name, $price, $stock, $category, $caption, $image_path);
-                if ($stmt->execute()) $message = "Product added successfully.";
-                else { $message = "Failed to add product: ".$stmt->error; error_log("Add product failed: ".$stmt->error); }
-                $stmt->close();
-            } else { 
-                // Handle edit notification
-                if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_notification'])) {
-                    $nid = intval($_POST['nid']);
-                    $message = $conn->real_escape_string(trim($_POST['nmessage']));
-                    if ($nid <= 0 || empty($message)) {
-                        $message = "Invalid notification edit.";
-                    } else {
-                        $stmt = $conn->prepare("UPDATE notifications SET message = ?, created_at = NOW() WHERE id = ?");
-                        $stmt->bind_param("si", $message, $nid);
-                        if ($stmt->execute()) {
-                            $message = "Notification updated successfully.";
-                        } else {
-                            $message = "Failed to update notification: " . $stmt->error;
-                            error_log("Edit notification failed: " . $stmt->error);
-                        }
-                        $stmt->close();
-                    }
-                    // Redirect or output JSON for fetch
-                    if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
-                        echo $message;
-                        exit;
-                    }
-                    // For non-AJAX, let the page reload with the message
+                if ($stmt->execute()) {
+                    $message = "Product added successfully.";
+                } else {
+                    $message = "Failed to add product: " . $stmt->error;
+                    error_log("Add product failed: " . $stmt->error);
                 }
-
+                $stmt->close();
+            } else { // edit
+                // Get current image path if no new image uploaded
+                if (!$image_path) {
+                    $stmt = $conn->prepare("SELECT image_path FROM products WHERE id = ?");
+                    $stmt->bind_param("i", $id);
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+                    if ($old_row = $result->fetch_assoc()) {
+                        $image_path = $old_row['image_path'];
+                    }
+                    $stmt->close();
+                }
+                
+                $sql = "UPDATE products SET name = ?, price = ?, stock = ?, category = ?, caption = ?, image_path = ? WHERE id = ?";
+                $stmt = $conn->prepare($sql);
+                $stmt->bind_param("sdisssi", $name, $price, $stock, $category, $caption, $image_path, $id);
+                if ($stmt->execute()) {
+                    $message = "Product updated successfully.";
+                } else {
+                    $message = "Failed to update product: " . $stmt->error;
+                    error_log("Update product failed: " . $stmt->error);
+                }
+                $stmt->close();
             }
         }
     }
@@ -295,50 +357,6 @@ a{color:inherit;text-decoration:none}
 .brand .logo{ width:52px;height:52px;background:#fff;color:var(--primary);border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px }
 .brand h1{margin:0;font-size:20px;font-weight:700}
 .brand p{margin:0;font-size:13px;opacity:0.95;color:#eaf3ff}
-/* Existing styles remain, add or modify these */
-.modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(2, 6, 23, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 2000;
-}
-
-.modal {
-    background: var(--card);
-    border-radius: 10px;
-    padding: 18px;
-    width: 560px;
-    max-width: 96%;
-    box-shadow: 0 10px 40px rgba(2, 6, 23, 0.2);
-    position: relative;
-}
-
-body.dark .modal {
-    background: #071229;
-    border: 1px solid rgba(255, 255, 255, 0.03);
-}
-
-.modal-content {
-    /* Remove this class if not needed, as it's now part of .modal */
-    background: none;
-    margin: 0;
-    padding: 0;
-    width: 100%;
-}
-
-.close {
-    /* If you want to reintroduce the close (×) button, add it back */
-    display: none; /* Removed for now, using the Close button instead */
-}
-
-#closeNotifModal, #cancelEdit {
-    padding: 6px 12px;
-    font-size: 14px;
-}
-
 
 .menu{ margin-top:6px; display:flex; flex-direction:column; gap:8px; }
 .menu a{ display:flex; align-items:center; gap:12px; padding:12px; border-radius:10px; font-weight:600; color:rgba(255,255,255,0.95); }
@@ -369,12 +387,43 @@ th, td{ padding:10px 12px; border-bottom:1px solid #f1f5f9; text-align:left; ver
 th{ background: linear-gradient(90deg,var(--primary),var(--primary-2)); color:#fff; font-weight:700; }
 td img{ width:56px; height:56px; object-fit:cover; border-radius:8px }
 
-.btn{ display:inline-block; padding:8px 12px; border-radius:8px; background:var(--primary); color:#fff; font-weight:700 }
+.btn{ display:inline-block; padding:8px 12px; border-radius:8px; background:var(--primary); color:#fff; font-weight:700; border:none; cursor:pointer }
 .btn.secondary{ background:#eef3ff; color:var(--primary); font-weight:700 }
 .small{ font-size:0.85rem; padding:6px 8px; border-radius:6px }
 
-.modal-overlay{ position:fixed; inset:0; background:rgba(2,6,23,0.5); display:flex; align-items:center; justify-content:center; z-index:2000 }
-.modal{ background:var(--card); border-radius:10px; padding:18px; width:560px; max-width:96%; box-shadow:0 10px 40px rgba(2,6,23,0.2) }
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(2, 6, 23, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+}
+
+.modal {
+    background: var(--card);
+    border-radius: 10px;
+    padding: 18px;
+    width: 560px;
+    max-width: 96%;
+    box-shadow: 0 10px 40px rgba(2, 6, 23, 0.2);
+    position: relative;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+body.dark .modal {
+    background: #071229;
+    border: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.modal-content {
+    background: none;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+}
 
 /* spacing/responsive */
 @media (max-width:1100px) {
@@ -394,16 +443,17 @@ body.dark th{ background: linear-gradient(90deg,#0b2b5b,#08306d) }
 
 /* messages */
 .message{ padding:10px 12px; border-radius:8px; margin-bottom:12px }
-.success{ background: rgba(16,89,185,0.08); color:var(--success) }
-.error{ background: rgba(220,38,38,0.06); color:var(--danger) }
+.success{ background: rgba(16,89,185,0.08); color:var(--success); border:1px solid rgba(16,89,185,0.2) }
+.error{ background: rgba(220,38,38,0.06); color:var(--danger); border:1px solid rgba(220,38,38,0.2) }
 
+textarea { resize: vertical; min-height: 60px; }
 </style>
 </head>
 <body>
     <!-- SIDEBAR -->
     <aside class="sidebar" role="navigation" aria-label="Main sidebar">
         <div class="brand">
-            <div class="logo"><img src="images/download.png" style="height: 40px; width: 40px;" alt=""></div>
+            <div class="logo"><img src="images/download.png" style="height: 40px; width: 40px;" alt="Logo"></div>
             <div>
                 <h1>Bugema CampusShop</h1>
                 <p>Admin Dashboard</p>
@@ -454,7 +504,7 @@ body.dark th{ background: linear-gradient(90deg,#0b2b5b,#08306d) }
 
         <!-- show message if exists -->
         <?php if (isset($message) && $message): ?>
-            <div class="message <?php echo (stripos($message,'success')!==false || stripos($message,'added')!==false) ? 'success' : 'error'; ?>">
+            <div class="message <?php echo (stripos($message,'success')!==false || stripos($message,'added')!==false || stripos($message,'updated')!==false) ? 'success' : 'error'; ?>">
                 <?php echo htmlspecialchars($message); ?>
             </div>
         <?php endif; ?>
@@ -550,24 +600,41 @@ body.dark th{ background: linear-gradient(90deg,#0b2b5b,#08306d) }
             <div class="panel">
                 <table>
                     <thead>
-                        <tr><th>ID</th><th>Image</th><th>Name</th><th>Price</th><th>Stock</th><th>Category</th><th>Actions</th></tr>
+                        <tr>
+                            <th>ID</th>
+                            <th>Image</th>
+                            <th>Name</th>
+                            <th>Caption</th>
+                            <th>Price</th>
+                            <th>Stock</th>
+                            <th>Category</th>
+                            <th>Actions</th>
+                        </tr>
                     </thead>
                     <tbody id="productTable">
                         <?php if (count($products) === 0): ?>
-                            <tr><td colspan="7">No products found.</td></tr>
+                            <tr><td colspan="8">No products found.</td></tr>
                         <?php else: foreach ($products as $p):
                             $image_path = !empty($p['image_path']) ? htmlspecialchars($p['image_path']) : '';
+                            $caption = htmlspecialchars($p['caption'] ?? 'No caption');
                         ?>
                         <tr>
                             <td><?php echo htmlspecialchars($p['id']); ?></td>
-                            <td><?php if($image_path): ?><img src="<?php echo $image_path; ?>" alt="img"><?php else: ?><div style="width:56px;height:56px;background:#eef3ff;border-radius:8px"></div><?php endif; ?></td>
+                            <td>
+                                <?php if($image_path): ?>
+                                    <img src="<?php echo $image_path; ?>" alt="Product image" style="width:56px; height:56px; object-fit:cover; border-radius:8px;">
+                                <?php else: ?>
+                                    <div style="width:56px;height:56px;background:#eef3ff;border-radius:8px; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:12px;">No img</div>
+                                <?php endif; ?>
+                            </td>
                             <td><?php echo htmlspecialchars($p['name']); ?></td>
+                            <td title="<?php echo $caption; ?>"><?php echo strlen($caption) > 30 ? substr($caption, 0, 30) . '...' : $caption; ?></td>
                             <td>UGX <?php echo number_format($p['price']); ?></td>
                             <td><?php echo htmlspecialchars($p['stock']); ?></td>
                             <td><?php echo htmlspecialchars($p['category']); ?></td>
                             <td>
-                                <a class="small btn secondary" href="#edit" onclick="openEditProduct(<?php echo $p['id'];?>)">Edit</a>
-                                <a class="small btn" style="background:#ff5b5b" href="?delete_product=<?php echo $p['id'];?>" onclick="return confirm('Delete product?')">Delete</a>
+                                <button class="small btn secondary" onclick="openEditProduct(<?php echo $p['id'];?>)">Edit</button>
+                                <a class="small btn" style="background:#ff5b5b; padding:6px 8px;" href="?delete_product=<?php echo $p['id'];?>" onclick="return confirm('Delete this product? This cannot be undone.')">Delete</a>
                             </td>
                         </tr>
                         <?php endforeach; endif; ?>
@@ -590,8 +657,8 @@ body.dark th{ background: linear-gradient(90deg,#0b2b5b,#08306d) }
                                 <option value="<?php echo htmlspecialchars($cat); ?>"><?php echo htmlspecialchars($cat); ?></option>
                             <?php endforeach; ?>
                         </select>
-                        <input type="file" name="image" accept="image/*" />
                         <textarea name="caption" placeholder="Short caption" style="padding:10px; border-radius:8px; border:1px solid #e6eefc;"></textarea>
+                        <input type="file" name="image" accept="image/*" />
                         <div style="display:flex; gap:10px;">
                             <button class="btn" type="submit">Add Product</button>
                             <button type="button" id="clearAdd" class="btn secondary">Clear</button>
@@ -654,90 +721,126 @@ body.dark th{ background: linear-gradient(90deg,#0b2b5b,#08306d) }
             </div>
         </section>
 
-       <!-- Notifications Section -->
-<section id="notificationsSection" style="display:none;">
-    <div class="panel" style="margin-bottom:12px;">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <h3 style="margin:0;">Notifications</h3>
-            <div><a href="#notifications" class="btn secondary small" onclick="document.querySelector('#notificationsSection').scrollIntoView({behavior:'smooth'})">View All</a></div>
-        </div>
-    </div>
-
-    <div class="panel" style="margin-bottom:12px;">
-        <h4 style="margin:0 0 8px 0;">Send New Notification</h4>
-        <form method="POST" action="admin_dashboard.php">
-            <textarea name="message" placeholder="Message to users" required style="width:100%; min-height:80px; padding:10px; border-radius:8px; border:1px solid #e6eefc;"></textarea>
-            <div style="margin-top:8px; text-align:right;">
-                <button class="btn" type="submit" name="send_notification">Send</button>
-            </div>
-        </form>
-    </div>
-
-    <div class="panel">
-        <h4 style="margin:0 0 8px 0;">Recent Notifications</h4>
-        <table>
-            <thead><tr><th>ID</th><th>Message</th><th>Date</th><th>Actions</th></tr></thead>
-            <tbody>
-                <?php if (count($notifications) === 0): ?>
-                    <tr><td colspan="5">No notifications found.</td></tr>
-                <?php else: foreach ($notifications as $n): ?>
-                    <tr>
-                        <td><?php echo htmlspecialchars($n['id']); ?></td>
-                        <td><?php echo htmlspecialchars($n['message']); ?></td>
-                        <td><?php echo htmlspecialchars(date('Y-m-d H:i', strtotime($n['created_at']))); ?></td>
-                        <td>
-                            <button class="small btn secondary edit-btn" data-id="<?php echo $n['id']; ?>" data-message="<?php echo htmlspecialchars($n['message']); ?>">Edit</button>
-                            <a class="small btn" style="background:#ff5b5b" href="?delete_notification=<?php echo $n['id'];?>" onclick="return confirm('Delete notification?')">Delete</a>
-                        </td>
-                    </tr>
-                <?php endforeach; endif; ?>
-            </tbody>
-        </table>
-    </div>
-</section>
-
-<!-- Edit Notification Modal -->
-<div id="editNotificationModal" style="display:none;">
-    <div class="modal-overlay" id="notifOverlay">
-        <div class="modal" role="dialog" aria-modal="true" aria-label="Edit notification">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <h3>Edit Notification</h3>
-                <button class="btn secondary" id="closeNotifModal">Close</button>
-            </div>
-            <form id="editForm" method="POST" action="admin_dashboard.php">
-                <input type="hidden" name="edit_notification" value="1">
-                <input type="hidden" id="notif_id" name="nid">
-                <label for="notif_message">Message:</label>
-                <textarea id="notif_message" name="nmessage" rows="4" required style="width:100%; padding:10px; border-radius:8px; border:1px solid #e6eefc; margin-top:10px;"></textarea>
-                <div style="text-align:right; margin-top:10px;">
-                    <button type="submit" class="save-btn">Save Changes</button>
-                    <button type="button" class="btn secondary" id="cancelEdit">Cancel</button>
+        <!-- Notifications Section -->
+        <section id="notificationsSection" style="display:none;">
+            <div class="panel" style="margin-bottom:12px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h3 style="margin:0;">Notifications</h3>
+                    <div><a href="#notifications" class="btn secondary small" onclick="document.querySelector('#notificationsSection').scrollIntoView({behavior:'smooth'})">View All</a></div>
                 </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Virtual Card Modal (client demo) -->
-<div id="cardModal" style="display:none;">
-    <div class="modal-overlay" id="cardOverlay">
-        <div class="modal" role="dialog" aria-modal="true" aria-label="Add virtual card">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <h3>Create Virtual Card</h3>
-                <button class="btn secondary" id="closeCardModal">Close</button>
             </div>
-            <form id="virtualCardForm" style="margin-top:10px;">
-                <div style="display:flex; flex-direction:column; gap:10px;">
-                    <input name="card_name" placeholder="Card name" required style="padding:10px;border-radius:8px;border:1px solid #e6eefc;">
-                    <input name="limit" type="number" placeholder="Limit (UGX)" required style="padding:10px;border-radius:8px;border:1px solid #e6eefc;">
-                    <div style="text-align:right;">
-                        <button class="btn" type="submit">Create</button>
+
+            <div class="panel" style="margin-bottom:12px;">
+                <h4 style="margin:0 0 8px 0;">Send New Notification</h4>
+                <form method="POST" action="admin_dashboard.php">
+                    <textarea name="message" placeholder="Message to users" required style="width:100%; min-height:80px; padding:10px; border-radius:8px; border:1px solid #e6eefc;"></textarea>
+                    <div style="margin-top:8px; text-align:right;">
+                        <button class="btn" type="submit" name="send_notification">Send</button>
                     </div>
+                </form>
+            </div>
+
+            <div class="panel">
+                <h4 style="margin:0 0 8px 0;">Recent Notifications</h4>
+                <table>
+                    <thead><tr><th>ID</th><th>Message</th><th>Date</th><th>Actions</th></tr></thead>
+                    <tbody>
+                        <?php if (count($notifications) === 0): ?>
+                            <tr><td colspan="4">No notifications found.</td></tr>
+                        <?php else: foreach ($notifications as $n): ?>
+                            <tr>
+                                <td><?php echo htmlspecialchars($n['id']); ?></td>
+                                <td><?php echo htmlspecialchars($n['message']); ?></td>
+                                <td><?php echo htmlspecialchars(date('Y-m-d H:i', strtotime($n['created_at']))); ?></td>
+                                <td>
+                                    <button class="small btn secondary edit-btn" data-id="<?php echo $n['id']; ?>" data-message="<?php echo htmlspecialchars($n['message']); ?>">Edit</button>
+                                    <a class="small btn" style="background:#ff5b5b" href="?delete_notification=<?php echo $n['id'];?>" onclick="return confirm('Delete notification?')">Delete</a>
+                                </td>
+                            </tr>
+                        <?php endforeach; endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Edit Product Modal -->
+        <div id="editProductModal" style="display:none;">
+            <div class="modal-overlay">
+                <div class="modal" role="dialog" aria-modal="true" aria-label="Edit product">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                        <h3>Edit Product</h3>
+                        <button class="btn secondary" onclick="closeEditProduct()">Close</button>
+                    </div>
+                    <form id="editProductForm" method="POST" action="admin_dashboard.php" enctype="multipart/form-data">
+                        <input type="hidden" name="action" value="edit">
+                        <input type="hidden" id="editProductHiddenId" name="id">
+                        
+                        <div style="display:flex; flex-direction:column; gap:10px;">
+                            <input id="editName" name="name" placeholder="Product name" required style="padding:10px; border-radius:8px; border:1px solid #e6eefc;" />
+                            <input type="number" step="0.01" id="editPrice" name="price" placeholder="Price (UGX)" required style="padding:10px; border-radius:8px; border:1px solid #e6eefc;" />
+                            <input type="number" id="editStock" name="stock" placeholder="Stock qty" min="0" required style="padding:10px; border-radius:8px; border:1px solid #e6eefc;" />
+                            <select id="editCategory" name="category" required style="padding:10px; border-radius:8px; border:1px solid #e6eefc;">
+                                <option value="">Category</option>
+                                <?php foreach ($valid_categories as $cat): ?>
+                                    <option value="<?php echo htmlspecialchars($cat); ?>"><?php echo htmlspecialchars($cat); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <textarea id="editCaption" name="caption" placeholder="Short caption" style="padding:10px; border-radius:8px; border:1px solid #e6eefc; min-height:60px;"></textarea>
+                            <input type="file" name="image" accept="image/*" />
+                            <div id="editCurrentImage" style="margin:10px 0;"></div>
+                            <div style="display:flex; gap:10px;">
+                                <button class="btn" type="submit">Update Product</button>
+                                <button type="button" class="btn secondary" onclick="closeEditProduct()">Cancel</button>
+                            </div>
+                        </div>
+                    </form>
                 </div>
-            </form>
+            </div>
+        </div>
+
+        <!-- Edit Notification Modal -->
+        <div id="editNotificationModal" style="display:none;">
+            <div class="modal-overlay" id="notifOverlay">
+                <div class="modal" role="dialog" aria-modal="true" aria-label="Edit notification">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                        <h3>Edit Notification</h3>
+                        <button class="btn secondary" id="closeNotifModal">Close</button>
+                    </div>
+                    <form id="editForm" method="POST" action="admin_dashboard.php">
+                        <input type="hidden" name="edit_notification" value="1">
+                        <input type="hidden" id="notif_id" name="nid">
+                        <label for="notif_message">Message:</label>
+                        <textarea id="notif_message" name="nmessage" rows="4" required style="width:100%; padding:10px; border-radius:8px; border:1px solid #e6eefc; margin-top:10px;"></textarea>
+                        <div style="text-align:right; margin-top:10px;">
+                            <button type="submit" class="btn">Save Changes</button>
+                            <button type="button" class="btn secondary" id="cancelEdit">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Virtual Card Modal (client demo) -->
+        <div id="cardModal" style="display:none;">
+            <div class="modal-overlay" id="cardOverlay">
+                <div class="modal" role="dialog" aria-modal="true" aria-label="Add virtual card">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <h3>Create Virtual Card</h3>
+                        <button class="btn secondary" id="closeCardModal">Close</button>
+                    </div>
+                    <form id="virtualCardForm" style="margin-top:10px;">
+                        <div style="display:flex; flex-direction:column; gap:10px;">
+                            <input name="card_name" placeholder="Card name" required style="padding:10px;border-radius:8px;border:1px solid #e6eefc;">
+                            <input name="limit" type="number" placeholder="Limit (UGX)" required style="padding:10px;border-radius:8px;border:1px solid #e6eefc;">
+                            <div style="text-align:right;">
+                                <button class="btn" type="submit">Create</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
         </div>
     </div>
-</div>
 
 <script>
     // ------------------
@@ -793,8 +896,16 @@ body.dark th{ background: linear-gradient(90deg,#0b2b5b,#08306d) }
     const themeToggle = document.getElementById('themeToggle');
     function applyTheme() {
         const t = localStorage.getItem('campus_theme') || 'light';
-        if (t === 'dark') { document.body.classList.add('dark'); themeToggle.innerHTML = '<i class="fa fa-sun"></i>'; themeToggle.setAttribute('aria-pressed', 'true'); }
-        else { document.body.classList.remove('dark'); themeToggle.innerHTML = '<i class="fa fa-moon"></i>'; themeToggle.setAttribute('aria-pressed', 'false'); }
+        if (t === 'dark') { 
+            document.body.classList.add('dark'); 
+            themeToggle.innerHTML = '<i class="fa fa-sun"></i>'; 
+            themeToggle.setAttribute('aria-pressed', 'true'); 
+        }
+        else { 
+            document.body.classList.remove('dark'); 
+            themeToggle.innerHTML = '<i class="fa fa-moon"></i>'; 
+            themeToggle.setAttribute('aria-pressed', 'false'); 
+        }
     }
     themeToggle.addEventListener('click', function() {
         const cur = document.body.classList.contains('dark') ? 'dark' : 'light';
@@ -803,6 +914,15 @@ body.dark th{ background: linear-gradient(90deg,#0b2b5b,#08306d) }
         applyTheme();
     });
     applyTheme();
+
+    // Close modals when clicking overlay
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+        overlay.addEventListener('click', function(e) {
+            if (e.target === overlay) {
+                overlay.style.display = 'none';
+            }
+        });
+    });
 
     // Add virtual card modal (demo)
     document.getElementById('addCardBtn').addEventListener('click', function() {
@@ -827,30 +947,53 @@ body.dark th{ background: linear-gradient(90deg,#0b2b5b,#08306d) }
         document.getElementById('addProductForm').reset();
     });
 
-    // Edit Product
+        // Edit Product
     function openEditProduct(id) {
-        fetch('admin_dashboard.php?fetch_product=' + encodeURIComponent(id))
-        .then(r => r.json())
+    console.log('Fetching product with ID:', id); // Debug log
+    fetch('admin_dashboard.php?fetch_product=' + encodeURIComponent(id))
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok: ' + response.status + ' ' + response.statusText);
+            }
+            return response.json();
+        })
         .then(data => {
-            if (data.error) { alert(data.error); return; }
-            document.getElementById('editProductId').value = data.id;
-            document.getElementById('editName').value = data.name;
-            document.getElementById('editPrice').value = data.price;
-            document.getElementById('editStock').value = data.stock;
-            document.getElementById('editCategory').value = data.category;
-            document.getElementById('editCaption').value = data.caption;
-            document.getElementById('editCurrentImage').innerHTML = data.image_path ? '<img src="' + data.image_path + '" style="width:100px;height:100px;object-fit:cover;border-radius:8px">' : 'No image';
+            console.log('Response data:', data); // Debug log
+            if (data.error) {
+                console.error('Fetch error:', data.error);
+                alert(data.error);
+                return;
+            }
+            // Populate form fields
+            document.getElementById('editProductHiddenId').value = data.id;
+            document.getElementById('editName').value = data.name || '';
+            document.getElementById('editPrice').value = data.price || '';
+            document.getElementById('editStock').value = data.stock || 0;
+            document.getElementById('editCategory').value = data.category || '';
+            document.getElementById('editCaption').value = data.caption || '';
+
+            // Show current image
+            if (data.image_path) {
+                document.getElementById('editCurrentImage').innerHTML =
+                    '<img src="' + data.image_path + '" alt="Current image" style="width:100px; height:100px; object-fit:cover; border-radius:8px; margin-bottom:5px;">' +
+                    '<small style="color:var(--muted);">New image will replace this</small>';
+            } else {
+                document.getElementById('editCurrentImage').innerHTML =
+                    '<div style="width:100px; height:100px; background:#eef3ff; border-radius:8px; display:flex; align-items:center; justify-content:center; color:var(--muted);">No image</div>';
+            }
+
             document.getElementById('editProductModal').style.display = 'block';
         })
-        .catch(err => { console.error(err); alert('Could not fetch product info'); });
-    }
-    function closeEditProduct() { document.getElementById('editProductModal').style.display = 'none'; }
+        .catch(err => {
+            console.error('Error fetching product:', err);
+            alert('Could not fetch product information. Please try again or check the console for details.');
+        });
+}
 
     // Edit Notification
     const editNotificationModal = document.getElementById('editNotificationModal');
     const closeNotifModal = document.getElementById('closeNotifModal');
     const cancelEdit = document.getElementById('cancelEdit');
-    const editForm = document.getElementById('editForm');
     const editBtns = document.querySelectorAll('.edit-btn');
 
     editBtns.forEach(btn => {
@@ -863,28 +1006,8 @@ body.dark th{ background: linear-gradient(90deg,#0b2b5b,#08306d) }
         });
     });
 
-    closeNotifModal.addEventListener('click', () => editNotificationModal.style.display = 'none');
-    cancelEdit.addEventListener('click', () => editNotificationModal.style.display = 'none');
-    window.addEventListener('click', (e) => { if (e.target === editNotificationModal) editNotificationModal.style.display = 'none'; });
-
-    editForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        const id = document.getElementById('notif_id').value;
-        const message = document.getElementById('notif_message').value;
-
-        fetch('admin_dashboard.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: `edit_notification=1&nid=${id}&nmessage=${encodeURIComponent(message)}`
-        })
-        .then(res => res.text())
-        .then(data => {
-            alert(data);
-            editNotificationModal.style.display = 'none';
-            location.reload(); // Refresh to update the table
-        })
-        .catch(err => alert('Error updating notification'));
-    });
+    if (closeNotifModal) closeNotifModal.addEventListener('click', () => editNotificationModal.style.display = 'none');
+    if (cancelEdit) cancelEdit.addEventListener('click', () => editNotificationModal.style.display = 'none');
 
     // Sales charts
     const salesLabels = <?php echo $salesLabelsJson; ?>;
@@ -894,60 +1017,58 @@ body.dark th{ background: linear-gradient(90deg,#0b2b5b,#08306d) }
 
     const salesCtx = document.getElementById('salesChart').getContext('2d');
     const salesChart = new Chart(salesCtx, {
-        type: 'line', data: { labels: salesLabels, datasets: [{ label: 'Revenue (UGX)', data: salesData, borderColor: '#0b63ff', backgroundColor: 'rgba(11,99,255,0.08)', tension: 0.25, fill: true, pointRadius: 3 }] },
-        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: v => Number(v).toLocaleString() } } } }
+        type: 'line', 
+        data: { 
+            labels: salesLabels, 
+            datasets: [{ 
+                label: 'Revenue (UGX)', 
+                data: salesData, 
+                borderColor: '#0b63ff', 
+                backgroundColor: 'rgba(11,99,255,0.08)', 
+                tension: 0.25, 
+                fill: true, 
+                pointRadius: 3 
+            }] 
+        },
+        options: { 
+            responsive: true, 
+            plugins: { legend: { display: false } }, 
+            scales: { y: { beginAtZero: true, ticks: { callback: v => Number(v).toLocaleString() } } } 
+        }
     });
+
     const salesCtx2 = document.getElementById('salesChart2') ? document.getElementById('salesChart2').getContext('2d') : null;
     if (salesCtx2) {
         new Chart(salesCtx2, {
-            type: 'bar', data: { labels: salesLabels, datasets: [{ label: 'Revenue (UGX)', data: salesData, backgroundColor: '#0b63ff' }] },
+            type: 'bar', 
+            data: { labels: salesLabels, datasets: [{ label: 'Revenue (UGX)', data: salesData, backgroundColor: '#0b63ff' }] },
             options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: v => Number(v).toLocaleString() } } } }
         });
     }
 
     const catCtx = document.getElementById('catChart').getContext('2d');
-    new Chart(catCtx, { type: 'doughnut', data: { labels: catLabels, datasets: [{ data: catData, backgroundColor: ['#60a5fa', '#93c5fd', '#fca5a5', '#fbbf24', '#34d399', '#c084fc'] }] }, options: { responsive: true, plugins: { legend: { position: 'bottom' } } } });
+    new Chart(catCtx, { 
+        type: 'doughnut', 
+        data: { 
+            labels: catLabels, 
+            datasets: [{ data: catData, backgroundColor: ['#60a5fa', '#93c5fd', '#fca5a5', '#fbbf24', '#34d399', '#c084fc'] }] 
+        }, 
+        options: { responsive: true, plugins: { legend: { position: 'bottom' } } } 
+    });
+
     const catCtx2 = document.getElementById('catChart2') ? document.getElementById('catChart2').getContext('2d') : null;
-    if (catCtx2) { new Chart(catCtx2, { type: 'doughnut', data: { labels: catLabels, datasets: [{ data: catData, backgroundColor: ['#60a5fa', '#93c5fd', '#fca5a5', '#fbbf24', '#34d399', '#c084fc'] }] }, options: { responsive: true, plugins: { legend: { position: 'bottom' } } } }); }
+    if (catCtx2) { 
+        new Chart(catCtx2, { 
+            type: 'doughnut', 
+            data: { labels: catLabels, datasets: [{ data: catData, backgroundColor: ['#60a5fa', '#93c5fd', '#fca5a5', '#fbbf24', '#34d399', '#c084fc'] }] }, 
+            options: { responsive: true, plugins: { legend: { position: 'bottom' } } } 
+        }); 
+    }
 </script>
-
-<?php
-// Lightweight JSON endpoint for product fetch (used by openEditProduct)
-if (isset($_GET['fetch_product'])) {
-    $pid = intval($_GET['fetch_product']);
-    header('Content-Type: application/json');
-    if ($pid <= 0) {
-        echo json_encode(['error'=>'Invalid product id']);
-        exit;
-    }
-    $stmt = $conn->prepare("SELECT id, name, price, stock, category, caption, image_path FROM products WHERE id = ?");
-    $stmt->bind_param("i",$pid);
-    $stmt->execute();
-    $res = $stmt->get_result();
-    if ($res && ($row = $res->fetch_assoc())) {
-        // return fields
-        echo json_encode([
-            'id' => (int)$row['id'],
-            'name' => $row['name'],
-            'price' => $row['price'],
-            'stock' => (int)$row['stock'],
-            'category' => $row['category'],
-            'caption' => $row['caption'],
-            'image_path' => $row['image_path']
-        ]);
-    } else {
-        echo json_encode(['error'=>'Product not found']);
-    }
-    $stmt->close();
-    $conn->close();
-    exit;
-}
-?>
-
-</body>
-</html>
 
 <?php
 // close DB connection
 $conn->close();
 ?>
+</body>
+</html>
