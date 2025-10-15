@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Oct 13, 2025 at 02:45 PM
+-- Generation Time: Oct 14, 2025 at 06:21 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -42,8 +42,8 @@ CREATE TABLE `cart` (
 INSERT INTO `cart` (`id`, `user_id`, `product_id`, `session_id`, `quantity`) VALUES
 (42, 1, 44, NULL, 1),
 (45, 1, 40, NULL, 1),
-(46, 1, 39, NULL, 7),
-(49, 1, 38, NULL, 1);
+(50, 1, 37, NULL, 1),
+(51, 1, 31, NULL, 1);
 
 -- --------------------------------------------------------
 
@@ -184,7 +184,9 @@ INSERT INTO `pending_deliveries` (`id`, `user_id`, `username`, `phone`, `payment
 (22, 1, 'Tendo', '0755087665', 'Pay on Delivery', NULL, 'Completed', '2025-10-05 10:37:51', 43, 'bugema', NULL, NULL, ''),
 (23, 1, 'Tendo', '0755097665', 'Mobile Money', 15000.00, 'Pending', '2025-10-08 16:05:32', 44, 'Room 19', NULL, NULL, 'Airtel'),
 (24, 1, 'Tendo', '0755087665', 'Mobile Money', 120000.00, 'Pending', '2025-10-13 12:36:54', 47, 'hostel A', NULL, NULL, 'Airtel'),
-(25, 1, 'Tendo', '0755087665', 'Pay on Delivery', NULL, 'Pending', '2025-10-13 12:37:50', 48, 'hostel A', NULL, NULL, '');
+(25, 1, 'Tendo', '0755087665', 'Pay on Delivery', NULL, 'Pending', '2025-10-13 12:37:50', 48, 'hostel A', NULL, NULL, ''),
+(26, 1, 'Tendo', '0765777269', 'Mobile Money', 15000.00, 'Pending', '2025-10-14 13:44:38', 49, 'Room 19', NULL, NULL, 'MTN'),
+(27, 1, 'Tendo', '0765777269', 'Pay on Delivery', NULL, 'Pending', '2025-10-14 13:46:04', 46, 'Room 19', NULL, NULL, '');
 
 -- --------------------------------------------------------
 
@@ -234,7 +236,9 @@ INSERT INTO `products` (`id`, `name`, `price`, `image_path`, `caption`, `categor
 (50, 'wall clock 1', 80000.00, 'images/1757426309_isidro-lam--4sTc8gIh_U-unsplash.jpg', 'rooooooooooooooooooooooooo', 'Wall Clocks', 10),
 (51, 'wall clock 2', 85000.00, 'images/1757426343_1757426309_isidro-lam--4sTc8gIh_U-unsplash.jpg', 'wooooooooooooooooooo', 'Wall Clocks', 10),
 (52, 'Wall Clock 7', 200000.00, 'images/1758721235_karl-callwood-KQONyIFXNZU-unsplash.jpg', 'goooooooooooooooooooooooooooooooooooooooooooo', 'Wall Clocks', 10),
-(53, 'text book 7', 7000.00, 'images/1759934374_isidro-lam--4sTc8gIh_U-unsplash.jpg', 'the best boot', 'Textbooks', 0);
+(53, 'text book 7', 7000.00, 'images/1759934374_isidro-lam--4sTc8gIh_U-unsplash.jpg', 'the best boot', 'Textbooks', 0),
+(54, 'Introduction to E-commerce', 234567.00, 'images/1760449943_1757425682_designecologist-gh1IgGFnhSk-unsplash.jpg', '190 pages.\\\\\\\\r\\\\\\\\nIt is good for a student doing E-commerce and E-business', 'Textbooks', 3),
+(55, 'Introduction to UI design ', 20000.00, 'images/1760452004_1757425559_notebook_A4.jpeg', '190 pages. The book is good for UI designers.', 'Textbooks', 3);
 
 -- --------------------------------------------------------
 
@@ -248,17 +252,23 @@ CREATE TABLE `users` (
   `password` varchar(255) NOT NULL,
   `role` enum('admin','student','lecturer') NOT NULL DEFAULT 'student',
   `email` varchar(100) DEFAULT NULL,
-  `profile_picture` varchar(255) DEFAULT NULL
+  `profile_picture` varchar(255) DEFAULT NULL,
+  `reset_token` varchar(255) DEFAULT NULL,
+  `reset_expires` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `users`
 --
 
-INSERT INTO `users` (`id`, `username`, `password`, `role`, `email`, `profile_picture`) VALUES
-(1, 'Tendo', '$2y$10$.J8ZXCZ5.GXiG9fWrBjC8u0eBSKBeXIrHWLZ5/4/umDfPXO8Oy7Xy', 'student', NULL, 'uploads/68d4f25852ff7.jpg'),
-(2, 'Ntendo', '$2y$10$GbXPRbSAW3aWl08OJNAPDOtXr.IgJHMkc1bdPgCXMqgrSLtGi9iGG', 'admin', NULL, NULL),
-(3, 'jackline', '$2y$10$ae06eA/cGPqBYjHbZGMbIeHdZFd2gjkT8F2iBeuNq8Koo96l5DE7C', 'student', NULL, NULL);
+INSERT INTO `users` (`id`, `username`, `password`, `role`, `email`, `profile_picture`, `reset_token`, `reset_expires`) VALUES
+(1, 'Tendo', '$2y$10$.J8ZXCZ5.GXiG9fWrBjC8u0eBSKBeXIrHWLZ5/4/umDfPXO8Oy7Xy', 'student', 'ntendo4343@gmail.com', 'uploads/68d4f25852ff7.jpg', '18ae5dc6acbe6fcd7c64c4c3e232b8f86052ea2d9af2e4edbca7edabd0e79ebc63508c4d207a5a09330b56e4013a0cd79716', '2025-10-14 18:27:29'),
+(2, 'Ntendo', '$2y$10$GbXPRbSAW3aWl08OJNAPDOtXr.IgJHMkc1bdPgCXMqgrSLtGi9iGG', 'admin', NULL, NULL, NULL, NULL),
+(3, 'jackline', '$2y$10$ae06eA/cGPqBYjHbZGMbIeHdZFd2gjkT8F2iBeuNq8Koo96l5DE7C', 'student', NULL, NULL, NULL, NULL),
+(4, 'Tendo Jackline', '$2y$10$gXvRCoAko64VPlmqBGAfZOyuVUWxtdVLD9/XSTLplcG7qMP3oBKua', 'lecturer', 'ntendo2018@gmail.com', NULL, NULL, NULL),
+(5, 'Paul', '$2y$10$3IaJOA9d7v2/iFGqpZyO6.nLmtzxmaaiBoKDpeFLfEzyW5fCgKWza', 'admin', 'tendojackline79@gmail.com', NULL, NULL, NULL),
+(6, 'morret123', '$2y$10$z2T80pvv1bLam.CV8mnwF.JYSMMnLEzt7Rk9sCluuO0DePR9rzr9i', 'lecturer', 'joann@gmail.com', NULL, NULL, NULL),
+(7, 'agaba', '$2y$10$O8YD7dXLiFYg8Xvgd9zd7.U1TtEqav9kfwMRVDH5HkgOIKYZlXLB6', 'student', 'davidk@gmail.com', NULL, NULL, NULL);
 
 --
 -- Indexes for dumped tables
@@ -329,7 +339,7 @@ ALTER TABLE `users`
 -- AUTO_INCREMENT for table `cart`
 --
 ALTER TABLE `cart`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=50;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=52;
 
 --
 -- AUTO_INCREMENT for table `favorites`
@@ -359,19 +369,19 @@ ALTER TABLE `orders`
 -- AUTO_INCREMENT for table `pending_deliveries`
 --
 ALTER TABLE `pending_deliveries`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=26;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=28;
 
 --
 -- AUTO_INCREMENT for table `products`
 --
 ALTER TABLE `products`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=54;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=56;
 
 --
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
 
 --
 -- Constraints for dumped tables

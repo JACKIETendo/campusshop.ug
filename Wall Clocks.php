@@ -1298,6 +1298,7 @@ $user_email = '';
 
             .product-card img {
                 height: 110px;
+                width: 147px;
             }
 
             .product-card h4 {
