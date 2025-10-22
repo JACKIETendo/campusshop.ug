@@ -189,6 +189,7 @@ $user_email = '';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cart - Bugema CampusShop</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -213,7 +214,7 @@ $user_email = '';
             line-height: 1.6;
             color: var(--dark-gray);
             background: var(--light-gray);
-            padding-bottom: 60px;
+            padding-bottom: 0;
         }
 
         .container {
@@ -429,6 +430,9 @@ $user_email = '';
             text-decoration: none;
             font-weight: 500;
             transition: background 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 5px;
         }
 
         .header-btn:hover {
@@ -452,6 +456,7 @@ $user_email = '';
 
         .cart-btn, .favorites-btn {
             position: relative;
+            font-size: 20px;
         }
 
         .cart-count, .favorites-count {
@@ -468,6 +473,43 @@ $user_email = '';
             align-items: center;
             justify-content: center;
             font-weight: 600;
+        }
+
+        /* SCROLL TO TOP BUTTON - ADDED */
+        .scroll-to-top {
+            position: fixed;
+            bottom: 30px;
+            left: 30px;
+            width: 50px;
+            height: 50px;
+            background: var(--primary-green);
+            color: var(--white);
+            border: none;
+            border-radius: 50%;
+            font-size: 1.2rem;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(9, 27, 190, 0.3);
+            transition: all 0.3s ease;
+            z-index: 1001;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(20px);
+        }
+
+        .scroll-to-top.show {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .scroll-to-top:hover {
+            background: var(--secondary-green);
+            transform: translateY(-2px) scale(1.1);
+            box-shadow: 0 6px 20px rgba(69, 145, 231, 0.4);
+        }
+
+        .scroll-to-top:active {
+            transform: translateY(0) scale(0.95);
         }
 
         .floating-buttons {
@@ -489,7 +531,7 @@ $user_email = '';
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 2rem;
+            font-size: 1.5rem;
             border: none;
             cursor: pointer;
             transition: background 0.3s ease, transform 0.2s ease;
@@ -1087,6 +1129,17 @@ $user_email = '';
             color: var(--text-gray);
         }
 
+        /* Responsive adjustments for scroll-to-top */
+        @media (max-width: 900px) {
+            .scroll-to-top {
+                bottom: 80px;
+                left: 20px;
+                width: 45px;
+                height: 45px;
+                font-size: 1.1rem;
+            }
+        }
+
         @media (max-width: 768px) {
             .container {
                 max-width: 90%;
@@ -1324,6 +1377,11 @@ $user_email = '';
     </style>
 </head>
 <body>
+    <!-- SCROLL TO TOP BUTTON - ADDED -->
+    <button class="scroll-to-top" id="scrollToTop" title="Back to Top">
+        <i class="fas fa-arrow-up"></i>
+    </button>
+
     <header>
         <div class="container">
             <div class="header-top">
@@ -1334,29 +1392,29 @@ $user_email = '';
                 <button class="menu-icon">☰</button>
                 <div class="search-bar">
                     <input type="text" class="search-input" placeholder="Search for Textbooks, Branded Jumpers, Pens...">
-                    <button class="search-btn">🔍</button>
+                    <button class="search-btn"><i class="fas fa-search"></i></button>
                     <div class="search-results"></div>
                 </div>
                 <div class="header-actions">
                     <?php if (isset($_SESSION['username'])): ?>
                         <span class="username"><a href="profile.php">Hi, <?php echo htmlspecialchars($_SESSION['username']); ?></a></span>
+                        <a href="logout.php" class="header-btn"><i class="fas fa-sign-out-alt"></i></a>
                         <a href="favorites.php" class="header-btn favorites-btn">
-                            ❤️ Favorites
+                            <i class="fas fa-heart"></i>
                             <span class="favorites-count"><?php echo $favorites_count; ?></span>
                         </a>
                         <a href="cart.php" class="header-btn cart-btn active">
-                            🛒 Cart
+                            <i class="fas fa-shopping-cart"></i>
                             <span class="cart-count"><?php echo $cart_count; ?></span>
                         </a>
-                        <a href="logout.php" class="header-btn">Logout</a>
                     <?php else: ?>
-                        <a href="login.php" class="header-btn">Login</a>
+                        <a href="login.php" class="header-btn"><i class="fas fa-sign-in-alt"></i></a>
                         <a href="favorites.php" class="header-btn favorites-btn">
-                            ❤️ Favorites
+                            <i class="fas fa-heart"></i>
                             <span class="favorites-count"><?php echo $favorites_count; ?></span>
                         </a>
                         <a href="cart.php" class="header-btn cart-btn active">
-                            🛒 Cart
+                            <i class="fas fa-shopping-cart"></i>
                             <span class="cart-count"><?php echo array_sum($_SESSION['guest_cart']); ?></span>
                         </a>
                     <?php endif; ?>
@@ -1382,7 +1440,7 @@ $user_email = '';
                 <?php endif; ?>
                 <div class="mobile-search-bar">
                     <input type="text" class="search-input" placeholder="Search for Textbooks, Branded Jumpers, Pens...">
-                    <button class="search-btn">🔍</button>
+                    <button class="search-btn"><i class="fas fa-search"></i></button>
                     <div class="search-results"></div>
                 </div>
                 <div class="mobile-nav">
@@ -1408,25 +1466,25 @@ $user_email = '';
     <div class="bottom-bar">
         <div class="bottom-bar-actions">
             <?php if (isset($_SESSION['username'])): ?>
-                <a href="profile.php" data-tooltip="Profile">👤</a>
-                <a href="favorites.php" data-tooltip="Favorites">❤️ <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
-                <a href="cart.php" data-tooltip="Cart" class="active">🛒 <span class="cart-count"><?php echo $cart_count; ?></span></a>
-                <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback">💬</button>
-                <a href="https://wa.me/+256755087665" target="_blank" data-tooltip="Help">📞</a>
+                <a href="profile.php" data-tooltip="Profile"><i class="fas fa-user"></i></a>
+                <a href="favorites.php" data-tooltip="Favorites"><i class="fas fa-heart"></i> <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
+                <a href="cart.php" data-tooltip="Cart" class="active"><i class="fas fa-shopping-cart"></i> <span class="cart-count"><?php echo $cart_count; ?></span></a>
+                <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback"><i class="fas fa-comments"></i></button>
+                <a href="https://wa.me/+256755087665" target="_blank" data-tooltip="Help"><i class="fab fa-whatsapp"></i></a>
             <?php else: ?>
-                <a href="profile.php" data-tooltip="Profile">👤</a>
-                <a href="favorites.php" data-tooltip="Favorites">❤️ <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
-                <a href="cart.php" data-tooltip="Cart" class="active">🛒 <span class="cart-count"><?php echo array_sum($_SESSION['guest_cart']); ?></span></a>
-                <a href="login.php" data-tooltip="Login">🔑</a>
-                <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback">💬</button>
-                <a href="https://wa.me/+256755087665" target="_blank" data-tooltip="Help">📞</a>
+                <a href="profile.php" data-tooltip="Profile"><i class="fas fa-user"></i></a>
+                <a href="favorites.php" data-tooltip="Favorites"><i class="fas fa-heart"></i> <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
+                <a href="cart.php" data-tooltip="Cart" class="active"><i class="fas fa-shopping-cart"></i> <span class="cart-count"><?php echo array_sum($_SESSION['guest_cart']); ?></span></a>
+                <a href="login.php" data-tooltip="Login"><i class="fas fa-sign-in-alt"></i></a>
+                <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback"><i class="fas fa-comments"></i></button>
+                <a href="https://wa.me/+256755087665" target="_blank" data-tooltip="Help"><i class="fab fa-whatsapp"></i></a>
             <?php endif; ?>
         </div>
     </div>
 
     <div class="floating-buttons">
-        <button class="floating-btn feedback-btn" id="floating-feedback-btn" data-tooltip="Feedback">💬</button>
-        <a href="https://wa.me/+256755087665" class="floating-btn" target="_blank" data-tooltip="Help">📞</a>
+        <button class="floating-btn feedback-btn" id="floating-feedback-btn" data-tooltip="Feedback"><i class="fas fa-comments"></i></button>
+        <a href="https://wa.me/+256755087665" class="floating-btn" target="_blank" data-tooltip="Help"><i class="fab fa-whatsapp"></i></a>
     </div>
 
     <div class="modal" id="feedback-modal">
@@ -1605,10 +1663,10 @@ $user_email = '';
                 <div class="footer-section">
                     <h3>Connect</h3>
                     <ul>
-                        <li><a href="#">📧 campusshop@bugemauniv.ac.ug</a></li>
-                        <li><a href="https://wa.me/+256755087665" target="_blank">📞 +256 7550 87665</a></li>
-                        <li><a href="#">📍 Bugema University</a></li>
-                        <li><a href="#">🕒 Mon-Fri 8AM-6PM</a></li>
+                        <li><a href="#"><i class="fas fa-envelope"></i> campusshop@bugemauniv.ac.ug</a></li>
+                        <li><a href="https://wa.me/+256755087665" target="_blank"><i class="fas fa-phone"></i> +256 7550 87665</a></li>
+                        <li><a href="#"><i class="fas fa-map-marker-alt"></i> Bugema University</a></li>
+                        <li><a href="#"><i class="fas fa-clock"></i> Mon-Fri 8AM-6PM</a></li>
                     </ul>
                 </div>
             </div>
@@ -1620,6 +1678,20 @@ $user_email = '';
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // SCROLL TO TOP FUNCTIONALITY - ADDED
+            const scrollToTopBtn = document.getElementById('scrollToTop');
+            window.addEventListener('scroll', function() {
+                if (window.pageYOffset > 300) {
+                    scrollToTopBtn.classList.add('show');
+                } else {
+                    scrollToTopBtn.classList.remove('show');
+                }
+            });
+            scrollToTopBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+
             const observerOptions = {
                 threshold: 0.1,
                 rootMargin: '0px 0px -50px 0px'
@@ -1826,7 +1898,7 @@ $user_email = '';
                 e.preventDefault();
                 const formData = new FormData(feedbackForm);
                 formData.append('submit_feedback', 'true');
-                fetch('cart.php', {
+                fetch('Bottles.php', {
                     method: 'POST',
                     body: formData
                 })

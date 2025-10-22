@@ -159,6 +159,20 @@ if (isset($_SESSION['user_id'])) {
     $favorites_count = count($_SESSION['guest_favorites']);
 }
 
+// Get cart count
+$cart_count = 0;
+if (isset($_SESSION['user_id'])) {
+    $user_id = $_SESSION['user_id'];
+    $stmt = $conn->prepare("SELECT SUM(quantity) as count FROM cart WHERE user_id = ?");
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $cart_count = $result->fetch_assoc()['count'] ?? 0;
+    $stmt->close();
+} else {
+    $cart_count = array_sum($_SESSION['guest_cart']);
+}
+
 $user_email = '';
 ?>
 
@@ -168,7 +182,7 @@ $user_email = '';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bugema CampusShop - Textbooks</title>
-    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -193,7 +207,7 @@ $user_email = '';
             line-height: 1.6;
             color: var(--dark-gray);
             background: var(--light-gray);
-            padding-bottom: 60px;
+            padding-bottom: 0;
         }
 
         .container {
@@ -409,6 +423,9 @@ $user_email = '';
             text-decoration: none;
             font-weight: 500;
             transition: background 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 5px;
         }
 
         .header-btn:hover {
@@ -432,6 +449,7 @@ $user_email = '';
 
         .cart-btn, .favorites-btn {
             position: relative;
+            font-size: 20px;
         }
 
         .cart-count, .favorites-count {
@@ -448,6 +466,43 @@ $user_email = '';
             align-items: center;
             justify-content: center;
             font-weight: 600;
+        }
+
+        /* SCROLL TO TOP BUTTON - ADDED */
+        .scroll-to-top {
+            position: fixed;
+            bottom: 30px;
+            left: 30px;
+            width: 50px;
+            height: 50px;
+            background: var(--primary-green);
+            color: var(--white);
+            border: none;
+            border-radius: 50%;
+            font-size: 1.2rem;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(9, 27, 190, 0.3);
+            transition: all 0.3s ease;
+            z-index: 1001;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(20px);
+        }
+
+        .scroll-to-top.show {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .scroll-to-top:hover {
+            background: var(--secondary-green);
+            transform: translateY(-2px) scale(1.1);
+            box-shadow: 0 6px 20px rgba(69, 145, 231, 0.4);
+        }
+
+        .scroll-to-top:active {
+            transform: translateY(0) scale(0.95);
         }
 
         .floating-buttons {
@@ -470,7 +525,7 @@ $user_email = '';
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 2rem;
+            font-size: 1.5rem;
             border: none;
             cursor: pointer;
             transition: background 0.3s ease, transform 0.2s ease;
@@ -509,7 +564,7 @@ $user_email = '';
         .favorite-btn {
             background: none;
             border: none;
-            color: var(--accent-yellow);
+            color: red;
             font-size: 1.2rem;
             cursor: pointer;
             margin-top: 0.5rem;
@@ -843,7 +898,7 @@ $user_email = '';
             padding: 8px 15px;
             border-radius: 8px;
             cursor: pointer;
-            font-size: 0.9rem;
+            font-size: 1.1rem;
             margin-top: 0.5rem;
             text-decoration: none;
             display: inline-block;
@@ -1125,6 +1180,16 @@ $user_email = '';
         }
 
         /* Responsive adjustments */
+        @media (max-width: 900px) {
+            .scroll-to-top {
+                bottom: 80px;
+                left: 20px;
+                width: 45px;
+                height: 45px;
+                font-size: 1.1rem;
+            }
+        }
+
         @media (max-width: 768px) {
             .container {
                 max-width: 90%;
@@ -1225,11 +1290,6 @@ $user_email = '';
                 width: 45px;
                 height: 45px;
                 font-size: 1.2rem;
-            }
-
-            .share-btn img {
-                width: 20px;
-                height: 20px;
             }
 
             .chatbot-modal-content {
@@ -1357,11 +1417,6 @@ $user_email = '';
                 height: 40px;
                 font-size: 1.1rem;
             }
-
-            .share-btn img {
-                width: 18px;
-                height: 18px;
-            }
         }
 
         .fade-in {
@@ -1402,40 +1457,30 @@ $user_email = '';
                 <button class="menu-icon">☰</button>
                 <div class="search-bar">
                     <input type="text" class="search-input" placeholder="Search for Textbooks, Branded Jumpers, Pens...">
-                    <button class="search-btn">🔍</button>
+                    <button class="search-btn"><i class="fas fa-search"></i></button>
                     <div class="search-results"></div>
                 </div>
                 <div class="header-actions">
                     <?php if (isset($_SESSION['username'])): ?>
                         <span class="username"><a href="profile.php">Hi, <?php echo htmlspecialchars($_SESSION['username']); ?></a></span>
-                        <a href="logout.php" class="header-btn">Logout</a>
+                        <a href="logout.php" class="header-btn"><i class="fas fa-sign-out-alt"></i></a>
                         <a href="favorites.php" class="header-btn favorites-btn">
-                            ❤️ Favorites
+                            <i class="fas fa-heart"></i>
                             <span class="favorites-count"><?php echo $favorites_count; ?></span>
                         </a>
                         <a href="cart.php" class="header-btn cart-btn">
-                            🛒 Cart
-                            <span class="cart-count">
-                                <?php
-                                $user_id = $_SESSION['user_id'] ?? 0;
-                                $stmt = $conn->prepare("SELECT SUM(quantity) as count FROM cart WHERE user_id = ?");
-                                $stmt->bind_param("i", $user_id);
-                                $stmt->execute();
-                                $result = $stmt->get_result();
-                                echo $result->fetch_assoc()['count'] ?? array_sum($_SESSION['guest_cart']);
-                                $stmt->close();
-                                ?>
-                            </span>
+                            <i class="fas fa-shopping-cart"></i>
+                            <span class="cart-count"><?php echo $cart_count; ?></span>
                         </a>
                     <?php else: ?>
-                        <a href="login.php" class="header-btn">Login</a>
+                        <a href="login.php" class="header-btn"><i class="fas fa-sign-in-alt"></i></a>
                         <a href="favorites.php" class="header-btn favorites-btn">
-                            ❤️ Favorites
+                            <i class="fas fa-heart"></i>
                             <span class="favorites-count"><?php echo $favorites_count; ?></span>
                         </a>
                         <a href="cart.php" class="header-btn cart-btn">
-                            🛒 Cart
-                            <span class="cart-count"><?php echo array_sum($_SESSION['guest_cart']); ?></span>
+                            <i class="fas fa-shopping-cart"></i>
+                            <span class="cart-count"><?php echo $cart_count; ?></span>
                         </a>
                     <?php endif; ?>
                 </div>
@@ -1460,7 +1505,7 @@ $user_email = '';
                 <?php endif; ?>
                 <div class="mobile-search-bar">
                     <input type="text" class="search-input" placeholder="Search for Textbooks, Branded Jumpers, Pens...">
-                    <button class="search-btn">🔍</button>
+                    <button class="search-btn"><i class="fas fa-search"></i></button>
                     <div class="search-results"></div>
                 </div>
                 <div class="mobile-nav">
@@ -1482,35 +1527,30 @@ $user_email = '';
     <div class="bottom-bar">
         <div class="bottom-bar-actions">
             <?php if (isset($_SESSION['username'])): ?>
-                <a href="profile.php" data-tooltip="Profile">👤</a>
-                <a href="favorites.php" data-tooltip="Favorites">❤️ <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
-                <a href="cart.php" data-tooltip="Cart">🛒 <span class="cart-count">
-                    <?php
-                    $user_id = $_SESSION['user_id'] ?? 0;
-                    $stmt = $conn->prepare("SELECT SUM(quantity) as count FROM cart WHERE user_id = ?");
-                    $stmt->bind_param("i", $user_id);
-                    $stmt->execute();
-                    $result = $stmt->get_result();
-                    echo $result->fetch_assoc()['count'] ?? array_sum($_SESSION['guest_cart']);
-                    $stmt->close();
-                    ?>
-                </span></a>
-                <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback">💬</button>
-                <a href="https://wa.me/+256755087665" target="_blank" data-tooltip="Help">📞</a>
+                <a href="profile.php" data-tooltip="Profile"><i class="fas fa-user"></i></a>
+                <a href="favorites.php" data-tooltip="Favorites"><i class="fas fa-heart"></i> <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
+                <a href="cart.php" data-tooltip="Cart"><i class="fas fa-shopping-cart"></i> <span class="cart-count"><?php echo $cart_count; ?></span></a>
+                <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback"><i class="fas fa-comments"></i></button>
+                <a href="https://wa.me/+256755087665" target="_blank" data-tooltip="Help"><i class="fab fa-whatsapp"></i></a>
             <?php else: ?>
-                <a href="login.php" data-tooltip="Login">🔑</a>
-                <a href="favorites.php" data-tooltip="Favorites">❤️ <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
-                <a href="cart.php" data-tooltip="Cart">🛒 <span class="cart-count"><?php echo array_sum($_SESSION['guest_cart']); ?></span></a>
-                <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback">💬</button>
-                <a href="https://wa.me/+256755087665" target="_blank" data-tooltip="Help">📞</a>
+                <a href="login.php" data-tooltip="Login"><i class="fas fa-sign-in-alt"></i></a>
+                <a href="favorites.php" data-tooltip="Favorites"><i class="fas fa-heart"></i> <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
+                <a href="cart.php" data-tooltip="Cart"><i class="fas fa-shopping-cart"></i> <span class="cart-count"><?php echo $cart_count; ?></span></a>
+                <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback"><i class="fas fa-comments"></i></button>
+                <a href="https://wa.me/+256755087665" target="_blank" data-tooltip="Help"><i class="fab fa-whatsapp"></i></a>
             <?php endif; ?>
         </div>
     </div>
 
+    <!-- SCROLL TO TOP BUTTON - ADDED -->
+    <button class="scroll-to-top" id="scrollToTop" title="Back to Top">
+        <i class="fas fa-arrow-up"></i>
+    </button>
+
     <div class="floating-buttons">
-        <button class="floating-btn feedback-btn" id="floating-feedback-btn" data-tooltip="Feedback">💬</button>
-        <button class="floating-btn chatbot-btn" id="floating-chatbot-btn" data-tooltip="Chat with Us"><img src="images/chat.png" style="height: 40px; width:40px; border-radius:60px;" alt=""></button>
-        <a href="https://wa.me/+256755087665" class="floating-btn" target="_blank" data-tooltip="Help">📞</a>
+        <button class="floating-btn feedback-btn" id="floating-feedback-btn" data-tooltip="Feedback"><i class="fas fa-comments"></i></button>
+        <button class="floating-btn chatbot-btn" id="floating-chatbot-btn" data-tooltip="Chat with Us"><i class="fas fa-robot"></i></button>
+        <a href="https://wa.me/+256755087665" class="floating-btn" target="_blank" data-tooltip="Help"><i class="fab fa-whatsapp"></i></a>
     </div>
 
     <div class="modal" id="feedback-modal">
@@ -1565,17 +1605,17 @@ $user_email = '';
                         <div class="form-group">
                             <label for="modal-quantity" class="sr-only">Quantity</label>
                             <input type="number" name="quantity" id="modal-quantity" class="quantity-input" value="1" min="1" aria-label="Quantity">
-                            <button type="submit" name="add_to_cart" class="action-btn cart-btn" aria-label="Add to cart">🛒</button>
-                            <button type="submit" name="toggle_favorite" class="action-btn favorite-btn" id="modal-favorite-btn" aria-label="Toggle favorite">❤️</button>
+                            <button type="submit" name="add_to_cart" class="action-btn cart-btn" aria-label="Add to cart"><i class="fas fa-shopping-cart"></i></button>
+                            <button type="submit" name="toggle_favorite" class="action-btn favorite-btn" id="modal-favorite-btn" aria-label="Toggle favorite"><i class="fas fa-heart"></i></button>
                         </div>
                     </form>
                     <div class="share-section">
                         <h5>Share This Product</h5>
                         <div class="share-buttons">
-                            <a href="#" class="share-btn whatsapp" data-platform="WhatsApp" target="_blank" aria-label="Share on WhatsApp"><img src="images/whatsapp2.png" style="height: 25px; width:25px;" alt=""></a>
-                            <a href="#" class="share-btn facebook" data-platform="Facebook" target="_blank" aria-label="Share on Facebook"><img src="images/facebook.png" style="height: 25px; width:25px;" alt=""></a>
-                            <a href="#" class="share-btn x" data-platform="X" target="_blank" aria-label="Share on X"><img src="images/xicon.png" style="height: 25px; width:25px;" alt=""></a>
-                            <a href="#" class="share-btn telegram" data-platform="Telegram" target="_blank" aria-label="Share on Telegram"><img src="images/telegram.png" style="height: 25px; width:25px;" alt=""></a>
+                            <a href="#" class="share-btn whatsapp" data-platform="WhatsApp" target="_blank" aria-label="Share on WhatsApp"><i class="fab fa-whatsapp"></i></a>
+                            <a href="#" class="share-btn facebook" data-platform="Facebook" target="_blank" aria-label="Share on Facebook"><i class="fab fa-facebook"></i></a>
+                            <a href="#" class="share-btn x" data-platform="X" target="_blank" aria-label="Share on X"><i class="fab fa-x-twitter"></i></a>
+                            <a href="#" class="share-btn telegram" data-platform="Telegram" target="_blank" aria-label="Share on Telegram"><i class="fab fa-telegram"></i></a>
                         </div>
                     </div>
                 </div>
@@ -1623,8 +1663,8 @@ $user_email = '';
                             <form method="POST" action="textbooks.php">
                                 <input type="hidden" name="product_id" value="<?php echo $product_id; ?>">
                                 <input type="number" name="quantity" class="quantity-input" value="1" min="1">
-                                <button type="submit" name="add_to_cart">🛒</button>
-                                <button type="submit" name="toggle_favorite" class="favorite-btn <?php echo $is_favorited ? 'favorited' : ''; ?>">❤️</button>
+                                <button type="submit" name="add_to_cart"><i class="fas fa-shopping-cart"></i></button>
+                                <button type="submit" name="toggle_favorite" class="favorite-btn <?php echo $is_favorited ? 'favorited' : ''; ?>"><i class="fas fa-heart"></i></button>
                             </form>
                         </div>
                         <?php
@@ -1657,10 +1697,10 @@ $user_email = '';
                 <div class="footer-section">
                     <h3>Connect</h3>
                     <ul>
-                        <li><a href="#">📧 campusshop@bugemauniv.ac.ug</a></li>
-                        <li><a href="https://wa.me/+256755087665" target="_blank">📞 +256 7550 87665</a></li>
-                        <li><a href="#">📍 Bugema University</a></li>
-                        <li><a href="#">🕒 Mon-Fri 8AM-6PM</a></li>
+                        <li><a href="#"><i class="fas fa-envelope"></i> campusshop@bugemauniv.ac.ug</a></li>
+                        <li><a href="https://wa.me/+256755087665" target="_blank"><i class="fas fa-phone"></i> +256 7550 87665</a></li>
+                        <li><a href="#"><i class="fas fa-map-marker-alt"></i> Bugema University</a></li>
+                        <li><a href="#"><i class="fas fa-clock"></i> Mon-Fri 8AM-6PM</a></li>
                     </ul>
                 </div>
             </div>
@@ -1672,6 +1712,20 @@ $user_email = '';
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // SCROLL TO TOP FUNCTIONALITY - ADDED
+            const scrollToTopBtn = document.getElementById('scrollToTop');
+            window.addEventListener('scroll', function() {
+                if (window.pageYOffset > 300) {
+                    scrollToTopBtn.classList.add('show');
+                } else {
+                    scrollToTopBtn.classList.remove('show');
+                }
+            });
+            scrollToTopBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+
             const observerOptions = {
                 threshold: 0.1,
                 rootMargin: '0px 0px -50px 0px'
@@ -1814,7 +1868,6 @@ $user_email = '';
             const modalProductId = document.getElementById('modal-product-id');
             const modalFavoriteBtn = document.getElementById('modal-favorite-btn');
             const chatbotBtn = document.getElementById('floating-chatbot-btn');
-            const mobileChatbotBtn = document.getElementById('mobile-chatbot-btn');
             const chatbotModal = document.getElementById('chatbot-modal');
             const chatbotModalClose = document.getElementById('chatbot-modal-close');
             const chatbotForm = document.getElementById('chatbot-form');
@@ -1889,12 +1942,11 @@ $user_email = '';
             'discount': 'Bugema University students with a valid student ID can enjoy exclusive discounts. Verify your ID at checkout to apply them!',
             'products': 'We offer textbooks, branded jumpers, pens, wall clocks, notebooks, T-shirts, and bottles. Browse categories via the "Browse Categories" button!',
             'contact': 'You can reach us at campusshop@bugemauniv.ac.ug or via WhatsApp at +256 7550 87665. Want to call now?',
-            'help': 'I’m here to assist! Ask about delivery, discounts, products, or anything else.',
-            'default': 'Sorry, I didn’t understand that. Try asking about delivery, discounts, products, or contact info!'
+            'help': 'I\'m here to assist! Ask about delivery, discounts, products, or anything else.',
+            'default': 'Sorry, I didn\'t understand that. Try asking about delivery, discounts, products, or contact info!'
         };
 
         chatbotBtn.addEventListener('click', openChatbotModal);
-        if (mobileChatbotBtn) mobileChatbotBtn.addEventListener('click', openChatbotModal);
 
         chatbotModalClose.addEventListener('click', closeChatbotModal);
 
@@ -2028,7 +2080,7 @@ $user_email = '';
                 })
                 .then(response => {
                     if (!response.ok) {
-                        throw new Error('Network response was not ok: ' + response.statusText);
+                        throw new Error('Network response was not ok: ' . response.statusText);
                     }
                     return response.json();
                 })

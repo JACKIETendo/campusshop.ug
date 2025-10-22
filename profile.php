@@ -161,6 +161,7 @@ $stmt->close();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>User Profile - Bugema CampusShop</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -178,7 +179,7 @@ $stmt->close();
             --white: #ffffff;
             --error-red: #dc2626;
             --success-green: #1059b9ff;
-            --border-color: #d1d5db; /* Darkened for higher opacity */
+            --border-color: #d1d5db;
         }
 
         body {
@@ -186,7 +187,7 @@ $stmt->close();
             line-height: 1.6;
             color: var(--dark-gray);
             background: var(--white);
-            padding-bottom: 60px;
+            padding-bottom: 100px;
         }
 
         .container {
@@ -195,7 +196,6 @@ $stmt->close();
             padding: 0 15px;
         }
 
-        /* Unchanged Navigation Styles */
         header {
             background: var(--primary-green);
             color: var(--white);
@@ -393,11 +393,14 @@ $stmt->close();
         .header-btn {
             background: var(--accent-yellow);
             color: var(--dark-gray);
-            padding: 8px 15px;
+           padding: 8px 15px;
             border-radius: 8px;
             text-decoration: none;
             font-weight: 500;
             transition: background 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 5px;
         }
 
         .header-btn:hover {
@@ -420,9 +423,9 @@ $stmt->close();
             text-decoration: underline;
         }
 
-        .cart-btn,
-        .favorites-btn {
+        .cart-btn, .favorites-btn {
             position: relative;
+            font-size: 20px;
         }
 
         .cart-count,
@@ -473,288 +476,92 @@ $stmt->close();
             background: var(--primary-green);
         }
 
-        .profile-header {
-            text-align: center;
-            margin-bottom: 2rem;
-            padding-bottom: 1rem;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .profile-picture {
-            width: 180px;
-            height: 180px;
-            border-radius: 50%;
-            object-fit: cover;
-            margin: 0 auto 1rem;
-            background: var(--white);
-        }
-
-        .profile-header h1 {
-            font-size: 2.2rem;
-            font-weight: 600;
-            color: var(--dark-gray);
-        }
-
-        .profile-content {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 2rem;
-        }
-
-        .profile-left,
-        .profile-right {
-            flex: 1;
-            min-width: 300px;
-        }
-
-        .profile-section {
-            margin-bottom: 2rem;
-            padding-bottom: 1.5rem;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .profile-section:last-child {
-            border-bottom: none;
-        }
-
-        .profile-section h2 {
-            font-size: 1.4rem;
-            font-weight: 600;
-            color: var(--primary-green);
-            margin-bottom: 1rem;
-        }
-
-        .profile-form {
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-            max-width: 400px;
-        }
-
-        .profile-form label {
-            font-size: 0.9rem;
-            font-weight: 500;
-            color: var(--dark-gray);
-        }
-
-        .profile-form input[type="text"],
-        .profile-form input[type="file"] {
-            padding: 10px;
-            border: 1px solid var(--text-gray);
-            border-radius: 8px;
-            font-size: 0.9rem;
-        }
-
-        .profile-form button {
-            background: var(--accent-yellow);
-            color: var(--dark-gray);
-            padding: 10px;
-            border: none;
-            border-radius: 8px;
-            font-size: 0.9rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.3s ease, color 0.3s ease;
-        }
-
-        .profile-form button:hover {
-            background: var(--secondary-green);
-            color: var(--white);
-        }
-
-        .message {
-            font-size: 0.9rem;
-            padding: 10px;
-            border-radius: 8px;
-            margin-bottom: 1rem;
-            text-align: center;
-        }
-
-        .message.success {
-            background: var(--success-green);
-            color: var(--white);
-        }
-
-        .message.error {
-            background: var(--error-red);
-            color: var(--white);
-        }
-
-        .notifications-list,
-        .orders-list {
-            list-style: none;
-        }
-
-        .notification-item,
-        .order-item {
-            padding: 0.75rem 0;
-            border-bottom: 1px solid var(--border-color);
-            font-size: 0.9rem;
-        }
-
-        .notification-item:last-child,
-        .order-item:last-child {
-            border-bottom: none;
-        }
-
-        .notification-item p,
-        .order-item p {
-            margin: 0.5rem 0;
-            color: var(--text-gray);
-        }
-
-        .order-item .status {
-            font-weight: 500;
-            color: var(--primary-green);
-        }
-
-        .payment-options {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 1rem;
-        }
-
-        .payment-option {
-            text-align: center;
-        }
-
-        .payment-option img {
-            width: 50px;
-            height: auto;
-            margin-bottom: 0.5rem;
-        }
-
-        .payment-option p {
-            font-size: 0.9rem;
-            color: var(--dark-gray);
-        }
-
-        .help-center {
-            text-align: center;
-        }
-
-        .help-center p {
-            font-size: 0.9rem;
-            color: var(--text-gray);
-            margin-bottom: 0.5rem;
-        }
-
-        .help-center a {
-            color: var(--secondary-green);
-            text-decoration: none;
-            font-weight: 500;
-            font-size: 0.9rem;
-        }
-
-        .help-center a:hover {
-            text-decoration: underline;
-        }
-
-        .account-settings {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-
-        .account-settings a {
-            color: var(--secondary-green);
-            text-decoration: none;
-            font-size: 0.9rem;
-            font-weight: 500;
-        }
-
-        .account-settings a:hover {
-            text-decoration: underline;
-        }
-        /* Profile Container */
         .profile-container {
             display: flex;
             min-height: calc(100vh - 70px);
             gap: 20px;
         }
 
-        /* Left Side (Profile Panel) - Professional Styling */
-.profile-left {
-    width: 30%;
-    background-color: var(--white);
-    padding: 30px;
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-    max-height: calc(100vh - 150px); /* Adjusted for navbar (70px) and footer (80px) */
-    margin-left: 30px;
-    margin-bottom: 30px;
-    overflow-y: auto;
-    position: fixed;
-    margin-top: 30px;
-}
+        .profile-left {
+            width: 30%;
+            background-color: var(--white);
+            padding: 30px;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            max-height: calc(100vh - 150px);
+            margin-left: 30px;
+            margin-bottom: 30px;
+            overflow-y: auto;
+            position: fixed;
+            margin-top: 30px;
+        }
 
-.profile-left img {
-    width: 150px;
-    height: 150px;
-    border-radius: 50%;
-    object-fit: cover;
-    margin: 0 auto 20px;
-    border: 4px solid var(--light-gray);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
+        .profile-left img {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            object-fit: cover;
+            margin: 0 auto 20px;
+            border: 4px solid var(--light-gray);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
 
-.profile-left h2 {
-    font-size: 1.8rem;
-    font-weight: 600;
-    text-align: center;
-    color: var(--primary-green);
-    margin-bottom: 25px;
-}
+        .profile-left h2 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            text-align: center;
+            color: var(--primary-green);
+            margin-bottom: 25px;
+        }
 
-.profile-left form {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-}
+        .profile-left form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
 
-.profile-left label {
-    font-size: 0.95rem;
-    font-weight: 500;
-    color: var(--dark-gray);
-    margin-bottom: 5px;
-}
+        .profile-left label {
+            font-size: 0.95rem;
+            font-weight: 500;
+            color: var(--dark-gray);
+            margin-bottom: 5px;
+        }
 
-.profile-left input[type="text"],
-.profile-left input[type="file"] {
-    padding: 12px;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    font-size: 0.95rem;
-    color: var(--dark-gray);
-    transition: border-color 0.3s ease;
-}
+        .profile-left input[type="text"],
+        .profile-left input[type="file"] {
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 0.95rem;
+            color: var(--dark-gray);
+            transition: border-color 0.3s ease;
+        }
 
-.profile-left input[type="text"]:focus,
-.profile-left input[type="file"]:focus {
-    border-color: var(--secondary-green);
-    outline: none;
-    box-shadow: 0 0 5px rgba(69, 145, 231, 0.3);
-}
+        .profile-left input[type="text"]:focus,
+        .profile-left input[type="file"]:focus {
+            border-color: var(--secondary-green);
+            outline: none;
+            box-shadow: 0 0 5px rgba(69, 145, 231, 0.3);
+        }
 
-.profile-left button {
-    padding: 12px;
-    background-color: var(--primary-green);
-    color: var(--white);
-    border: none;
-    border-radius: 8px;
-    font-size: 1rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background-color 0.3s ease, transform 0.2s ease;
-}
+        .profile-left button {
+            padding: 12px;
+            background-color: var(--primary-green);
+            color: var(--white);
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+        }
 
-.profile-left button:hover {
-    background-color: var(--secondary-green);
-    transform: translateY(-2px);
-}
+        .profile-left button:hover {
+            background-color: var(--secondary-green);
+            transform: translateY(-2px);
+        }
 
-        /* Right Side (Content Panel) - Professional Styling */
         .profile-right {
             flex: 1;
             margin-left: 32%;
@@ -783,7 +590,6 @@ $stmt->close();
             border-bottom: 2px solid var(--secondary-green);
         }
 
-        /* Notifications */
         .notification {
             padding: 15px 0;
             border-bottom: 1px solid var(--border-color);
@@ -805,7 +611,6 @@ $stmt->close();
             font-style: italic;
         }
 
-        /* Order History Table */
         table {
             width: 100%;
             border-collapse: collapse;
@@ -836,7 +641,6 @@ $stmt->close();
             background-color: var(--light-gray);
         }
 
-        /* Payment Options */
         .payment-options {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
@@ -861,12 +665,6 @@ $stmt->close();
             width: 60px;
             height: auto;
             margin-bottom: 10px;
-            filter: grayscale(0);
-            transition: filter 0.3s ease;
-        }
-
-        .payment-option:hover img {
-            filter: grayscale(0);
         }
 
         .payment-option p {
@@ -875,42 +673,85 @@ $stmt->close();
             font-weight: 500;
         }
 
-        /* Help Center */
+        /* HELP CENTER - UPDATED WITH RETURN POLICY */
         .help-center {
-            text-align: center;
-            padding: 20px 0;
+            text-align: left;
+        }
+
+        .help-center h4 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--primary-green);
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid var(--secondary-green);
+        }
+
+        .return-policy {
+            background: var(--light-gray);
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 4px solid var(--primary-green);
+        }
+
+        .return-policy h5 {
+            color: var(--primary-green);
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .return-policy ul {
+            list-style: disc;
+            padding-left: 20px;
+            margin: 10px 0;
+        }
+
+        .return-policy li {
+            font-size: 0.9rem;
+            color: var(--text-gray);
+            margin-bottom: 5px;
+            line-height: 1.5;
+        }
+
+        .help-center-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
         }
 
         .help-center p {
-            font-size: 1rem;
+            font-size: 0.95rem;
             color: var(--text-gray);
             margin-bottom: 15px;
+            line-height: 1.6;
         }
 
-        .help-center .chatbot-btn {
-            padding: 12px 25px;
-            margin-bottom: 10px;
-            font-size: 1rem;
-        }
-
-        .help-center a {
-            color: var(--secondary-green);
-            text-decoration: none;
-            font-weight: 500;
-            font-size: 1rem;
-            display: inline-block;
-            padding: 8px 15px;
-            border: 1px solid var(--secondary-green);
+        .chatbot-btn {
+            background: var(--light-gray);
+            color: var(--primary-green);
+            padding: 12px 20px;
+            border: none;
             border-radius: 8px;
-            transition: background-color 0.3s ease, color 0.3s ease;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            text-decoration: none;
         }
 
-        .help-center a:hover {
-            background-color: var(--secondary-green);
+        .chatbot-btn:hover {
+            background: var(--secondary-green);
             color: var(--white);
+            transform: translateY(-2px);
         }
 
-        /* Account Settings */
         .account-settings {
             display: flex;
             flex-direction: column;
@@ -927,7 +768,11 @@ $stmt->close();
             border: 1px solid var(--secondary-green);
             width: 20%;
             border-radius: 8px;
-            transition: background-color 0.3s ease, color 0.3s ease;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
         }
 
         .account-settings a:hover {
@@ -935,7 +780,6 @@ $stmt->close();
             color: var(--white);
         }
 
-        /* Messages */
         .message {
             font-size: 0.95rem;
             padding: 12px;
@@ -956,133 +800,45 @@ $stmt->close();
             background: var(--error-red);
             color: var(--white);
         }
-        @media (max-width: 900px) {
-            .profile-container {
-                flex-direction: column;
-            }
-            .profile-left {
-                width: 100%;
-                position: relative;
-                top: 0;
-                max-height: none;
-                margin-bottom: 20px;
-            }
-            .profile-right {
-                margin-left: 0;
-                padding: 20px;
-            }
-            .section {
-                padding: 15px;
-            }
-            .payment-options {
-                grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-            }
-        }
 
-        @media (max-width: 480px) {
-            .profile-left {
-                padding: 20px;
-                margin-left: 0;
-            }
-            .profile-left .profile-image {
-                width: 120px;
-                height: 120px;
-            }
-            .profile-left h2 {
-                font-size: 1.5rem;
-            }
-            .profile-left input[type="text"],
-            .profile-left input[type="file"] {
-                font-size: 0.9rem;
-                padding: 10px;
-            }
-            .profile-left button {
-                font-size: 0.9rem;
-                padding: 10px;
-            }
-            .section h3 {
-                font-size: 1.2rem;
-            }
-            th, td {
-                font-size: 0.85rem;
-                padding: 8px;
-            }
-            .payment-option img {
-                width: 50px;
-            }
-            .payment-option p {
-                font-size: 0.9rem;
-            }
-            .account-settings a {
-            color: var(--secondary-green);
-            text-decoration: none;
-            font-size: 1rem;
-            font-weight: 500;
-            padding: 10px 15px;
-            border: 1px solid var(--secondary-green);
-            width: 50%;
-            border-radius: 8px;
-            transition: background-color 0.3s ease, color 0.3s ease;
-        }
-        }
-
-        /* Unchanged Bottom Bar and Footer Styles */
-        .floating-buttons {
+        /* SCROLL TO TOP BUTTON - NEW */
+        .scroll-to-top {
             position: fixed;
-            bottom: 20px;
-            right: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            z-index: 1000;
-            font-size: 2rem;
-        }
-
-        .floating-btn {
-            background: var(--accent-yellow);
-            color: var(--dark-gray);
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 2rem;
+            bottom: 30px;
+            left: 30px;
+            width: 50px;
+            height: 50px;
+            background: var(--primary-green);
+            color: var(--white);
             border: none;
+            border-radius: 50%;
+            font-size: 1.2rem;
             cursor: pointer;
-            transition: background 0.3s ease, transform 0.2s ease;
-            position: relative;
-            text-decoration: none;
-        }
-
-        .floating-btn:hover {
-            background: var(--secondary-green);
-            color: var(--white);
-            transform: scale(1.1);
-        }
-
-        .floating-btn::after {
-            content: attr(data-tooltip);
-            position: absolute;
-            right: 50px;
-            top: 50%;
-            transform: translateY(-50%);
-            background: var(--dark-gray);
-            color: var(--white);
-            padding: 5px 10px;
-            border-radius: 4px;
-            font-size: 0.8rem;
-            white-space: nowrap;
+            box-shadow: 0 4px 12px rgba(9, 27, 190, 0.3);
+            transition: all 0.3s ease;
+            z-index: 1001;
             opacity: 0;
             visibility: hidden;
-            transition: opacity 0.2s ease, visibility 0.2s ease;
+            transform: translateY(20px);
         }
 
-        .floating-btn:hover::after {
+        .scroll-to-top.show {
             opacity: 1;
             visibility: visible;
+            transform: translateY(0);
         }
 
+        .scroll-to-top:hover {
+            background: var(--secondary-green);
+            transform: translateY(-2px) scale(1.1);
+            box-shadow: 0 6px 20px rgba(69, 145, 231, 0.4);
+        }
+
+        .scroll-to-top:active {
+            transform: translateY(0) scale(0.95);
+        }
+
+        /* BOTTOM BAR */
         .bottom-bar {
             display: none;
             position: fixed;
@@ -1126,172 +882,7 @@ $stmt->close();
             color: var(--white);
         }
 
-        .bottom-bar-actions a::after,
-        .bottom-bar-actions button::after {
-            content: attr(data-tooltip);
-            position: absolute;
-            bottom: 50px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: var(--dark-gray);
-            color: var(--white);
-            padding: 5px 10px;
-            border-radius: 4px;
-            font-size: 0.8rem;
-            white-space: nowrap;
-            opacity: 0;
-            visibility: hidden;
-            transition: opacity 0.2s ease, visibility 0.2s ease;
-        }
-
-        .bottom-bar-actions a:hover::after,
-        .bottom-bar-actions button:hover::after {
-            opacity: 1;
-            visibility: visible;
-        }
-
-        .feedback-form {
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-        }
-
-        .feedback-form label {
-            font-size: 0.9rem;
-            font-weight: 500;
-            color: var(--dark-gray);
-        }
-
-        .feedback-form input,
-        .feedback-form textarea {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid var(--text-gray);
-            border-radius: 8px;
-            font-size: 0.9rem;
-            color: var(--dark-gray);
-        }
-
-        .feedback-form textarea {
-            resize: vertical;
-            min-height: 100px;
-        }
-
-        .feedback-form button {
-            background: var(--accent-yellow);
-            color: var(--dark-gray);
-            padding: 10px;
-            border: none;
-            border-radius: 8px;
-            font-size: 0.9rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.3s ease, color 0.3s ease;
-        }
-
-        .feedback-form button:hover {
-            background: var(--secondary-green);
-            color: var(--white);
-        }
-
-        .feedback-message {
-            font-size: 0.9rem;
-            text-align: center;
-            padding: 10px;
-            border-radius: 8px;
-            margin-bottom: 1rem;
-        }
-
-        .feedback-message.success {
-            background: var(--success-green);
-            color: var(--white);
-        }
-
-        .feedback-message.error {
-            background: var(--error-red);
-            color: var(--white);
-        }
-        .chatbot-btn {
-            background: var(--light-gray);
-            color: blue;
-            padding: 10px 10px;
-            border: none;
-            border-radius: 8px;
-            font-size: 0.9rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.3s ease, color 0.3s ease;
-            margin: 0.5rem 0;
-        }
-
-        .chatbot-btn:hover {
-            background: var(--secondary-green);
-            color: var(--white);
-        }
-
-        .chatbot-form {
-            display: flex;
-            gap: 0.5rem;
-            margin-top: 1rem;
-        }
-
-        .chatbot-form input {
-            flex: 1;
-            padding: 10px;
-            border: 1px solid var(--text-gray);
-            border-radius: 8px;
-            font-size: 0.9rem;
-            color: var(--dark-gray);
-        }
-
-        .chatbot-form button {
-            background: var(--accent-yellow);
-            color: var(--dark-gray);
-            padding: 10px 20px;
-            border: none;
-            border-radius: 8px;
-            font-size: 0.9rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.3s ease, color 0.3s ease;
-        }
-
-        .chatbot-form button:hover {
-            background: var(--secondary-green);
-            color: var(--white);
-        }
-
-        .chatbot-messages {
-            max-height: 300px;
-            overflow-y: auto;
-            padding: 10px;
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            background: var(--light-gray);
-            margin-bottom: 1rem;
-        }
-
-        .chatbot-message {
-            margin: 0.5rem 0;
-            padding: 8px 12px;
-            border-radius: 8px;
-            font-size: 0.9rem;
-        }
-
-        .chatbot-message.user {
-            background: var(--primary-green);
-            color: var(--white);
-            margin-left: 20%;
-            border-bottom-right-radius: 0;
-        }
-
-        .chatbot-message.bot {
-            background: var(--white);
-            color: var(--dark-gray);
-            margin-right: 20%;
-            border-bottom-left-radius: 0;
-        }
-
+        /* MODALS */
         .modal {
             display: none;
             position: fixed;
@@ -1334,17 +925,39 @@ $stmt->close();
             color: var(--error-red);
         }
 
-        .modal h2 {
-            font-size: 1.8rem;
-            font-weight: 600;
-            color: var(--primary-green);
-            margin-bottom: 1.5rem;
+        .feedback-form,
+        .chatbot-form {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
         }
 
+        .feedback-form input,
+        .feedback-form textarea,
+        .chatbot-form input {
+            padding: 10px;
+            border: 1px solid var(--text-gray);
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+
+        .feedback-form button,
+        .chatbot-form button {
+            background: var(--accent-yellow);
+            color: var(--dark-gray);
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        /* FOOTER */
         footer {
             background: var(--dark-gray);
             color: var(--white);
             padding: 2rem 0;
+            margin-top: 50px;
         }
 
         .footer-content {
@@ -1360,18 +973,9 @@ $stmt->close();
             color: var(--accent-yellow);
         }
 
-        .footer-section ul {
-            list-style: none;
-        }
-
-        .footer-section ul li {
-            margin-bottom: 0.5rem;
-        }
-
         .footer-section ul li a {
             color: var(--text-gray);
             text-decoration: none;
-            font-size: 0.9rem;
         }
 
         .footer-section ul li a:hover {
@@ -1386,133 +990,76 @@ $stmt->close();
             color: var(--text-gray);
         }
 
-        /* Responsive adjustments */
+        /* RESPONSIVE */
+        @media (max-width: 900px) {
+            .profile-container {
+                flex-direction: column;
+            }
+            .profile-left {
+                width: 100%;
+                position: relative;
+                top: 0;
+                max-height: none;
+                margin-bottom: 20px;
+            }
+            .profile-right {
+                margin-left: 0;
+                padding: 20px;
+            }
+            .scroll-to-top {
+                bottom: 80px;
+                left: 20px;
+                width: 45px;
+                height: 45px;
+                font-size: 1.1rem;
+            }
+        }
+
         @media (max-width: 768px) {
             .container {
                 max-width: 90%;
             }
-
-            .header-top {
-                justify-content: space-between;
-            }
-
             .menu-icon {
                 display: block;
             }
-
             .search-bar,
             .header-actions,
             nav {
                 display: none;
             }
-
             .bottom-bar {
                 display: block;
             }
-
-            .floating-buttons {
-                display: none;
+            .help-center-buttons {
+                grid-template-columns: 1fr;
             }
-
-            .profile-container {
-                padding: 0 10px;
+            .return-policy {
+                padding: 15px;
             }
-
-            .profile-picture {
-                width: 120px;
-                height: 120px;
-            }
-
-            .profile-header h1 {
-                font-size: 1.6rem;
-            }
-
-            .profile-content {
-                flex-direction: column;
-            }
-
-            .profile-left,
-            .profile-right {
-                width: 100%;
-            }
-
-            .profile-section h2 {
-                font-size: 1.2rem;
-            }
-
-            .payment-options {
-                grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-            }
-        }
-
-        @media (min-width: 769px) {
-            .menu-icon,
-            .mobile-menu,
-            .bottom-bar {
-                display: none;
-            }
-
-            .search-bar,
-            .header-actions,
-            nav {
-                display: flex;
+            .return-policy li {
+                font-size: 0.85rem;
             }
         }
 
         @media (max-width: 480px) {
-            .container {
-                max-width: 100%;
+            .profile-left {
+                padding: 20px;
+                margin-left: 0;
             }
-
-            .logo {
-                font-size: 1.2rem;
+            .account-settings a {
+                width: 50%;
             }
-
-            .logo-icon {
-                width: 30px;
-                height: 30px;
-            }
-
-            .profile-picture {
-                width: 100px;
-                height: 100px;
-            }
-
-            .profile-header h1 {
-                font-size: 1.3rem;
-            }
-
-            .profile-section h2 {
-                font-size: 1rem;
-            }
-
-            .profile-form input[type="text"],
-            .profile-form input[type="file"],
-            .profile-form button {
-                font-size: 0.8rem;
-                padding: 8px;
-            }
-            .bottom-bar-actions a, .bottom-bar-actions button {
-                padding: 6px;
-                font-size: 1.2rem;
+            .bottom-bar-actions a,
+            .bottom-bar-actions button {
                 width: 36px;
                 height: 36px;
+                font-size: 1.2rem;
             }
-        }
-
-        .fade-in {
-            animation: fadeIn 0.6s ease-out;
         }
 
         @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
     </style>
 </head>
@@ -1521,7 +1068,9 @@ $stmt->close();
         <div class="container">
             <div class="header-top">
                 <div class="logo">
-                    <div class="logo-icon"><img style="height: 50px; width: 50px; border-radius:25px;" src="images/download.png" alt=""></div>
+                    <div class="logo-icon">
+                        <img style="height: 50px; width: 50px; border-radius:25px;" src="images/download.png" alt="">
+                    </div>
                     <span>Bugema CampusShop</span>
                 </div>
                 <button class="menu-icon">☰</button>
@@ -1532,13 +1081,13 @@ $stmt->close();
                 </div>
                 <div class="header-actions">
                     <span class="username"><a href="profile.php">Hi, <?php echo htmlspecialchars($_SESSION['username']); ?></a></span>
-                    <a href="logout.php" class="header-btn">Logout</a>
+                    <a href="logout.php" class="header-btn"><i class="fas fa-sign-out-alt"></i></a>
                     <a href="favorites.php" class="header-btn favorites-btn">
-                        ❤️ Favorites
+                        <i class="fas fa-heart"></i>
                         <span class="favorites-count"><?php echo $favorites_count; ?></span>
                     </a>
                     <a href="cart.php" class="header-btn cart-btn">
-                        🛒 Cart
+                        <i class="fas fa-shopping-cart"></i>
                         <span class="cart-count"><?php echo $cart_count; ?></span>
                     </a>
                 </div>
@@ -1583,19 +1132,15 @@ $stmt->close();
 
     <div class="bottom-bar">
         <div class="bottom-bar-actions">
-            <a href="profile.php" data-tooltip="Profile">👤</a>
-            <a href="favorites.php" data-tooltip="Favorites">❤️ <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
-            <a href="cart.php" data-tooltip="Cart">🛒 <span class="cart-count"><?php echo $cart_count; ?></span></a>
-            <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback">💬</button>
-            <a href="https://wa.me/+256755087665" target="_blank" data-tooltip="Help">📞</a>
+            <a href="profile.php" data-tooltip="Profile"><i class="fas fa-user"></i></a>
+            <a href="favorites.php" data-tooltip="Favorites"><i class="fas fa-heart"></i> <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
+            <a href="cart.php" data-tooltip="Cart"><i class="fas fa-shopping-cart"></i> <span class="cart-count"><?php echo $cart_count; ?></span></a>
+            <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback"><i class="fas fa-comments"></i></button>
+            <a href="https://wa.me/+256755087665" target="_blank" data-tooltip="Help"><i class="fab fa-whatsapp"></i></a>
         </div>
     </div>
 
-    <div class="floating-buttons">
-        <button class="floating-btn feedback-btn" id="floating-feedback-btn" data-tooltip="Feedback">💬</button>
-        <a href="https://wa.me/+256755087665" class="floating-btn" target="_blank" data-tooltip="Help">📞</a>
-    </div>
-
+    <!-- FEEDBACK MODAL -->
     <div class="modal" id="feedback-modal">
         <div class="modal-content">
             <button class="modal-close" id="feedback-modal-close">&times;</button>
@@ -1612,22 +1157,22 @@ $stmt->close();
             </form>
         </div>
     </div>
-    <div class="modal" id="chatbot-modal" role="dialog" aria-labelledby="chatbot-title">
+
+    <!-- CHATBOT MODAL -->
+    <div class="modal" id="chatbot-modal">
         <div class="modal-content">
-            <button class="modal-close" id="chatbot-modal-close" aria-label="Close chatbot">&times;</button>
-            <h2 id="chatbot-title">Chat with CampusShop Support</h2>
-            <div class="chatbot-messages" id="chatbot-messages">
-                <!-- Messages will be dynamically added here -->
-            </div>
+            <button class="modal-close" id="chatbot-modal-close">&times;</button>
+            <h2>Chat with CampusShop Support</h2>
+            <div class="chatbot-messages" id="chatbot-messages"></div>
             <form id="chatbot-form" class="chatbot-form">
-                <input type="text" id="chatbot-input" name="chatbot_input" placeholder="Type your message..." required aria-label="Chatbot input">
-                <button type="submit" aria-label="Send message">Send</button>
+                <input type="text" id="chatbot-input" name="chatbot_input" placeholder="Type your message..." required>
+                <button type="submit">Send</button>
             </form>
         </div>
     </div>
 
     <section class="profile-container">
-        <!-- Left Side -->
+        <!-- LEFT SIDE - PROFILE -->
         <div class="profile-left">
             <center>
                 <img src="<?= htmlspecialchars($user['profile_picture'] ?? 'default-avatar.png'); ?>" alt="Profile Picture">
@@ -1651,11 +1196,12 @@ $stmt->close();
         <?php if (isset($error)): ?>
             <div class="message error"><?php echo htmlspecialchars($error); ?></div>
         <?php endif; ?>
-        <!-- Right Side -->
+
+        <!-- RIGHT SIDE -->
         <div class="profile-right">
-            <!-- Notifications -->
+            <!-- NOTIFICATIONS -->
             <div class="section">
-                <h3>Recent Notifications</h3>
+                <h3><i class="fas fa-bell"></i> Recent Notifications</h3>
                 <?php if (!empty($notifications)): ?>
                     <?php foreach ($notifications as $note): ?>
                         <div class="notification">
@@ -1668,9 +1214,9 @@ $stmt->close();
                 <?php endif; ?>
             </div>
 
-            <!-- Order History -->
+            <!-- ORDER HISTORY -->
             <div class="section">
-                <h3>Order History</h3>
+                <h3><i class="fas fa-history"></i> Order History</h3>
                 <?php if (!empty($orders)): ?>
                     <table>
                         <thead>
@@ -1697,21 +1243,21 @@ $stmt->close();
                 <?php endif; ?>
             </div>
 
-            <!-- Payment Options -->
+            <!-- PAYMENT OPTIONS -->
             <div class="section">
-                <h2>Payment Options</h2>
+                <h3><i class="fas fa-credit-card"></i> Payment Options</h3>
                 <div class="payment-options">
                     <div class="payment-option">
                         <img src="images/mobile money.png" alt="Mobile Money">
                         <p>Mobile Money</p>
                     </div>
                     <div class="payment-option">
-                        <img src="images/paypal.png" alt="Bank Card">
-                        <p>Bank Card</p>
+                        <img src="images/paypal.png" alt="PayPal">
+                        <p>PayPal</p>
                     </div>
                     <div class="payment-option">
-                        <img src="images/visa.png" alt="Bank Card">
-                        <p>Bank Card</p>
+                        <img src="images/visa.png" alt="Visa">
+                        <p>Visa</p>
                     </div>
                     <div class="payment-option">
                         <img src="images/pay on delivery.jpeg" alt="Cash on Delivery">
@@ -1720,332 +1266,213 @@ $stmt->close();
                 </div>
             </div>
 
-            <!-- Help Center -->
+            <!-- HELP CENTER - UPDATED -->
             <div class="section">
-                <h2>Help Center</h2>
+                <h3><i class="fas fa-question-circle"></i> Help Center</h3>
                 <div class="help-center">
-                    <p>Need assistance? Chat with our support bot or contact us via WhatsApp.</p>
-                    <button class="chatbot-btn" id="chatbot-btn">💬 Chat with Us</button>
-                    <a href="https://wa.me/+256755087665" target="_blank">📞 Contact Support via WhatsApp</a>
+                    <p>Need assistance? We're here to help you with your shopping experience at Bugema CampusShop.</p>
+                    
+                    <!-- RETURN POLICY -->
+                    <div class="return-policy">
+                        <h5><i class="fas fa-shipping-fast"></i> Return Policy</h5>
+                        <ul>
+                            <li><strong>30-Day Return Window:</strong> Returns accepted within 30 days from delivery date</li>
+                            <li><strong>Full Refund:</strong> Complete refund for unused items in original packaging</li>
+                            <li><strong>Defective Items:</strong> Free return shipping for damaged or defective products</li>
+                            <li><strong>Size Issues:</strong> Exchange available for wrong size clothing (T-Shirts, Jumpers)</li>
+                            <li><strong>Non-Returnable:</strong> Personalized items, opened electronics, or hygiene products</li>
+                            <li><strong>Process:</strong> Contact us via WhatsApp or chatbot, we'll arrange pickup within 48 hours</li>
+                            <li><strong>Refund Time:</strong> Processed within 3-5 business days to original payment method</li>
+                        </ul>
+                        <p style="font-size: 0.85rem; color: var(--success-green); margin-top: 10px;">
+                            <strong>Questions?</strong> Message us anytime!
+                        </p>
+                    </div>
+
+                    <div class="help-center-buttons">
+                        <button class="chatbot-btn" id="chatbot-btn">
+                            <i class="fas fa-comments"></i> Chat with Us
+                        </button>
+                        <a href="https://wa.me/+256755087665" target="_blank" class="chatbot-btn">
+                            <i class="fab fa-whatsapp"></i> WhatsApp Support
+                        </a>
+                        <button class="chatbot-btn" onclick="window.open('mailto:campusshop@bugemauniv.ac.ug')" style="background: var(--accent-yellow);">
+                            <i class="fas fa-envelope"></i> Email Support
+                        </button>
+                    </div>
                 </div>
             </div>
 
-            <!-- Account Settings -->
+            <!-- ACCOUNT SETTINGS -->
             <div class="section">
-                <h2>Account Settings</h2>
+                <h3><i class="fas fa-cog"></i> Account Settings</h3>
                 <div class="account-settings">
-                    <a href="change_password.php">Change Password</a>
-                    <a href="delete_account.php">Delete Account</a>
+                    <a href="change_password.php">
+                        <i class="fas fa-lock"></i> Change Password
+                    </a>
+                    <a href="delete_account.php">
+                        <i class="fas fa-user-times"></i> Delete Account
+                    </a>
                 </div>
             </div>
         </div>
     </section>
 
+    <!-- SCROLL TO TOP BUTTON -->
+    <button class="scroll-to-top" id="scrollToTop" title="Back to Top">
+        <i class="fas fa-arrow-up"></i>
+    </button>
+
     
 
     <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const observerOptions = {
-        threshold: 0.1,
-        rootMargin: '0px 0px -50px 0px'
-    };
-
-    const observer = new IntersectionObserver(function(entries) {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                entry.target.style.opacity = '1';
-                entry.target.style.transform = 'translateY(0)';
+    document.addEventListener('DOMContentLoaded', function() {
+        // SCROLL TO TOP
+        const scrollToTopBtn = document.getElementById('scrollToTop');
+        window.addEventListener('scroll', function() {
+            if (window.pageYOffset > 300) {
+                scrollToTopBtn.classList.add('show');
+            } else {
+                scrollToTopBtn.classList.remove('show');
             }
         });
-    }, observerOptions);
-
-    document.querySelectorAll('.profile-section').forEach(el => {
-        el.style.opacity = '0';
-        el.style.transform = 'translateY(20px)';
-        el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
-        observer.observe(el);
-    });
-
-    const searchInput = document.querySelectorAll('.search-input');
-    const searchResults = document.querySelectorAll('.search-results');
-    let selectedIndex = -1;
-
-    function fetchSuggestions(query, resultsContainer) {
-        if (query.length >= 2) {
-            fetch(`search.php?query=${encodeURIComponent(query)}&type=autocomplete`)
-                .then(response => response.text())
-                .then(data => {
-                    resultsContainer.innerHTML = data;
-                    resultsContainer.classList.add('active');
-                    selectedIndex = -1;
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    resultsContainer.innerHTML = '<div class="no-results">Error fetching suggestions</div>';
-                    resultsContainer.classList.add('active');
-                });
-        } else {
-            resultsContainer.innerHTML = '';
-            resultsContainer.classList.remove('active');
-        }
-    }
-
-    function fetchFullResults(query, resultsContainer) {
-        fetch(`search.php?query=${encodeURIComponent(query)}&type=full`)
-            .then(response => response.text())
-            .then(data => {
-                resultsContainer.innerHTML = data;
-                resultsContainer.classList.add('active');
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                resultsContainer.innerHTML = '<div class="no-results">Error fetching results</div>';
-                resultsContainer.classList.add('active');
-            });
-    }
-
-    searchInput.forEach(input => {
-        input.addEventListener('input', function() {
-            const resultsContainer = this.parentElement.querySelector('.search-results');
-            fetchSuggestions(this.value.trim(), resultsContainer);
+        scrollToTopBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         });
 
-        input.addEventListener('keydown', function(e) {
-            const resultsContainer = this.parentElement.querySelector('.search-results');
-            const suggestions = resultsContainer.querySelectorAll('.suggestion');
-            if (suggestions.length === 0) return;
+        // FEEDBACK MODAL
+        const feedbackBtn = document.getElementById('floating-feedback-btn') || document.getElementById('mobile-feedback-btn');
+        const feedbackModal = document.getElementById('feedback-modal');
+        const feedbackModalClose = document.getElementById('feedback-modal-close');
+        const feedbackForm = document.getElementById('feedback-form');
+        const feedbackMessage = document.getElementById('feedback-message');
 
-            if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                selectedIndex = Math.min(selectedIndex + 1, suggestions.length - 1);
-                updateSelection(suggestions);
-            } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                selectedIndex = Math.max(selectedIndex - 1, -1);
-                updateSelection(suggestions);
-            } else if (e.key === 'Enter' && selectedIndex >= 0) {
-                e.preventDefault();
-                const selectedSuggestion = suggestions[selectedIndex].textContent;
-                this.value = selectedSuggestion;
-                fetchFullResults(selectedSuggestion, resultsContainer);
-            }
-        });
-    });
-
-    function updateSelection(suggestions) {
-        suggestions.forEach((suggestion, index) => {
-            suggestion.classList.toggle('selected', index === selectedIndex);
-        });
-        if (selectedIndex >= 0) {
-            const activeInput = document.querySelector('.search-input:focus');
-            if (activeInput) activeInput.value = suggestions[selectedIndex].textContent;
-        }
-    }
-
-    searchResults.forEach(resultsContainer => {
-        resultsContainer.addEventListener('click', function(e) {
-            const suggestion = e.target.closest('.suggestion');
-            if (suggestion) {
-                const activeInput = document.querySelector('.search-input:focus') || document.querySelector('.search-input');
-                activeInput.value = suggestion.textContent;
-                fetchFullResults(suggestion.textContent, resultsContainer);
-            }
-        });
-    });
-
-    document.addEventListener('click', function(e) {
-        if (!e.target.closest('.search-bar') && !e.target.closest('.search-results')) {
-            searchResults.forEach(resultsContainer => {
-                resultsContainer.classList.remove('active');
+        if (feedbackBtn) {
+            feedbackBtn.addEventListener('click', () => {
+                feedbackModal.style.display = 'flex';
+                feedbackMessage.style.display = 'none';
             });
         }
-    });
 
-    const feedbackBtn = document.getElementById('floating-feedback-btn');
-    const mobileFeedbackBtn = document.getElementById('mobile-feedback-btn');
-    const feedbackModal = document.getElementById('feedback-modal');
-    const feedbackModalClose = document.getElementById('feedback-modal-close');
-    const feedbackForm = document.getElementById('feedback-form');
-    const feedbackMessage = document.getElementById('feedback-message');
-
-    feedbackBtn.addEventListener('click', function() {
-        feedbackModal.style.display = 'flex';
-        feedbackMessage.style.display = 'none';
-    });
-
-    mobileFeedbackBtn.addEventListener('click', function() {
-        feedbackModal.style.display = 'flex';
-        feedbackMessage.style.display = 'none';
-    });
-
-    feedbackModalClose.addEventListener('click', function() {
-        feedbackModal.style.display = 'none';
-        feedbackForm.reset();
-        feedbackMessage.style.display = 'none';
-    });
-
-    feedbackModal.addEventListener('click', function(e) {
-        if (e.target === feedbackModal) {
+        feedbackModalClose.addEventListener('click', () => {
             feedbackModal.style.display = 'none';
             feedbackForm.reset();
             feedbackMessage.style.display = 'none';
-        }
-    });
-
-    feedbackForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        const formData = new FormData(feedbackForm);
-        formData.append('submit_feedback', 'true');
-        fetch('profile.php', { // Changed to profile.php
-            method: 'POST',
-            body: formData
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok: ' + response.statusText);
-            }
-            return response.json();
-        })
-        .then(data => {
-            feedbackMessage.style.display = 'block';
-            feedbackMessage.className = `feedback-message ${data.success ? 'success' : 'error'}`;
-            feedbackMessage.textContent = data.message;
-            if (data.success) {
-                feedbackForm.reset();
-                setTimeout(() => {
-                    feedbackModal.style.display = 'none';
-                    feedbackMessage.style.display = 'none';
-                }, 2000);
-            }
-        })
-        .catch(error => {
-            console.error('Error details:', error);
-            feedbackMessage.style.display = 'block';
-            feedbackMessage.className = 'feedback-message error';
-            feedbackMessage.textContent = 'An error occurred: ' + error.message;
         });
-    });
 
-    const menuIcon = document.querySelector('.menu-icon');
-    const mobileMenu = document.querySelector('.mobile-menu');
-    const closeIcon = document.querySelector('.close-icon');
-
-    menuIcon.addEventListener('click', function() {
-        mobileMenu.classList.add('active');
-    });
-
-    closeIcon.addEventListener('click', function() {
-        mobileMenu.classList.remove('active');
-    });
-
-    mobileMenu.addEventListener('click', function(e) {
-        if (e.target.classList.contains('mobile-nav') || e.target.tagName === 'A') {
-            mobileMenu.classList.remove('active');
-        }
-    });
-
-    // Chatbot functionality
-    const chatbotBtn = document.getElementById('chatbot-btn');
-    const chatbotModal = document.getElementById('chatbot-modal');
-    const chatbotModalClose = document.getElementById('chatbot-modal-close');
-    const chatbotForm = document.getElementById('chatbot-form');
-    const chatbotMessages = document.getElementById('chatbot-messages');
-    const chatbotInput = document.getElementById('chatbot-input');
-
-    function openChatbotModal() {
-        chatbotModal.style.display = 'flex';
-        chatbotInput.focus();
-        scrollToBottom();
-    }
-
-    function closeChatbotModal() {
-        chatbotModal.style.display = 'none';
-        chatbotInput.value = '';
-    }
-
-    function scrollToBottom() {
-        chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
-    }
-
-    function addMessage(content, sender) {
-        const messageDiv = document.createElement('div');
-        messageDiv.classList.add('chatbot-message', sender);
-        messageDiv.innerHTML = `<p>${content}</p>`;
-        chatbotMessages.appendChild(messageDiv);
-        scrollToBottom();
-    }
-
-    const responses = {
-        'hello': 'Hi! How can I assist you today?',
-        'delivery': 'We offer fast campus delivery within 24 hours to your dorm or a campus pickup point. Would you like more details on delivery options?',
-        'discount': 'Bugema University students with a valid student ID can enjoy exclusive discounts. Verify your ID at checkout to apply them!',
-        'products': 'We offer textbooks, branded jumpers, pens, wall clocks, notebooks, T-shirts, and bottles. Browse categories via the navigation menu!',
-        'contact': 'You can reach us at campusshop@bugemauniv.ac.ug or via WhatsApp at +256 7550 87665. Want to call now?',
-        'help': 'I’m here to assist! Ask about delivery, discounts, products, or anything else.',
-        'default': 'Sorry, I didn’t understand that. Try asking about delivery, discounts, products, or contact info!'
-    };
-
-    chatbotBtn.addEventListener('click', openChatbotModal);
-
-    chatbotModalClose.addEventListener('click', closeChatbotModal);
-
-    chatbotModal.addEventListener('click', function(e) {
-        if (e.target === chatbotModal) {
-            closeChatbotModal();
-        }
-    });
-
-    chatbotForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        const message = chatbotInput.value.trim();
-        if (!message) return;
-
-        // Add user message
-        addMessage(message, 'user');
-
-        // Get bot response
-        const lowerMessage = message.toLowerCase();
-        let response = responses['default'];
-        for (const key in responses) {
-            if (lowerMessage.includes(key)) {
-                response = responses[key];
-                break;
-            }
-        }
-
-        // Add bot response
-        setTimeout(() => {
-            addMessage(response, 'bot');
-        }, 500);
-
-        chatbotInput.value = '';
-        chatbotInput.focus();
-    });
-
-    chatbotInput.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            chatbotForm.dispatchEvent(new Event('submit'));
-        }
-    });
-
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') {
-            if (feedbackModal.style.display === 'flex') {
+        feedbackModal.addEventListener('click', (e) => {
+            if (e.target === feedbackModal) {
                 feedbackModal.style.display = 'none';
                 feedbackForm.reset();
                 feedbackMessage.style.display = 'none';
             }
-            if (chatbotModal.style.display === 'flex') {
-                closeChatbotModal();
+        });
+
+        feedbackForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(feedbackForm);
+            formData.append('submit_feedback', 'true');
+            
+            fetch('profile.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                feedbackMessage.style.display = 'block';
+                feedbackMessage.className = `feedback-message ${data.success ? 'success' : 'error'}`;
+                feedbackMessage.textContent = data.message;
+                if (data.success) {
+                    feedbackForm.reset();
+                    setTimeout(() => {
+                        feedbackModal.style.display = 'none';
+                        feedbackMessage.style.display = 'none';
+                    }, 2000);
+                }
+            })
+            .catch(error => {
+                feedbackMessage.style.display = 'block';
+                feedbackMessage.className = 'feedback-message error';
+                feedbackMessage.textContent = 'An error occurred: ' + error.message;
+            });
+        });
+
+        // CHATBOT
+        const chatbotBtn = document.getElementById('chatbot-btn');
+        const chatbotModal = document.getElementById('chatbot-modal');
+        const chatbotModalClose = document.getElementById('chatbot-modal-close');
+        const chatbotForm = document.getElementById('chatbot-form');
+        const chatbotMessages = document.getElementById('chatbot-messages');
+        const chatbotInput = document.getElementById('chatbot-input');
+
+        const responses = {
+            'hello': 'Hi! How can I assist you today?',
+            'delivery': 'We offer fast campus delivery within 24 hours to your dorm or a campus pickup point.',
+            'discount': 'Bugema University students with valid ID enjoy exclusive discounts. Verify at checkout!',
+            'products': 'We offer textbooks, branded jumpers, pens, wall clocks, notebooks, T-shirts, and bottles.',
+            'contact': 'Reach us at +256 7550 87665 (WhatsApp) or campusshop@bugemauniv.ac.ug',
+            'return': 'Our 30-day return policy covers unused items. See Help Center for details!',
+            'help': 'Ask about delivery, discounts, products, returns, or contact info.',
+            'default': 'Sorry, I didn\'t understand. Try: delivery, discounts, products, or returns!'
+        };
+
+        function addMessage(content, sender) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('chatbot-message', sender);
+            messageDiv.innerHTML = `<p>${content}</p>`;
+            chatbotMessages.appendChild(messageDiv);
+            chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
+        }
+
+        if (chatbotBtn) chatbotBtn.addEventListener('click', () => chatbotModal.style.display = 'flex');
+        if (chatbotModalClose) chatbotModalClose.addEventListener('click', () => chatbotModal.style.display = 'none');
+        
+        chatbotModal.addEventListener('click', (e) => {
+            if (e.target === chatbotModal) chatbotModal.style.display = 'none';
+        });
+
+        chatbotForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const message = chatbotInput.value.trim();
+            if (!message) return;
+            
+            addMessage(message, 'user');
+            const lowerMessage = message.toLowerCase();
+            let response = responses['default'];
+            
+            for (const key in responses) {
+                if (lowerMessage.includes(key)) {
+                    response = responses[key];
+                    break;
+                }
             }
-            if (mobileMenu.classList.contains('active')) {
+            
+            setTimeout(() => addMessage(response, 'bot'), 500);
+            chatbotInput.value = '';
+        });
+
+        // MOBILE MENU
+        const menuIcon = document.querySelector('.menu-icon');
+        const mobileMenu = document.querySelector('.mobile-menu');
+        const closeIcon = document.querySelector('.close-icon');
+
+        if (menuIcon) menuIcon.addEventListener('click', () => mobileMenu.classList.add('active'));
+        if (closeIcon) closeIcon.addEventListener('click', () => mobileMenu.classList.remove('active'));
+        if (mobileMenu) mobileMenu.addEventListener('click', (e) => {
+            if (e.target.tagName === 'A') mobileMenu.classList.remove('active');
+        });
+
+        // ESCAPE KEY
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                feedbackModal.style.display = 'none';
+                chatbotModal.style.display = 'none';
                 mobileMenu.classList.remove('active');
             }
-        }
+        });
     });
-});
-</script>
+    </script>
 </body>
 </html>
 

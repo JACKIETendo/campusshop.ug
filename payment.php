@@ -148,6 +148,7 @@ $user_email = '';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Payment - Bugema CampusShop</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://js.stripe.com/v3/"></script>
     <!-- PayPal SDK included but not initialized -->
     <script src="https://www.paypal.com/sdk/js?client-id=your_paypal_client_id&currency=UGX"></script>
@@ -172,7 +173,7 @@ $user_email = '';
             flex-direction: column;
             position: relative;
             overflow-x: hidden;
-            padding-bottom: 60px;
+            padding-bottom: 0;
         }
 
         body::before {
@@ -312,6 +313,9 @@ $user_email = '';
             text-decoration: none;
             font-weight: 500;
             transition: background 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 5px;
         }
 
         .header-btn:hover {
@@ -333,6 +337,43 @@ $user_email = '';
             text-decoration: underline;
         }
 
+        /* SCROLL TO TOP BUTTON - ADDED */
+        .scroll-to-top {
+            position: fixed;
+            bottom: 30px;
+            left: 30px;
+            width: 50px;
+            height: 50px;
+            background: var(--primary-green);
+            color: var(--white);
+            border: none;
+            border-radius: 50%;
+            font-size: 1.2rem;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(9, 27, 190, 0.3);
+            transition: all 0.3s ease;
+            z-index: 1001;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(20px);
+        }
+
+        .scroll-to-top.show {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .scroll-to-top:hover {
+            background: var(--secondary-green);
+            transform: translateY(-2px) scale(1.1);
+            box-shadow: 0 6px 20px rgba(69, 145, 231, 0.4);
+        }
+
+        .scroll-to-top:active {
+            transform: translateY(0) scale(0.95);
+        }
+
         .floating-buttons {
             position: fixed;
             bottom: 20px;
@@ -352,7 +393,7 @@ $user_email = '';
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 2rem;
+            font-size: 1.5rem;
             border: none;
             cursor: pointer;
             transition: background 0.3s ease, transform 0.2s ease;
@@ -769,6 +810,17 @@ $user_email = '';
             text-align: center;
         }
 
+        /* Responsive adjustments for scroll-to-top */
+        @media (max-width: 900px) {
+            .scroll-to-top {
+                bottom: 80px;
+                left: 20px;
+                width: 45px;
+                height: 45px;
+                font-size: 1.1rem;
+            }
+        }
+
         @media (max-width: 768px) {
             .container {
                 max-width: 90%;
@@ -896,9 +948,9 @@ $user_email = '';
                 <button class="menu-icon">☰</button>
                 <div class="header-actions">
                     <span class="username"><a href="profile.php">Hi, <?php echo htmlspecialchars($_SESSION['username']); ?></a></span>
-                    <a href="index.php" class="header-btn">Home</a>
-                    <a href="cart.php" class="header-btn">Cart</a>
-                    <a href="logout.php" class="header-btn">Logout</a>
+                    <a href="index.php" class="header-btn"><i class="fas fa-home"></i></a>
+                    <a href="cart.php" class="header-btn"><i class="fas fa-shopping-cart"></i></a>
+                    <a href="logout.php" class="header-btn"><i class="fas fa-sign-out-alt"></i></a>
                 </div>
             </div>
             <div class="mobile-menu">
@@ -915,17 +967,22 @@ $user_email = '';
 
     <div class="bottom-bar">
         <div class="bottom-bar-actions">
-            <a href="profile.php" data-tooltip="Profile">👤</a>
-            <a href="index.php" data-tooltip="Home">🏠</a>
-            <a href="cart.php" data-tooltip="Cart">🛒</a>
-            <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback">💬</button>
-            <a href="https://wa.me/+256755087665" target="_blank" data-tooltip="Help">📞</a>
+            <a href="profile.php" data-tooltip="Profile"><i class="fas fa-user"></i></a>
+            <a href="index.php" data-tooltip="Home"><i class="fas fa-home"></i></a>
+            <a href="cart.php" data-tooltip="Cart"><i class="fas fa-shopping-cart"></i></a>
+            <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback"><i class="fas fa-comments"></i></button>
+            <a href="https://wa.me/+256755087665" target="_blank" data-tooltip="Help"><i class="fab fa-whatsapp"></i></a>
         </div>
     </div>
 
+    <!-- SCROLL TO TOP BUTTON - ADDED -->
+    <button class="scroll-to-top" id="scrollToTop" title="Back to Top">
+        <i class="fas fa-arrow-up"></i>
+    </button>
+
     <div class="floating-buttons">
-        <button class="floating-btn feedback-btn" id="floating-feedback-btn" data-tooltip="Feedback">💬</button>
-        <a href="https://wa.me/+256755087665" class="floating-btn" target="_blank" data-tooltip="Help">📞</a>
+        <button class="floating-btn feedback-btn" id="floating-feedback-btn" data-tooltip="Feedback"><i class="fas fa-comments"></i></button>
+        <a href="https://wa.me/+256755087665" class="floating-btn" target="_blank" data-tooltip="Help"><i class="fab fa-whatsapp"></i></a>
     </div>
 
     <div class="modal" id="feedback-modal">
@@ -1059,6 +1116,20 @@ $user_email = '';
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // SCROLL TO TOP FUNCTIONALITY - ADDED
+            const scrollToTopBtn = document.getElementById('scrollToTop');
+            window.addEventListener('scroll', function() {
+                if (window.pageYOffset > 300) {
+                    scrollToTopBtn.classList.add('show');
+                } else {
+                    scrollToTopBtn.classList.remove('show');
+                }
+            });
+            scrollToTopBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+
             const menuIcon = document.querySelector('.menu-icon');
             const mobileMenu = document.querySelector('.mobile-menu');
             const closeIcon = document.querySelector('.close-icon');
