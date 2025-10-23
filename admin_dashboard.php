@@ -1,5 +1,5 @@
 <?php
-// admin_dashboard.php (single-file dashboard: Products, Deliveries, Reports, Notifications)
+// admin_dashboard.php (single-file dashboard: Products, Categories, Deliveries, Reports, Notifications)
 // Requires: db_connect.php (creates $conn mysqli connection)
 // Database: campusshop_db
 // Tables required:
@@ -21,6 +21,7 @@ if (!isset($_SESSION['username']) || $_SESSION['role'] !== 'admin') {
     header("Location: index.php");
     exit;
 }
+
 // Lightweight JSON endpoint for product fetch (used by openEditProduct)
 if (isset($_GET['fetch_product'])) {
     $pid = intval($_GET['fetch_product']);
@@ -193,6 +194,114 @@ if (isset($_GET['delete_product'])) {
     }
 }
 
+// --------------------
+// CATEGORY MANAGEMENT
+// --------------------
+
+// Add/Edit Category
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['category_action'])) {
+    $category_action = $_POST['category_action'];
+    $category_name = trim($conn->real_escape_string(post_val('category_name', '')));
+    $category_id = intval(post_val('category_id', 0));
+    
+    if (empty($category_name)) {
+        $message = "Category name cannot be empty.";
+    } elseif (strlen($category_name) > 50) {
+        $message = "Category name must be 50 characters or less.";
+    } else {
+        if ($category_action === 'add') {
+            // Check if category already exists
+            $check_stmt = $conn->prepare("SELECT id FROM products WHERE category = ? LIMIT 1");
+            $check_stmt->bind_param("s", $category_name);
+            $check_stmt->execute();
+            $check_result = $check_stmt->get_result();
+            
+            if ($check_result->num_rows > 0) {
+                $message = "Category already exists and cannot be added again.";
+            } else {
+                // Add new category by inserting a dummy product (or you can create a categories table)
+                $stmt = $conn->prepare("INSERT INTO products (name, price, stock, category, caption, image_path) VALUES (?, 0, 0, ?, 'System Category', '')");
+                $dummy_name = "CATEGORY_" . strtoupper($category_name);
+                $stmt->bind_param("ss", $dummy_name, $category_name);
+                if ($stmt->execute()) {
+                    $message = "Category added successfully.";
+                    // Update valid categories array
+                    $valid_categories[] = $category_name;
+                } else {
+                    $message = "Failed to add category: " . $stmt->error;
+                    error_log("Add category failed: " . $stmt->error);
+                }
+                $stmt->close();
+            }
+            $check_stmt->close();
+            
+        } elseif ($category_action === 'edit' && $category_id > 0) {
+            // Get old category name first
+            $old_stmt = $conn->prepare("SELECT category FROM products WHERE id = ?");
+            $old_stmt->bind_param("i", $category_id);
+            $old_stmt->execute();
+            $old_result = $old_stmt->get_result();
+            $old_category = '';
+            if ($old_row = $old_result->fetch_assoc()) {
+                $old_category = $old_row['category'];
+            }
+            $old_stmt->close();
+            
+            // Update category name across all products
+            $stmt = $conn->prepare("UPDATE products SET category = ? WHERE category = ?");
+            $stmt->bind_param("ss", $category_name, $old_category);
+            if ($stmt->execute()) {
+                $message = "Category updated successfully.";
+                // Update valid categories array
+                $key = array_search($old_category, $valid_categories);
+                if ($key !== false) {
+                    $valid_categories[$key] = $category_name;
+                }
+            } else {
+                $message = "Failed to update category: " . $stmt->error;
+                error_log("Update category failed: " . $stmt->error);
+            }
+            $stmt->close();
+        }
+    }
+}
+
+// Delete Category
+if (isset($_GET['delete_category'])) {
+    $category_to_delete = $conn->real_escape_string($_GET['delete_category']);
+    
+    if (!empty($category_to_delete)) {
+        // Check if category has products
+        $check_stmt = $conn->prepare("SELECT COUNT(*) as product_count FROM products WHERE category = ? AND name NOT LIKE 'CATEGORY_%'");
+        $check_stmt->bind_param("s", $category_to_delete);
+        $check_stmt->execute();
+        $result = $check_stmt->get_result();
+        $row = $result->fetch_assoc();
+        $product_count = $row['product_count'];
+        $check_stmt->close();
+        
+        if ($product_count > 0) {
+            $message = "Cannot delete category '$category_to_delete' - it contains $product_count product(s). Move or delete products first.";
+        } else {
+            // Delete the category (dummy products)
+            $stmt = $conn->prepare("DELETE FROM products WHERE category = ? AND name LIKE 'CATEGORY_%'");
+            $stmt->bind_param("s", $category_to_delete);
+            if ($stmt->execute()) {
+                $message = "Category deleted successfully.";
+                // Remove from valid categories array
+                $key = array_search($category_to_delete, $valid_categories);
+                if ($key !== false) {
+                    unset($valid_categories[$key]);
+                }
+            } else {
+                $message = "Failed to delete category: " . $stmt->error;
+                error_log("Delete category failed: " . $stmt->error);
+            }
+            $stmt->close();
+        }
+    }
+}
+
 // Mark delivery complete
 if (isset($_GET['complete_delivery'])) {
     $id = intval($_GET['complete_delivery']);
@@ -256,6 +365,73 @@ if (isset($_GET['delete_notification'])) {
 }
 
 // --------------------
+// PRINT SALES REPORT
+// --------------------
+if (isset($_GET['print_report'])) {
+    $report_type = $_GET['print_report'];
+    $start_date = $_GET['start_date'] ?? date('Y-m-01');
+    $end_date = $_GET['end_date'] ?? date('Y-m-t');
+    
+    // Generate report data
+    $report_data = [];
+    $report_title = "";
+    
+    if ($report_type === 'sales_summary') {
+        $report_title = "Sales Summary Report";
+        $stmt = $conn->prepare("
+            SELECT 
+                DATE(created_at) as sale_date,
+                COUNT(*) as order_count,
+                SUM(amount) as total_amount,
+                AVG(amount) as avg_order_value
+            FROM pending_deliveries 
+            WHERE status = 'Completed' AND created_at BETWEEN ? AND ?
+            GROUP BY DATE(created_at)
+            ORDER BY sale_date DESC
+        ");
+        $stmt->bind_param("ss", $start_date, $end_date);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        while ($row = $result->fetch_assoc()) {
+            $report_data[] = $row;
+        }
+        $stmt->close();
+    } elseif ($report_type === 'category_sales') {
+        $report_title = "Category Sales Report";
+        // Note: This query assumes you have a product_id in pending_deliveries table
+        // For now, we'll use a simplified version
+        $stmt = $conn->prepare("
+            SELECT 
+                category,
+                COUNT(*) as product_count,
+                SUM(price * stock) as estimated_value
+            FROM products 
+            GROUP BY category
+            ORDER BY estimated_value DESC
+        ");
+        $stmt->execute();
+        $result = $stmt->get_result();
+        while ($row = $result->fetch_assoc()) {
+            $report_data[] = $row;
+        }
+        $stmt->close();
+    }
+    
+    // Store report data in session for printing
+    $_SESSION['print_report'] = [
+        'title' => $report_title,
+        'type' => $report_type,
+        'data' => $report_data,
+        'start_date' => $start_date,
+        'end_date' => $end_date,
+        'generated_at' => date('Y-m-d H:i:s')
+    ];
+    
+    header("Location: admin_dashboard.php?show_print=true");
+    exit;
+}
+
+// --------------------
 // FETCH DASHBOARD DATA
 // --------------------
 $totalSales = 0;
@@ -264,7 +440,7 @@ if ($res = $conn->query("SELECT SUM(amount) AS total_sales FROM pending_deliveri
 }
 
 $totalProducts = 0;
-if ($res = $conn->query("SELECT COUNT(*) AS cnt FROM products")) { $r = $res->fetch_assoc(); $totalProducts = intval($r['cnt']); }
+if ($res = $conn->query("SELECT COUNT(*) AS cnt FROM products WHERE name NOT LIKE 'CATEGORY_%'")) { $r = $res->fetch_assoc(); $totalProducts = intval($r['cnt']); }
 
 $pendingCount = 0;
 if ($res = $conn->query("SELECT COUNT(*) AS cnt FROM pending_deliveries WHERE status = 'Pending'")) { $r = $res->fetch_assoc(); $pendingCount = intval($r['cnt']); }
@@ -293,7 +469,7 @@ for ($i=11;$i>=0;$i--) {
 
 // Category distribution
 $catLabels = []; $catData = [];
-if ($res = $conn->query("SELECT category, COUNT(*) AS cnt FROM products GROUP BY category")) {
+if ($res = $conn->query("SELECT category, COUNT(*) AS cnt FROM products WHERE name NOT LIKE 'CATEGORY_%' GROUP BY category")) {
     while ($r = $res->fetch_assoc()) { $catLabels[] = $r['category']; $catData[] = intval($r['cnt']); }
 }
 
@@ -306,13 +482,21 @@ if ($res = $conn->query("SELECT id, username, amount, payment_method, status, cr
 }
 
 // Products and pending lists for tables
-$products = []; if ($res = $conn->query("SELECT * FROM products ORDER BY id DESC LIMIT 200")) while ($r=$res->fetch_assoc()) $products[] = $r;
+$products = []; if ($res = $conn->query("SELECT * FROM products WHERE name NOT LIKE 'CATEGORY_%' ORDER BY id DESC LIMIT 200")) while ($r=$res->fetch_assoc()) $products[] = $r;
 $pendingDeliveries = []; if ($res = $conn->query("SELECT id, username, phone, location, payment_method, amount, status, created_at FROM pending_deliveries ORDER BY id DESC LIMIT 200")) while ($r=$res->fetch_assoc()) $pendingDeliveries[] = $r;
 
 // Notifications list
 $notifications = [];
 if ($res = $conn->query("SELECT id, user_id, message, created_at FROM notifications ORDER BY created_at DESC LIMIT 200")) {
     while ($r = $res->fetch_assoc()) $notifications[] = $r;
+}
+
+// Fetch categories for management (exclude dummy category products)
+$categories = [];
+if ($res = $conn->query("SELECT DISTINCT category, COUNT(*) as product_count FROM products WHERE name NOT LIKE 'CATEGORY_%' GROUP BY category ORDER BY category")) {
+    while ($r = $res->fetch_assoc()) {
+        $categories[] = $r;
+    }
 }
 
 // JSON for charts
@@ -425,6 +609,27 @@ body.dark .modal {
     width: 100%;
 }
 
+/* Print Styles */
+@media print {
+    body * {
+        visibility: hidden;
+    }
+    #printableReport, #printableReport * {
+        visibility: visible;
+    }
+    #printableReport {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        background: white;
+        padding: 20px;
+    }
+    .btn, .sidebar, .topbar, .panel:not(#printableReport) {
+        display: none !important;
+    }
+}
+
 /* spacing/responsive */
 @media (max-width:1100px) {
     .card-row{ grid-template-columns: repeat(2,1fr) }
@@ -463,6 +668,7 @@ textarea { resize: vertical; min-height: 60px; }
         <nav class="menu" aria-label="Sidebar menu">
             <a href="#" data-section="overview" class="active"><i class="fa fa-home"></i> Dashboard</a>
             <a href="#" data-section="products"><i class="fa fa-box"></i> Products</a>
+            <a href="#" data-section="categories"><i class="fa fa-tags"></i> Categories</a>
             <a href="#" data-section="deliveries"><i class="fa fa-truck"></i> Deliveries</a>
             <a href="#" data-section="reports"><i class="fa fa-chart-line"></i> Reports</a>
             <a href="#" data-section="notifications"><i class="fa fa-bell"></i> Notifications</a>
@@ -668,6 +874,66 @@ textarea { resize: vertical; min-height: 60px; }
             </div>
         </section>
 
+        <!-- Categories Section -->
+        <section id="categoriesSection" style="display:none;">
+            <div class="panel" style="margin-bottom:16px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h3 style="margin:0;">Manage Categories</h3>
+                    <div>
+                        <button class="btn secondary small" id="addCategoryBtn">Add New Category</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Category Name</th>
+                            <th>Product Count</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="categoriesTable">
+                        <?php if (count($categories) === 0): ?>
+                            <tr><td colspan="3">No categories found.</td></tr>
+                        <?php else: foreach ($categories as $cat): ?>
+                        <tr>
+                            <td><?php echo htmlspecialchars($cat['category']); ?></td>
+                            <td><?php echo htmlspecialchars($cat['product_count']); ?></td>
+                            <td>
+                                <button class="small btn secondary" onclick="openEditCategory('<?php echo htmlspecialchars($cat['category']); ?>')">Edit</button>
+                                <a class="small btn" style="background:#ff5b5b; padding:6px 8px;" 
+                                   href="?delete_category=<?php echo urlencode($cat['category']); ?>" 
+                                   onclick="return confirm('Delete category <?php echo htmlspecialchars(addslashes($cat['category'])); ?>? This will only work if no products are assigned to this category.')">
+                                   Delete
+                                </a>
+                            </td>
+                        </tr>
+                        <?php endforeach; endif; ?>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Add/Edit Category Form -->
+            <div class="panel" id="category-form-section" style="margin-top:16px;">
+                <h4 style="margin:0 0 8px 0;" id="categoryFormTitle">Add Category</h4>
+                <form id="categoryForm" method="POST" action="admin_dashboard.php">
+                    <input type="hidden" name="category_action" id="categoryAction" value="add">
+                    <input type="hidden" name="category_id" id="categoryId" value="">
+                    <div style="display:flex; flex-direction:column; gap:10px;">
+                        <input id="categoryName" name="category_name" placeholder="Category name" required 
+                               style="padding:10px; border-radius:8px; border:1px solid #e6eefc;" />
+                        <div style="display:flex; gap:10px;">
+                            <button class="btn" type="submit" id="categorySubmitBtn">Add Category</button>
+                            <button type="button" id="clearCategory" class="btn secondary">Clear</button>
+                            <button type="button" id="cancelEditCategory" class="btn secondary" style="display:none;">Cancel</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </section>
+
         <!-- Deliveries Section -->
         <section id="deliveriesSection" style="display:none;">
             <div class="panel">
@@ -707,8 +973,138 @@ textarea { resize: vertical; min-height: 60px; }
 
         <!-- Reports Section -->
         <section id="reportsSection" style="display:none;">
+            <div class="panel" style="margin-bottom:16px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h3 style="margin:0;">Sales Reports & Analytics</h3>
+                    <div>
+                        <button class="btn secondary small" id="printReportBtn">Print Report</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Print Report Form -->
+            <div class="panel" style="margin-bottom:16px;">
+                <h4 style="margin:0 0 12px 0;">Generate Printable Report</h4>
+                <form method="GET" action="admin_dashboard.php" id="reportForm">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr auto auto; gap:10px; align-items:end;">
+                        <div>
+                            <label style="display:block; margin-bottom:5px; font-size:14px;">Report Type</label>
+                            <select name="print_report" required style="width:100%; padding:10px; border-radius:8px; border:1px solid #e6eefc;">
+                                <option value="sales_summary">Sales Summary</option>
+                                <option value="category_sales">Category Sales</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="display:block; margin-bottom:5px; font-size:14px;">Start Date</label>
+                            <input type="date" name="start_date" value="<?php echo date('Y-m-01'); ?>" 
+                                   style="width:100%; padding:10px; border-radius:8px; border:1px solid #e6eefc;">
+                        </div>
+                        <div>
+                            <label style="display:block; margin-bottom:5px; font-size:14px;">End Date</label>
+                            <input type="date" name="end_date" value="<?php echo date('Y-m-t'); ?>" 
+                                   style="width:100%; padding:10px; border-radius:8px; border:1px solid #e6eefc;">
+                        </div>
+                        <div>
+                            <button class="btn" type="submit">Generate Report</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Print Report Preview -->
+            <?php if (isset($_GET['show_print']) && isset($_SESSION['print_report'])): 
+                $report = $_SESSION['print_report'];
+            ?>
+            <div class="panel" id="printableReport">
+                <div style="text-align:center; margin-bottom:20px; padding-bottom:15px; border-bottom:2px solid #e6eefc;">
+                    <h2 style="margin:0; color:var(--primary);">CampusShop - <?php echo htmlspecialchars($report['title']); ?></h2>
+                    <p style="margin:5px 0; color:var(--muted);">
+                        Period: <?php echo htmlspecialchars($report['start_date']); ?> to <?php echo htmlspecialchars($report['end_date']); ?>
+                    </p>
+                    <p style="margin:0; color:var(--muted); font-size:14px;">
+                        Generated on: <?php echo htmlspecialchars($report['generated_at']); ?>
+                    </p>
+                </div>
+
+                <?php if ($report['type'] === 'sales_summary'): ?>
+                <table style="width:100%; border-collapse:collapse; margin-top:15px;">
+                    <thead>
+                        <tr style="background:linear-gradient(90deg,var(--primary),var(--primary-2)); color:#fff;">
+                            <th style="padding:12px; text-align:left;">Date</th>
+                            <th style="padding:12px; text-align:right;">Orders</th>
+                            <th style="padding:12px; text-align:right;">Total Amount</th>
+                            <th style="padding:12px; text-align:right;">Avg. Order Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php 
+                        $grand_total = 0;
+                        $total_orders = 0;
+                        foreach ($report['data'] as $row): 
+                            $grand_total += $row['total_amount'];
+                            $total_orders += $row['order_count'];
+                        ?>
+                        <tr style="border-bottom:1px solid #f1f5f9;">
+                            <td style="padding:10px;"><?php echo htmlspecialchars($row['sale_date']); ?></td>
+                            <td style="padding:10px; text-align:right;"><?php echo number_format($row['order_count']); ?></td>
+                            <td style="padding:10px; text-align:right;">UGX <?php echo number_format($row['total_amount'], 2); ?></td>
+                            <td style="padding:10px; text-align:right;">UGX <?php echo number_format($row['avg_order_value'], 2); ?></td>
+                        </tr>
+                        <?php endforeach; ?>
+                        <tr style="background:#f8fafc; font-weight:bold;">
+                            <td style="padding:12px;">TOTAL</td>
+                            <td style="padding:12px; text-align:right;"><?php echo number_format($total_orders); ?></td>
+                            <td style="padding:12px; text-align:right;">UGX <?php echo number_format($grand_total, 2); ?></td>
+                            <td style="padding:12px; text-align:right;">UGX <?php echo number_format($total_orders > 0 ? $grand_total / $total_orders : 0, 2); ?></td>
+                        </tr>
+                    </tbody>
+                </table>
+                <?php elseif ($report['type'] === 'category_sales'): ?>
+                <table style="width:100%; border-collapse:collapse; margin-top:15px;">
+                    <thead>
+                        <tr style="background:linear-gradient(90deg,var(--primary),var(--primary-2)); color:#fff;">
+                            <th style="padding:12px; text-align:left;">Category</th>
+                            <th style="padding:12px; text-align:right;">Products</th>
+                            <th style="padding:12px; text-align:right;">Estimated Value</th>
+                            <th style="padding:12px; text-align:right;">Percentage</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php 
+                        $grand_total = 0;
+                        foreach ($report['data'] as $row) {
+                            $grand_total += $row['estimated_value'];
+                        }
+                        foreach ($report['data'] as $row): 
+                            $percentage = $grand_total > 0 ? ($row['estimated_value'] / $grand_total) * 100 : 0;
+                        ?>
+                        <tr style="border-bottom:1px solid #f1f5f9;">
+                            <td style="padding:10px;"><?php echo htmlspecialchars($row['category']); ?></td>
+                            <td style="padding:10px; text-align:right;"><?php echo number_format($row['product_count']); ?></td>
+                            <td style="padding:10px; text-align:right;">UGX <?php echo number_format($row['estimated_value'], 2); ?></td>
+                            <td style="padding:10px; text-align:right;"><?php echo number_format($percentage, 1); ?>%</td>
+                        </tr>
+                        <?php endforeach; ?>
+                        <tr style="background:#f8fafc; font-weight:bold;">
+                            <td style="padding:12px;">TOTAL</td>
+                            <td style="padding:12px; text-align:right;"><?php echo number_format(array_sum(array_column($report['data'], 'product_count'))); ?></td>
+                            <td style="padding:12px; text-align:right;">UGX <?php echo number_format($grand_total, 2); ?></td>
+                            <td style="padding:12px; text-align:right;">100%</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <?php endif; ?>
+
+                <div style="margin-top:20px; text-align:center;">
+                    <button class="btn" onclick="window.print()">Print Report</button>
+                    <a href="admin_dashboard.php?section=reports" class="btn secondary">Close</a>
+                </div>
+            </div>
+            <?php unset($_SESSION['print_report']); endif; ?>
+
+            <!-- Existing Charts -->
             <div class="panel">
-                <h3 style="margin:0 0 10px 0;">Sales Reports</h3>
+                <h3 style="margin:0 0 10px 0;">Sales Analytics</h3>
                 <p style="color:var(--muted)">Sales summary and category distribution.</p>
                 <div style="display:flex; gap:16px; margin-top:12px; flex-wrap:wrap;">
                     <div style="flex:1; min-width:350px; background:var(--card); padding:12px; border-radius:8px;">
@@ -852,6 +1248,7 @@ textarea { resize: vertical; min-height: 60px; }
     const sections = {
         overview: document.getElementById('overviewSection'),
         products: document.getElementById('productsSection'),
+        categories: document.getElementById('categoriesSection'),
         deliveries: document.getElementById('deliveriesSection'),
         reports: document.getElementById('reportsSection'),
         notifications: document.getElementById('notificationsSection'),
@@ -883,6 +1280,10 @@ textarea { resize: vertical; min-height: 60px; }
             r.style.display = txt.includes(q) ? '' : 'none';
         });
         document.querySelectorAll('#pendingTable tr').forEach(r => {
+            const txt = r.innerText.toLowerCase();
+            r.style.display = txt.includes(q) ? '' : 'none';
+        });
+        document.querySelectorAll('#categoriesTable tr').forEach(r => {
             const txt = r.innerText.toLowerCase();
             r.style.display = txt.includes(q) ? '' : 'none';
         });
@@ -947,48 +1348,87 @@ textarea { resize: vertical; min-height: 60px; }
         document.getElementById('addProductForm').reset();
     });
 
-        // Edit Product
+    // Edit Product
     function openEditProduct(id) {
-    console.log('Fetching product with ID:', id); // Debug log
-    fetch('admin_dashboard.php?fetch_product=' + encodeURIComponent(id))
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok: ' + response.status + ' ' + response.statusText);
-            }
-            return response.json();
-        })
-        .then(data => {
-            console.log('Response data:', data); // Debug log
-            if (data.error) {
-                console.error('Fetch error:', data.error);
-                alert(data.error);
-                return;
-            }
-            // Populate form fields
-            document.getElementById('editProductHiddenId').value = data.id;
-            document.getElementById('editName').value = data.name || '';
-            document.getElementById('editPrice').value = data.price || '';
-            document.getElementById('editStock').value = data.stock || 0;
-            document.getElementById('editCategory').value = data.category || '';
-            document.getElementById('editCaption').value = data.caption || '';
+        console.log('Fetching product with ID:', id);
+        fetch('admin_dashboard.php?fetch_product=' + encodeURIComponent(id))
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok: ' + response.status + ' ' + response.statusText);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Response data:', data);
+                if (data.error) {
+                    console.error('Fetch error:', data.error);
+                    alert(data.error);
+                    return;
+                }
+                // Populate form fields
+                document.getElementById('editProductHiddenId').value = data.id;
+                document.getElementById('editName').value = data.name || '';
+                document.getElementById('editPrice').value = data.price || '';
+                document.getElementById('editStock').value = data.stock || 0;
+                document.getElementById('editCategory').value = data.category || '';
+                document.getElementById('editCaption').value = data.caption || '';
 
-            // Show current image
-            if (data.image_path) {
-                document.getElementById('editCurrentImage').innerHTML =
-                    '<img src="' + data.image_path + '" alt="Current image" style="width:100px; height:100px; object-fit:cover; border-radius:8px; margin-bottom:5px;">' +
-                    '<small style="color:var(--muted);">New image will replace this</small>';
-            } else {
-                document.getElementById('editCurrentImage').innerHTML =
-                    '<div style="width:100px; height:100px; background:#eef3ff; border-radius:8px; display:flex; align-items:center; justify-content:center; color:var(--muted);">No image</div>';
-            }
+                // Show current image
+                if (data.image_path) {
+                    document.getElementById('editCurrentImage').innerHTML =
+                        '<img src="' + data.image_path + '" alt="Current image" style="width:100px; height:100px; object-fit:cover; border-radius:8px; margin-bottom:5px;">' +
+                        '<small style="color:var(--muted);">New image will replace this</small>';
+                } else {
+                    document.getElementById('editCurrentImage').innerHTML =
+                        '<div style="width:100px; height:100px; background:#eef3ff; border-radius:8px; display:flex; align-items:center; justify-content:center; color:var(--muted);">No image</div>';
+                }
 
-            document.getElementById('editProductModal').style.display = 'block';
-        })
-        .catch(err => {
-            console.error('Error fetching product:', err);
-            alert('Could not fetch product information. Please try again or check the console for details.');
-        });
-}
+                document.getElementById('editProductModal').style.display = 'block';
+            })
+            .catch(err => {
+                console.error('Error fetching product:', err);
+                alert('Could not fetch product information. Please try again or check the console for details.');
+            });
+    }
+
+    function closeEditProduct() {
+        document.getElementById('editProductModal').style.display = 'none';
+    }
+
+    // Category Management Functions
+    function openEditCategory(categoryName) {
+        document.getElementById('categoryAction').value = 'edit';
+        document.getElementById('categoryFormTitle').textContent = 'Edit Category';
+        document.getElementById('categoryName').value = categoryName;
+        document.getElementById('categoryId').value = categoryName;
+        document.getElementById('categorySubmitBtn').textContent = 'Update Category';
+        document.getElementById('cancelEditCategory').style.display = 'inline-block';
+        
+        document.getElementById('category-form-section').scrollIntoView({behavior: 'smooth', block: 'center'});
+    }
+
+    function resetCategoryForm() {
+        document.getElementById('categoryForm').reset();
+        document.getElementById('categoryAction').value = 'add';
+        document.getElementById('categoryFormTitle').textContent = 'Add Category';
+        document.getElementById('categorySubmitBtn').textContent = 'Add Category';
+        document.getElementById('cancelEditCategory').style.display = 'none';
+        document.getElementById('categoryId').value = '';
+    }
+
+    // Event Listeners for Category Management
+    document.getElementById('addCategoryBtn').addEventListener('click', function() {
+        resetCategoryForm();
+        document.getElementById('category-form-section').scrollIntoView({behavior: 'smooth', block: 'center'});
+    });
+
+    document.getElementById('clearCategory').addEventListener('click', resetCategoryForm);
+    document.getElementById('cancelEditCategory').addEventListener('click', resetCategoryForm);
+
+    // Print Report functionality
+    document.getElementById('printReportBtn')?.addEventListener('click', function() {
+        document.getElementById('reportForm').scrollIntoView({behavior: 'smooth', block: 'center'});
+    });
 
     // Edit Notification
     const editNotificationModal = document.getElementById('editNotificationModal');
