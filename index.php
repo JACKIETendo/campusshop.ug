@@ -18,7 +18,7 @@ if (!isset($_SESSION['guest_favorites'])) {
 if (isset($_SESSION['user_id']) && !empty($_SESSION['guest_favorites'])) {
     $user_id = $_SESSION['user_id'];
     foreach ($_SESSION['guest_favorites'] as $product_id) {
-        $product_id = (int)$product_id; // Ensure integer
+        $product_id = (int)$product_id;
         $stmt = $conn->prepare("SELECT * FROM favorites WHERE user_id = ? AND product_id = ?");
         $stmt->bind_param("ii", $user_id, $product_id);
         $stmt->execute();
@@ -104,7 +104,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_favorite'])) {
 
 // Handle feedback submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
-    // Ensure database connection is valid
     if (!$conn || $conn->connect_error) {
         $response = ['success' => false, 'message' => 'Database connection failed.'];
         header('Content-Type: application/json');
@@ -146,43 +145,69 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
     exit();
 }
 
-/* Optional: Handle chatbot submission (uncomment to enable logging)
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_chat'])) {
-    if (!$conn || $conn->connect_error) {
-        $response = ['success' => false, 'message' => 'Database connection failed.'];
-        header('Content-Type: application/json');
-        echo json_encode($response);
-        exit();
-    }
-
-    $message = trim($_POST['message']);
-    $response_text = trim($_POST['response']);
-    $user_id = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
-
-    if (empty($message) || empty($response_text)) {
-        $response = ['success' => false, 'message' => 'Message and response are required.'];
+// Handle newsletter subscription
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['subscribe_newsletter'])) {
+    $email = trim($_POST['newsletter_email']);
+    
+    if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $response = ['success' => false, 'message' => 'Please enter a valid email address.'];
     } else {
-        $stmt = $conn->prepare("INSERT INTO chat_logs (user_id, message, response, created_at) VALUES (?, ?, ?, NOW())");
-        if (!$stmt) {
-            $response = ['success' => false, 'message' => 'Failed to prepare query: ' . $conn->error];
-            error_log("Prepare failed: " . $conn->error);
-        } else {
-            $stmt->bind_param("iss", $user_id, $message, $response_text);
+        // Check if newsletter_subscribers table exists, if not create it
+        $table_check = $conn->query("SHOW TABLES LIKE 'newsletter_subscribers'");
+        if ($table_check->num_rows == 0) {
+            // Create the table
+            $create_table = $conn->query("CREATE TABLE newsletter_subscribers (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                email VARCHAR(255) UNIQUE NOT NULL,
+                subscribed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )");
+        }
+        
+        $stmt = $conn->prepare("INSERT INTO newsletter_subscribers (email, subscribed_at) VALUES (?, NOW()) ON DUPLICATE KEY UPDATE subscribed_at = NOW()");
+        if ($stmt) {
+            $stmt->bind_param("s", $email);
             if ($stmt->execute()) {
-                $response = ['success' => true, 'message' => 'Chat logged successfully!'];
+                $response = ['success' => true, 'message' => 'Thank you for subscribing to our newsletter!'];
             } else {
-                $response = ['success' => false, 'message' => 'Failed to log chat: ' . $stmt->error];
-                error_log("Failed to log chat: " . $stmt->error);
+                $response = ['success' => false, 'message' => 'Failed to subscribe. Please try again.'];
             }
             $stmt->close();
+        } else {
+            $response = ['success' => false, 'message' => 'Database error. Please try again.'];
         }
     }
-
+    
     header('Content-Type: application/json');
     echo json_encode($response);
     exit();
 }
-*/
+
+// Get notifications count - UPDATED FOR YOUR TABLE STRUCTURE
+$notifications_count = 0;
+$recent_notifications = [];
+if (isset($_SESSION['user_id'])) {
+    // Check if notifications table exists
+    $table_check = $conn->query("SHOW TABLES LIKE 'notifications'");
+    if ($table_check->num_rows > 0) {
+        // Count all notifications (since there's no is_read column in your table)
+        $stmt = $conn->prepare("SELECT COUNT(*) as count FROM notifications");
+        if ($stmt) {
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $notifications_count = $result->fetch_assoc()['count'];
+            $stmt->close();
+        }
+        
+        // Get recent notifications for display
+        $stmt = $conn->prepare("SELECT * FROM notifications ORDER BY created_at DESC LIMIT 5");
+        if ($stmt) {
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $recent_notifications = $result->fetch_all(MYSQLI_ASSOC);
+            $stmt->close();
+        }
+    }
+}
 
 // Get favorites count
 $favorites_count = 0;
@@ -299,24 +324,42 @@ header {
     border: none;
     color: var(--white);
     cursor: pointer;
+    padding: 5px;
+    z-index: 1101;
 }
 
 .mobile-menu {
     position: fixed;
     top: 0;
     right: -100%;
-    width: 250px;
+    width: 280px;
     height: 100%;
-    background: rgba(255, 255, 255, 0.8);
+    background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(10px);
     padding: 2rem;
     z-index: 1100;
     transition: right 0.3s ease;
     overflow-y: auto;
+    box-shadow: -5px 0 15px rgba(0, 0, 0, 0.1);
 }
 
 .mobile-menu.active {
     right: 0;
+}
+
+.mobile-menu-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--light-gray);
+}
+
+.mobile-menu-title {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--primary-green);
 }
 
 .close-icon {
@@ -325,25 +368,25 @@ header {
     border: none;
     color: var(--dark-gray);
     cursor: pointer;
-    position: absolute;
-    top: 1rem;
-    right: 1rem;
+    padding: 5px;
 }
 
 .mobile-nav {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
-    margin-top: 2rem;
+    gap: 0.5rem;
 }
 
 .mobile-nav a {
     color: var(--dark-gray);
     text-decoration: none;
     font-size: 1rem;
-    padding: 0.5rem;
+    padding: 0.75rem 1rem;
     border-radius: 8px;
     transition: background 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
 .mobile-nav a:hover, .mobile-nav a.active {
@@ -362,6 +405,18 @@ header {
     font-weight: 500;
     padding: 0.5rem;
     border-radius: 8px;
+    background: var(--light-gray);
+    margin-bottom: 1rem;
+    text-align: center;
+}
+
+.mobile-username a {
+    color: var(--primary-green);
+    text-decoration: none;
+}
+
+.mobile-username a:hover {
+    text-decoration: underline;
 }
 
 .search-bar {
@@ -488,12 +543,12 @@ header {
     text-decoration: underline;
 }
 
-.cart-btn, .favorites-btn {
-            position: relative;
-            font-size: 20px;
-        }
+.cart-btn, .favorites-btn, .notifications-btn {
+    position: relative;
+    font-size: 20px;
+}
 
-.cart-count, .favorites-count {
+.cart-count, .favorites-count, .notifications-count {
     position: absolute;
     top: -6px;
     right: -6px;
@@ -509,7 +564,66 @@ header {
     font-weight: 600;
 }
 
-/* SCROLL TO TOP BUTTON - ADDED FROM FIRST CODE */
+/* Notifications Dropdown */
+.notifications-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background: var(--white);
+    border-radius: 8px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    width: 300px;
+    max-height: 400px;
+    overflow-y: auto;
+    z-index: 1000;
+    display: none;
+}
+
+.notifications-dropdown.active {
+    display: block;
+}
+
+.notification-item {
+    padding: 1rem;
+    border-bottom: 1px solid var(--light-gray);
+    cursor: pointer;
+    transition: background 0.3s ease;
+}
+
+.notification-item:last-child {
+    border-bottom: none;
+}
+
+.notification-item:hover {
+    background: var(--light-gray);
+}
+
+.notification-message {
+    font-size: 0.9rem;
+    color: var(--dark-gray);
+    margin-bottom: 0.5rem;
+}
+
+.notification-time {
+    font-size: 0.8rem;
+    color: var(--text-gray);
+}
+
+.view-all-notifications {
+    display: block;
+    text-align: center;
+    padding: 0.75rem;
+    background: var(--primary-green);
+    color: var(--white);
+    text-decoration: none;
+    font-weight: 500;
+    border-radius: 0 0 8px 8px;
+}
+
+.view-all-notifications:hover {
+    background: var(--secondary-green);
+}
+
 .scroll-to-top {
     position: fixed;
     bottom: 30px;
@@ -603,11 +717,11 @@ header {
 }
 
 .floating-btn.chatbot-btn {
-    color: var(--dark-gray); /* Ensure emoji is dark for visibility on yellow */
+    color: var(--dark-gray);
 }
 
 .floating-btn.chatbot-btn:hover {
-    color: var(--white); /* White on hover, consistent with bottom-bar */
+    color: var(--white);
 }
 
 .favorite-btn {
@@ -665,8 +779,8 @@ nav {
     bottom: 0;
     left: 0;
     right: 0;
-    background: rgba(255, 255, 255, 0.8); /* Match mobile-menu background */
-    backdrop-filter: blur(10px); /* Match mobile-menu frosted-glass effect */
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
     padding: 0.5rem;
     box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
     z-index: 1000;
@@ -680,10 +794,10 @@ nav {
 
 .bottom-bar-actions a,
 .bottom-bar-actions button {
-    color: var(--dark-gray); /* Changed from white to dark gray for better visibility */
+    color: var(--dark-gray);
     text-decoration: none;
     font-weight: 500;
-    font-size: 1.5rem; /* Slightly larger for better visibility */
+    font-size: 1.5rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -692,12 +806,12 @@ nav {
     transition: color 0.3s ease, transform 0.2s ease;
     position: relative;
     border: none;
-    background: none; /* Remove yellow background */
+    background: none;
 }
 
 .bottom-bar-actions a:hover,
 .bottom-bar-actions button:hover {
-    color: var(--secondary-green); /* Lighter blue on hover */
+    color: var(--secondary-green);
     transform: scale(1.1);
 }
 
@@ -723,6 +837,456 @@ nav {
 .bottom-bar-actions button:hover::after {
     opacity: 1;
     visibility: visible;
+}
+
+/* Enhanced Product Modal Styles */
+.product-modal-content {
+    max-width: 1200px;
+    width: 95%;
+    padding: 1.5rem;
+    max-height: 90vh;
+    overflow-y: auto;
+    background: var(--white);
+    border-radius: 12px;
+    position: relative;
+}
+
+.product-modal-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    align-items: start;
+}
+
+.product-modal-left {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.product-modal-image {
+    width: 100%;
+    max-height: 400px;
+    object-fit: contain;
+    border-radius: 12px;
+    background: var(--light-gray);
+    padding: 1rem;
+}
+
+.product-modal-thumbnails {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    padding: 0.5rem 0;
+}
+
+.thumbnail {
+    width: 60px;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 8px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: border-color 0.3s ease;
+}
+
+.thumbnail.active {
+    border-color: var(--primary-green);
+}
+
+.product-modal-right {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.product-modal-header {
+    border-bottom: 1px solid var(--light-gray);
+    padding-bottom: 1rem;
+}
+
+.product-modal-title {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--primary-green);
+    margin-bottom: 0.5rem;
+}
+
+.product-modal-price {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--secondary-green);
+    margin-bottom: 0.5rem;
+}
+
+.product-modal-caption {
+    color: var(--text-gray);
+    line-height: 1.6;
+}
+
+.product-actions {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.quantity-selector {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.quantity-input {
+    width: 80px;
+    padding: 8px;
+    border: 1px solid var(--text-gray);
+    border-radius: 6px;
+    text-align: center;
+    font-size: 1rem;
+}
+
+.action-btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.action-btn.primary {
+    background: var(--primary-green);
+    color: var(--white);
+}
+
+.action-btn.secondary {
+    background: var(--accent-yellow);
+    color: var(--dark-gray);
+}
+
+.action-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.action-btn.favorite-btn {
+    background: none;
+    border: 2px solid var(--text-gray);
+    padding: 8px 12px;
+}
+
+.action-btn.favorite-btn.favorited {
+    background: var(--error-red);
+    border-color: var(--error-red);
+    color: var(--white);
+}
+
+/* Enhanced Reviews Section */
+.product-reviews {
+    margin-top: 2rem;
+}
+
+.reviews-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.rating-summary {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.average-rating {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--primary-green);
+}
+
+.rating-stars {
+    color: var(--accent-yellow);
+    font-size: 1.2rem;
+}
+
+.review-form {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: var(--light-gray);
+    border-radius: 8px;
+}
+
+.rating-input {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.star-rating {
+    display: flex;
+    gap: 0.25rem;
+    cursor: pointer;
+}
+
+.star-rating .star {
+    font-size: 1.5rem;
+    color: var(--text-gray);
+    transition: color 0.2s ease;
+}
+
+.star-rating .star:hover,
+.star-rating .star.active {
+    color: var(--accent-yellow);
+}
+
+.review-form textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--text-gray);
+    border-radius: 8px;
+    font-size: 0.9rem;
+    resize: vertical;
+    min-height: 80px;
+    margin-bottom: 1rem;
+}
+
+.submit-review-btn {
+    background: var(--primary-green);
+    color: var(--white);
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background 0.3s ease;
+}
+
+.submit-review-btn:hover {
+    background: var(--secondary-green);
+}
+
+.review-item {
+    padding: 1rem;
+    border: 1px solid var(--light-gray);
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+.review-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.reviewer-name {
+    font-weight: 600;
+    color: var(--dark-gray);
+}
+
+.review-date {
+    color: var(--text-gray);
+    font-size: 0.9rem;
+}
+
+.review-text {
+    color: var(--text-gray);
+    line-height: 1.5;
+}
+
+/* Enhanced Related Products */
+.related-products-section {
+    margin-top: 2rem;
+    padding-top: 2rem;
+    border-top: 2px solid var(--light-gray);
+}
+
+.related-products-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.view-all-related {
+    color: var(--primary-green);
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.view-all-related:hover {
+    text-decoration: underline;
+}
+
+.related-products-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.related-product-card {
+    background: var(--white);
+    padding: 1rem;
+    border-radius: 8px;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: transform 0.3s ease;
+    cursor: pointer;
+    border: 1px solid var(--light-gray);
+}
+
+.related-product-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+}
+
+.related-product-image {
+    width: 100%;
+    height: 120px;
+    object-fit: contain;
+    margin-bottom: 0.5rem;
+    border-radius: 6px;
+}
+
+.related-product-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    color: var(--dark-gray);
+}
+
+.related-product-price {
+    font-size: 0.8rem;
+    color: var(--secondary-green);
+    font-weight: 600;
+}
+
+.share-section {
+    padding-top: 1rem;
+    border-top: 1px solid var(--light-gray);
+}
+
+.share-buttons {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.share-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    color: var(--white);
+    font-size: 1rem;
+}
+
+.share-btn.whatsapp { background: #25D366; }
+.share-btn.facebook { background: #1877F2; }
+.share-btn.telegram { background: #0088cc; }
+.share-btn.twitter { background: #1DA1F2; }
+
+.share-btn:hover {
+    transform: scale(1.1);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Newsletter Section */
+.newsletter-section {
+    background: var(--primary-green);
+    color: var(--white);
+    padding: 2rem 0;
+    margin-top: 2rem;
+}
+
+.newsletter-content {
+    text-align: center;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.newsletter-form {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1rem;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.newsletter-input {
+    flex: 1;
+    min-width: 250px;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+}
+
+.newsletter-btn {
+    background: var(--accent-yellow);
+    color: var(--dark-gray);
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.3s ease;
+}
+
+.newsletter-btn:hover {
+    background: var(--secondary-green);
+    color: var(--white);
+}
+
+/* FAQ Section */
+.faq-section {
+    background: var(--white);
+    padding: 3rem 0;
+}
+
+.faq-container {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.faq-item {
+    border: 1px solid var(--light-gray);
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    overflow: hidden;
+}
+
+.faq-question {
+    padding: 1.5rem;
+    background: var(--light-gray);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 600;
+}
+
+.faq-answer {
+    padding: 1.5rem;
+    display: none;
+    color: var(--text-gray);
+    line-height: 1.6;
+}
+
+.faq-item.active .faq-answer {
+    display: block;
 }
 
 .feedback-form {
@@ -880,33 +1444,6 @@ nav {
 
 .chatbot-messages::-webkit-scrollbar-thumb:hover {
     background: var(--secondary-green);
-}
-
-/* Share modal styles */
-.share-modal-content {
-    max-width: 500px;
-    width: 90%;
-    padding: 1.5rem;
-    text-align: center;
-}
-
-.share-buttons {
-    display: flex;
-    justify-content: center;
-    gap: 1rem;
-    flex-wrap: wrap;
-}
-
-.share-btn {
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.5rem;
-    text-decoration: none;
-    transition: background 0.3s ease, transform 0.2s ease;
 }
 
 .hero {
@@ -1169,13 +1706,6 @@ nav {
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
 }
 
-.image-modal-content .caption {
-    display: block;
-    font-size: 1.1rem;
-    color: var(--text-gray);
-    margin-bottom: 0.75rem;
-}
-
 .no-results {
     text-align: center;
     font-size: 1.1rem;
@@ -1194,6 +1724,7 @@ nav {
     z-index: 2000;
     align-items: center;
     justify-content: center;
+    padding: 1rem;
 }
 
 .modal-content {
@@ -1210,29 +1741,6 @@ nav {
     text-align: center;
 }
 
-.image-modal-content {
-    background: var(--white);
-    border-radius: 12px;
-    padding: 2.5rem;
-    max-width: 90%;
-    width: 600px;
-    max-height: 85vh;
-    overflow-y: auto;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-    position: relative;
-    animation: fadeIn 0.3s ease-out;
-    text-align: center;
-}
-
-.image-modal-content img {
-    max-width: 100%;
-    height: auto;
-    max-height: 450px;
-    object-fit: contain;
-    border-radius: 8px;
-    margin-bottom: 1rem;
-}
-
 .modal-close {
     position: absolute;
     top: 1rem;
@@ -1242,6 +1750,7 @@ nav {
     font-size: 1.5rem;
     color: var(--text-gray);
     cursor: pointer;
+    z-index: 1;
 }
 
 .modal-close:hover {
@@ -1332,143 +1841,42 @@ footer {
     color: var(--text-gray);
 }
 
-.image-modal-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1.5rem;
-    align-items: start;
+.fade-in {
+    animation: fadeIn 0.6s ease-out;
 }
 
-.image-modal-left {
-    display: flex;
-    justify-content: center;
-    align-items: center;
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
-.image-modal-right {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
-.image-modal-content h4 {
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: var(--primary-green);
-    margin-bottom: 0.5rem;
+@keyframes slideInFromRight {
+    from {
+        transform: translateX(100%);
+    }
+    to {
+        transform: translateX(0);
+    }
 }
 
-.image-modal-content .caption {
-    font-size: 1rem;
-    color: var(--text-gray);
-    margin-bottom: 0.5rem;
-}
-
-.image-modal-content .price {
-    font-size: 1.2rem;
-    font-weight: 500;
-    color: var(--dark-gray);
-    margin-bottom: 1rem;
-}
-
-.modal-form {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-}
-
-.form-group {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-}
-
-.action-btn {
-    color: var(--dark-gray);
-    padding: 10px 20px;
-    border: none;
-    border-radius: 8px;
-    font-size: 0.9rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.3s ease, color 0.3s ease, transform 0.2s ease;
-}
-
-.action-btn:hover {
-    background: var(--secondary-green);
-    color: var(--white);
-    transform: translateY(-2px);
-}
-
-.action-btn.favorite-btn {
-    padding: 5px;
-    font-size: 1rem;
-    width: 35%;
-}
-
-.action-btn.favorite-btn.favorited {
-    color: var(--error-red);
-}
-
-.share-section {
-    margin-top: 1rem;
-    padding-top: 1rem;
-    border-top: 1px solid var(--light-gray);
-}
-
-.share-section h5 {
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--primary-green);
-    margin-bottom: 0.75rem;
-}
-
-.share-buttons {
-    display: flex;
-    gap: 1rem;
-    justify-content: flex-start;
-    flex-wrap: wrap;
-}
-
-.share-btn {
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.5rem;
-    text-decoration: none;
-    transition: background 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease;
-    position: relative;
-}
-
-.share-btn:hover {
-    transform: scale(1.1);
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
-}
-
-.share-btn::after {
-    content: attr(data-platform);
-    position: absolute;
-    bottom: 60px;
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 5px 10px;
-    border-radius: 4px;
-    font-size: 0.8rem;
-    white-space: nowrap;
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.2s ease, visibility 0.2s ease;
-}
-
-.share-btn:hover::after {
-    opacity: 1;
-    visibility: visible;
-}
-
-/* Responsive adjustments for small screens */
+/* Responsive adjustments */
 @media (max-width: 900px) {
     .scroll-to-top {
         bottom: 80px;
@@ -1476,6 +1884,20 @@ footer {
         width: 45px;
         height: 45px;
         font-size: 1.1rem;
+    }
+    
+    .product-modal-grid {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+    }
+    
+    .product-modal-image {
+        max-height: 300px;
+    }
+    
+    .notifications-dropdown {
+        width: 280px;
+        right: -50px;
     }
 }
 
@@ -1556,25 +1978,32 @@ footer {
         font-size: 0.8rem;
     }
 
-    .image-modal-content {
+    .product-modal-content {
         width: 95%;
         padding: 1rem;
+        margin: 1rem;
     }
 
-    .image-modal-content img {
-        max-height: 300px;
+    .product-actions {
+        flex-direction: column;
+        align-items: stretch;
     }
 
-    .image-modal-content h4 {
-        font-size: 1rem;
+    .action-btn {
+        width: 100%;
+        justify-content: center;
     }
 
-    .image-modal-content .caption {
-        font-size: 0.9rem;
+    .related-products-grid {
+        grid-template-columns: repeat(2, 1fr);
     }
 
-    .image-modal-content .price {
-        font-size: 1rem;
+    .newsletter-form {
+        flex-direction: column;
+    }
+
+    .newsletter-input {
+        min-width: auto;
     }
 
     .slider-arrow {
@@ -1599,80 +2028,10 @@ footer {
         padding: 8px 15px;
         font-size: 0.8rem;
     }
-
-    .image-modal-content {
-        width: 95%;
-        padding: 1rem;
-    }
-
-    .image-modal-grid {
-        grid-template-columns: 1fr; /* Stack vertically on smaller screens */
-        gap: 1rem;
-    }
-
-    .image-modal-left img {
-        max-height: 300px; /* Adjusted for smaller screens */
-    }
-
-    .image-modal-content h4 {
-        font-size: 1.4rem;
-    }
-
-    .image-modal-content .caption {
-        font-size: 0.9rem;
-    }
-
-    .image-modal-content .price {
-        font-size: 1.1rem;
-    }
-
-    .form-group {
-        gap: 0.5rem;
-    }
-
-    .quantity-input {
-        width: 70px;
-        padding: 6px;
-        font-size: 0.8rem;
-    }
-
-    .action-btn {
-        padding: 6px 12px;
-        font-size: 0.8rem;
-    }
-
-    .action-btn.favorite-btn {
-        padding: 6px 12px;
-        font-size: 1rem;
-        min-width: 45px;
-    }
-
-    .share-btn {
-        width: 36px;
-        height: 36px;
-        font-size: 1rem;
-    }
-
-    .share-btn img {
-        width: 20px;
-        height: 20px;
-    }
-
-    .form-group {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    .action-btn {
-        padding: 8px 8px;
-        font-size: 1rem;
-        width: 35%;
-    }
-
-    .share-btn {
-        width: 45px;
-        height: 45px;
-        font-size: 1.2rem;
+    
+    .notifications-dropdown {
+        width: 250px;
+        right: -30px;
     }
 }
 
@@ -1742,66 +2101,27 @@ footer {
     }
 
     .bottom-bar-actions a, .bottom-bar-actions button {
-        font-size: 1.2rem; /* Smaller icons for very small screens */
+        font-size: 1.2rem;
         width: 36px;
         height: 36px;
     }
 
-    .image-modal-content {
-        width: 95%;
+    .product-modal-content {
+        width: 98%;
         padding: 0.8rem;
+        margin: 0.5rem;
     }
 
-    .image-modal-grid {
-        gap: 0.5rem;
+    .product-modal-title {
+        font-size: 1.4rem;
     }
 
-    .image-modal-left img {
-        max-height: 250px;
-    }
-
-    .image-modal-content h4 {
+    .product-modal-price {
         font-size: 1.2rem;
     }
 
-    .image-modal-content .caption {
-        font-size: 0.8rem;
-    }
-
-    .image-modal-content .price {
-        font-size: 0.9rem;
-    }
-
-    .form-group {
-        gap: 0.4rem;
-    }
-
-    .quantity-input {
-        width: 60px;
-        padding: 5px;
-        font-size: 0.7rem;
-    }
-
-    .action-btn {
-        padding: 5px 10px;
-        font-size: 0.7rem;
-    }
-
-    .action-btn.favorite-btn {
-        padding: 5px 10px;
-        font-size: 0.9rem;
-        min-width: 40px;
-    }
-
-    .share-btn {
-        width: 32px;
-        height: 32px;
-        font-size: 0.9rem;
-    }
-
-    .share-btn img {
-        width: 18px;
-        height: 18px;
+    .related-products-grid {
+        grid-template-columns: 1fr;
     }
 
     .slider-arrow {
@@ -1826,104 +2146,14 @@ footer {
         padding: 8px 15px;
         font-size: 0.8rem;
     }
-
-    .share-modal-content {
-        width: 95%;
-        padding: 1rem;
+    
+    .notifications-dropdown {
+        width: 220px;
+        right: -20px;
     }
-
-    .share-btn {
-        width: 50px;
-        height: 50px;
-        font-size: 1.2rem;
-    }
-
-    .image-modal-content {
-        width: 95%;
-        padding: 0.8rem;
-    }
-
-    .image-modal-grid {
-        gap: 0.8rem;
-    }
-
-    .image-modal-content img {
-        max-height: 250px;
-    }
-
-    .image-modal-content h4 {
-        font-size: 1.1rem;
-    }
-
-    .image-modal-content .caption {
-        font-size: 0.8rem;
-    }
-
-    .image-modal-content .price {
-        font-size: 0.9rem;
-    }
-
-    .action-btn {
-        padding: 6px 12px;
-        font-size: 0.8rem;
-        width: 35%;
-    }
-
-    .share-btn {
-        width: 40px;
-        height: 40px;
-        font-size: 1.1rem;
-    }
-}
-
-.fade-in {
-    animation: fadeIn 0.6s ease-out;
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-@keyframes fadeInUp {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-@keyframes slideInFromRight {
-    from {
-        transform: translateX(100%);
-    }
-    to {
-        transform: translateX(0);
-    }
-}
-
-/* Optional: Add this if you revert to image-based icons for the bottom-bar */
-.bottom-bar-actions a img,
-.bottom-bar-actions button img {
-    height: 24px;
-    width: 24px;
-    object-fit: contain;
-}
-
-@media (max-width: 480px) {
-    .bottom-bar-actions a img,
-    .bottom-bar-actions button img {
-        height: 20px;
-        width: 20px;
+    
+    .mobile-menu {
+        width: 100%;
     }
 }
     </style>
@@ -1945,6 +2175,30 @@ footer {
                 <div class="header-actions">
                     <?php if (isset($_SESSION['username'])): ?>
                         <span class="username"><a href="profile.php">Hi, <?php echo htmlspecialchars($_SESSION['username']); ?></a></span>
+                        <div class="notifications-wrapper" style="position: relative;">
+                            <a href="profile.php?tab=notifications" class="header-btn notifications-btn">
+                                <i class="fas fa-bell"></i>
+                                <?php if ($notifications_count > 0): ?>
+                                    <span class="notifications-count"><?php echo $notifications_count; ?></span>
+                                <?php endif; ?>
+                            </a>
+                            <!-- Notifications Dropdown -->
+                            <div class="notifications-dropdown">
+                                <?php if (!empty($recent_notifications)): ?>
+                                    <?php foreach ($recent_notifications as $notification): ?>
+                                        <div class="notification-item">
+                                            <div class="notification-message"><?php echo htmlspecialchars($notification['message']); ?></div>
+                                            <div class="notification-time"><?php echo date('M j, Y g:i A', strtotime($notification['created_at'])); ?></div>
+                                        </div>
+                                    <?php endforeach; ?>
+                                <?php else: ?>
+                                    <div class="notification-item">
+                                        <div class="notification-message">No new notifications</div>
+                                    </div>
+                                <?php endif; ?>
+                                <a href="profile.php?tab=notifications" class="view-all-notifications">View All Notifications</a>
+                            </div>
+                        </div>
                         <a href="logout.php" class="header-btn"><i class="fas fa-sign-out-alt"></i></a>
                         <a href="favorites.php" class="header-btn favorites-btn">
                             <i class="fas fa-heart"></i>
@@ -1981,9 +2235,14 @@ footer {
                 </ul>
             </nav>
             <div class="mobile-menu">
-                <button class="close-icon">✖</button>
+                <div class="mobile-menu-header">
+                    <div class="mobile-menu-title">Menu</div>
+                    <button class="close-icon">✖</button>
+                </div>
                 <?php if (isset($_SESSION['username'])): ?>
-                    <span class="mobile-username"><a href="profile.php">Hi, <?php echo htmlspecialchars($_SESSION['username']); ?></a></span>
+                    <div class="mobile-username">
+                        <a href="profile.php">Hi, <?php echo htmlspecialchars($_SESSION['username']); ?></a>
+                    </div>
                 <?php endif; ?>
                 <div class="mobile-search-bar">
                     <input type="text" class="search-input" placeholder="Search for Textbooks, Branded Jumpers, Pens...">
@@ -1991,16 +2250,21 @@ footer {
                     <div class="search-results"></div>
                 </div>
                 <div class="mobile-nav">
-                    <a href="index.php" class="active">Home</a>
-                    <a href="textbooks.php">Textbooks</a>
-                    <a href="Branded Jumpers.php">Branded Jumpers</a>
-                    <a href="Pens.php">Pens</a>
-                    <a href="Wall Clocks.php">Wall Clocks</a>
-                    <a href="Note Books.php">Note Books</a>
-                    <a href="T-Shirts.php">T-Shirts</a>
-                    <a href="Bottles.php">Bottles</a>
-                    <a href="favorites.php">Favorites</a>
-                    <a href="logout.php">logout</a>
+                    <a href="index.php" class="active"><i class="fas fa-home"></i> Home</a>
+                    <a href="textbooks.php"><i class="fas fa-book"></i> Textbooks</a>
+                    <a href="Branded Jumpers.php"><i class="fas fa-tshirt"></i> Branded Jumpers</a>
+                    <a href="Pens.php"><i class="fas fa-pen"></i> Pens</a>
+                    <a href="Wall Clocks.php"><i class="fas fa-clock"></i> Wall Clocks</a>
+                    <a href="Note Books.php"><i class="fas fa-sticky-note"></i> Note Books</a>
+                    <a href="T-Shirts.php"><i class="fas fa-tshirt"></i> T-Shirts</a>
+                    <a href="Bottles.php"><i class="fas fa-wine-bottle"></i> Bottles</a>
+                    <a href="favorites.php"><i class="fas fa-heart"></i> Favorites</a>
+                    <a href="profile.php?tab=notifications"><i class="fas fa-bell"></i> Notifications</a>
+                    <?php if (isset($_SESSION['username'])): ?>
+                        <a href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a>
+                    <?php else: ?>
+                        <a href="login.php"><i class="fas fa-sign-in-alt"></i> Login</a>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -2012,6 +2276,11 @@ footer {
                 <a href="profile.php" data-tooltip="Profile"><i class="fas fa-user"></i></a>
                 <a href="favorites.php" data-tooltip="Favorites"><i class="fas fa-heart"></i> <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
                 <a href="cart.php" data-tooltip="Cart"><i class="fas fa-shopping-cart"></i> <span class="cart-count"><?php echo $cart_count; ?></span></a>
+                <a href="profile.php?tab=notifications" data-tooltip="Notifications"><i class="fas fa-bell"></i> 
+                    <?php if ($notifications_count > 0): ?>
+                        <span class="notifications-count"><?php echo $notifications_count; ?></span>
+                    <?php endif; ?>
+                </a>
                 <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback"><i class="fas fa-comments"></i></button>
                 <a href="https://wa.me/+256755087665" target="_blank" data-tooltip="Help"><i class="fab fa-whatsapp"></i></a>
             <?php else: ?>
@@ -2024,7 +2293,7 @@ footer {
         </div>
     </div>
 
-    <!-- SCROLL TO TOP BUTTON - ADDED FROM FIRST CODE -->
+    <!-- SCROLL TO TOP BUTTON -->
     <button class="scroll-to-top" id="scrollToTop" title="Back to Top">
         <i class="fas fa-arrow-up"></i>
     </button>
@@ -2104,34 +2373,94 @@ footer {
         </div>
     </div>
 
-    <div class="modal" id="image-modal">
-        <div class="modal-content image-modal-content">
-            <button class="modal-close" id="image-modal-close" aria-label="Close product modal">&times;</button>
-            <div class="image-modal-grid">
-                <div class="image-modal-left">
-                    <img id="modal-image" src="" alt="Product Image" loading="lazy">
+    <!-- Enhanced Product Modal -->
+    <div class="modal" id="product-modal">
+        <div class="modal-content product-modal-content">
+            <button class="modal-close" id="product-modal-close" aria-label="Close product modal">&times;</button>
+            <div class="product-modal-grid">
+                <div class="product-modal-left">
+                    <img id="product-modal-image" src="" alt="Product Image" class="product-modal-image" loading="lazy">
+                    <div class="product-modal-thumbnails" id="product-thumbnails">
+                        <!-- Thumbnails will be populated by JavaScript -->
+                    </div>
                 </div>
-                <div class="image-modal-right">
-                    <h4 id="modal-title"></h4>
-                    <p class="caption" id="modal-caption"></p>
-                    <p class="price" id="modal-price"></p>
-                    <form method="POST" action="index.php" id="modal-form" class="modal-form">
-                        <input type="hidden" name="product_id" id="modal-product-id">
-                        <div class="form-group">
-                            <label for="modal-quantity" class="sr-only">Quantity</label>
-                            <input type="number" name="quantity" id="modal-quantity" class="quantity-input" value="1" min="1" aria-label="Quantity">
-                            <button type="submit" name="add_to_cart" class="action-btn cart-btn" aria-label="Add to cart"><i class="fas fa-shopping-cart"></i></button>
-                            <button type="submit" name="toggle_favorite" class="action-btn favorite-btn" id="modal-favorite-btn" aria-label="Toggle favorite"><i class="fas fa-heart"></i></button>
+                <div class="product-modal-right">
+                    <div class="product-modal-header">
+                        <h3 id="product-modal-title" class="product-modal-title"></h3>
+                        <div id="product-modal-price" class="product-modal-price"></div>
+                        <p id="product-modal-caption" class="product-modal-caption"></p>
+                    </div>
+                    
+                    <div class="product-actions">
+                        <div class="quantity-selector">
+                            <label for="product-quantity">Quantity:</label>
+                            <input type="number" name="quantity" id="product-quantity" class="quantity-input" value="1" min="1" aria-label="Quantity">
                         </div>
-                    </form>
+                        <button type="button" class="action-btn primary" id="product-add-to-cart">
+                            <i class="fas fa-shopping-cart"></i> Add to Cart
+                        </button>
+                        <button type="button" class="action-btn favorite-btn" id="product-toggle-favorite">
+                            <i class="fas fa-heart"></i> Favorite
+                        </button>
+                    </div>
+
+                    <div class="product-reviews">
+                        <div class="reviews-header">
+                            <h4>Customer Reviews</h4>
+                            <div class="rating-summary">
+                                <div class="average-rating" id="average-rating">4.5</div>
+                                <div class="rating-stars">
+                                    <i class="fas fa-star"></i>
+                                    <i class="fas fa-star"></i>
+                                    <i class="fas fa-star"></i>
+                                    <i class="fas fa-star"></i>
+                                    <i class="fas fa-star-half-alt"></i>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Review Form -->
+                        <div class="review-form">
+                            <h5>Add Your Review</h5>
+                            <div class="rating-input">
+                                <label>Your Rating:</label>
+                                <div class="star-rating" id="star-rating">
+                                    <span class="star" data-rating="1">★</span>
+                                    <span class="star" data-rating="2">★</span>
+                                    <span class="star" data-rating="3">★</span>
+                                    <span class="star" data-rating="4">★</span>
+                                    <span class="star" data-rating="5">★</span>
+                                </div>
+                                <span id="rating-text">Click to rate</span>
+                            </div>
+                            <textarea id="review-comment" placeholder="Share your experience with this product..."></textarea>
+                            <button type="button" class="submit-review-btn" id="submit-review">Submit Review</button>
+                        </div>
+
+                        <div class="reviews-list" id="reviews-list">
+                            <!-- Reviews will be populated by JavaScript -->
+                        </div>
+                    </div>
+
                     <div class="share-section">
                         <h5>Share This Product</h5>
                         <div class="share-buttons">
                             <a href="#" class="share-btn whatsapp" data-platform="whatsapp" target="_blank" aria-label="Share on WhatsApp"><i class="fab fa-whatsapp"></i></a>
                             <a href="#" class="share-btn facebook" data-platform="facebook" target="_blank" aria-label="Share on Facebook"><i class="fab fa-facebook"></i></a>
                             <a href="#" class="share-btn telegram" data-platform="telegram" target="_blank" aria-label="Share on Telegram"><i class="fab fa-telegram"></i></a>
+                            <a href="#" class="share-btn twitter" data-platform="twitter" target="_blank" aria-label="Share on Twitter"><i class="fab fa-twitter"></i></a>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <div class="related-products-section">
+                <div class="related-products-header">
+                    <h4>Related Products</h4>
+                    <a href="#" class="view-all-related">View All</a>
+                </div>
+                <div class="related-products-grid" id="related-products">
+                    <!-- Related products will be populated by JavaScript -->
                 </div>
             </div>
         </div>
@@ -2193,7 +2522,14 @@ footer {
                             $image_path = !empty($row['image_path']) ? htmlspecialchars($row['image_path']) : 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+A8AAQAB3gB4cAAAAABJRU5ErkJggg==';
                             ?>
                             <div class="product-card">
-                                <img src="<?php echo $image_path; ?>" alt="<?php echo htmlspecialchars($row['name']); ?>" data-product-id="<?php echo $product_id; ?>" data-title="<?php echo htmlspecialchars($row['name']); ?>" data-caption="<?php echo htmlspecialchars($row['caption'] ?? 'No description available'); ?>" data-price="UGX <?php echo number_format($row['price']); ?>" data-favorited="<?php echo $is_favorited ? 'true' : 'false'; ?>">
+                                <img src="<?php echo $image_path; ?>" alt="<?php echo htmlspecialchars($row['name']); ?>" 
+                                     data-product-id="<?php echo $product_id; ?>" 
+                                     data-title="<?php echo htmlspecialchars($row['name']); ?>" 
+                                     data-caption="<?php echo htmlspecialchars($row['caption'] ?? 'No description available'); ?>" 
+                                     data-price="UGX <?php echo number_format($row['price']); ?>" 
+                                     data-favorited="<?php echo $is_favorited ? 'true' : 'false'; ?>"
+                                     data-category="<?php echo htmlspecialchars($row['category'] ?? 'general'); ?>"
+                                     class="product-image">
                                 <h4><?php echo htmlspecialchars($row['name']); ?></h4>
                                 <p class="caption"><?php echo htmlspecialchars($row['caption'] ?? 'No description available'); ?></p>
                                 <p class="price">Price: UGX <?php echo number_format($row['price']); ?></p>
@@ -2217,6 +2553,65 @@ footer {
         </div>
     </section>
 
+    <!-- FAQ Section -->
+    <section class="faq-section">
+        <div class="container">
+            <h2>Frequently Asked Questions</h2>
+            <div class="faq-container">
+                <div class="faq-item">
+                    <div class="faq-question">
+                        How long does delivery take?
+                        <i class="fas fa-chevron-down"></i>
+                    </div>
+                    <div class="faq-answer">
+                        We offer fast campus delivery within 24 hours to your dorm or campus pickup point. Orders placed before 2 PM are delivered the same day.
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <div class="faq-question">
+                        Do you offer student discounts?
+                        <i class="fas fa-chevron-down"></i>
+                    </div>
+                    <div class="faq-answer">
+                        Yes! Bugema University students with a valid student ID can enjoy exclusive discounts. Verify your ID at checkout to apply the discount.
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <div class="faq-question">
+                        What payment methods do you accept?
+                        <i class="fas fa-chevron-down"></i>
+                    </div>
+                    <div class="faq-answer">
+                        We accept mobile money (MTN, Airtel), cash on delivery, and credit/debit cards for online orders.
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <div class="faq-question">
+                        Can I return or exchange products?
+                        <i class="fas fa-chevron-down"></i>
+                    </div>
+                    <div class="faq-answer">
+                        Yes, we have a 7-day return policy for unused products in original packaging. Textbooks must be returned within 3 days of purchase.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Newsletter Section -->
+    <section class="newsletter-section">
+        <div class="container">
+            <div class="newsletter-content">
+                <h3>Stay Updated with CampusShop</h3>
+                <p>Subscribe to our newsletter for exclusive deals, new arrivals, and campus events</p>
+                <form id="newsletter-form" class="newsletter-form">
+                    <input type="email" name="newsletter_email" class="newsletter-input" placeholder="Enter your email address" required>
+                    <button type="submit" name="subscribe_newsletter" class="newsletter-btn">Subscribe</button>
+                </form>
+            </div>
+        </div>
+    </section>
+
     <footer>
         <div class="container">
             <div class="footer-content">
@@ -2228,7 +2623,7 @@ footer {
                     <h3>Quick Links</h3>
                     <ul>
                         <li><a href="https://wa.me/+256755087665" target="_blank">Contact</a></li>
-                        <li><a href="#">FAQs</a></li>
+                        <li><a href="#faq">FAQs</a></li>
                         <li><a href="Bottles.php">Bottles</a></li>
                         <li><a href="favorites.php">Favorites</a></li>
                     </ul>
@@ -2251,7 +2646,7 @@ footer {
 
     <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // SCROLL TO TOP FUNCTIONALITY - ADDED FROM FIRST CODE
+        // SCROLL TO TOP FUNCTIONALITY
         const scrollToTopBtn = document.getElementById('scrollToTop');
         window.addEventListener('scroll', function() {
             if (window.pageYOffset > 300) {
@@ -2265,366 +2660,473 @@ footer {
             window.scrollTo({ top: 0, behavior: 'smooth' });
         });
 
-        const observerOptions = {
-            threshold: 0.1,
-            rootMargin: '0px 0px -50px 0px'
-        };
-
-        const observer = new IntersectionObserver(function(entries) {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    entry.target.style.opacity = '1';
-                    entry.target.style.transform = 'translateY(0)';
-                }
-            });
-        }, observerOptions);
-
-        document.querySelectorAll('.feature-card, .product-card').forEach(el => {
-            el.style.opacity = '0';
-            el.style.transform = 'translateY(20px)';
-            el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
-            observer.observe(el);
-        });
-
-        const searchInput = document.querySelectorAll('.search-input');
-        const searchResults = document.querySelectorAll('.search-results');
-        let selectedIndex = -1;
-
-        function fetchSuggestions(query, resultsContainer) {
-            if (query.length >= 2) {
-                fetch(`search.php?query=${encodeURIComponent(query)}&type=autocomplete`)
-                    .then(response => response.text())
-                    .then(data => {
-                        resultsContainer.innerHTML = data;
-                        resultsContainer.classList.add('active');
-                        selectedIndex = -1;
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        resultsContainer.innerHTML = '<div class="no-results">Error fetching suggestions</div>';
-                        resultsContainer.classList.add('active');
-                    });
-            } else {
-                resultsContainer.innerHTML = '';
-                resultsContainer.classList.remove('active');
-            }
-        }
-
-        function fetchFullResults(query, resultsContainer) {
-            fetch(`search.php?query=${encodeURIComponent(query)}&type=full`)
-                .then(response => response.text())
-                .then(data => {
-                    resultsContainer.innerHTML = data;
-                    resultsContainer.classList.add('active');
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    resultsContainer.innerHTML = '<div class="no-results">Error fetching results</div>';
-                    resultsContainer.classList.add('active');
-                });
-        }
-
-        searchInput.forEach(input => {
-            input.addEventListener('input', function() {
-                const resultsContainer = this.parentElement.querySelector('.search-results');
-                fetchSuggestions(this.value.trim(), resultsContainer);
-            });
-
-            input.addEventListener('keydown', function(e) {
-                const resultsContainer = this.parentElement.querySelector('.search-results');
-                const suggestions = resultsContainer.querySelectorAll('.suggestion');
-                if (suggestions.length === 0) return;
-
-                if (e.key === 'ArrowDown') {
-                    e.preventDefault();
-                    selectedIndex = Math.min(selectedIndex + 1, suggestions.length - 1);
-                    updateSelection(suggestions);
-                } else if (e.key === 'ArrowUp') {
-                    e.preventDefault();
-                    selectedIndex = Math.max(selectedIndex - 1, -1);
-                    updateSelection(suggestions);
-                } else if (e.key === 'Enter' && selectedIndex >= 0) {
-                    e.preventDefault();
-                    const selectedSuggestion = suggestions[selectedIndex].textContent;
-                    this.value = selectedSuggestion;
-                    fetchFullResults(selectedSuggestion, resultsContainer);
-                }
-            });
-        });
-
-        function updateSelection(suggestions) {
-            suggestions.forEach((suggestion, index) => {
-                suggestion.classList.toggle('selected', index === selectedIndex);
-            });
-            if (selectedIndex >= 0) {
-                const activeInput = document.querySelector('.search-input:focus');
-                if (activeInput) activeInput.value = suggestions[selectedIndex].textContent;
-            }
-        }
-
-        searchResults.forEach(resultsContainer => {
-            resultsContainer.addEventListener('click', function(e) {
-                const suggestion = e.target.closest('.suggestion');
-                if (suggestion) {
-                    const activeInput = document.querySelector('.search-input:focus') || document.querySelector('.search-input');
-                    activeInput.value = suggestion.textContent;
-                    fetchFullResults(suggestion.textContent, resultsContainer);
-                }
-            });
-        });
-
-        document.addEventListener('click', function(e) {
-            if (!e.target.closest('.search-bar') && !e.target.closest('.search-results')) {
-                searchResults.forEach(resultsContainer => {
-                    resultsContainer.classList.remove('active');
-                });
-            }
-        });
-
-        const cartBtn = document.querySelectorAll('.cart-btn');
-        cartBtn.forEach(btn => {
-            btn.addEventListener('click', function(e) {
-                e.preventDefault();
-                window.location.href = 'cart.php';
-            });
-        });
-
-        const browseCategoriesBtn = document.getElementById('browse-categories-btn');
-        const categoriesModal = document.getElementById('categories-modal');
-        const modalCloseBtn = document.getElementById('modal-close-btn');
-        const feedbackBtn = document.getElementById('floating-feedback-btn');
-        const mobileFeedbackBtn = document.getElementById('mobile-feedback-btn');
-        const feedbackModal = document.getElementById('feedback-modal');
-        const feedbackModalClose = document.getElementById('feedback-modal-close');
-        const feedbackForm = document.getElementById('feedback-form');
-        const feedbackMessage = document.getElementById('feedback-message');
-        const imageModal = document.getElementById('image-modal');
-        const imageModalClose = document.getElementById('image-modal-close');
-        const modalImage = document.getElementById('modal-image');
-        const modalTitle = document.getElementById('modal-title');
-        const modalCaption = document.getElementById('modal-caption');
-        const modalPrice = document.getElementById('modal-price');
-        const modalProductId = document.getElementById('modal-product-id');
-        const modalFavoriteBtn = document.getElementById('modal-favorite-btn');
-        const chatbotBtn = document.getElementById('floating-chatbot-btn');
-        const chatbotModal = document.getElementById('chatbot-modal');
-        const chatbotModalClose = document.getElementById('chatbot-modal-close');
-        const chatbotForm = document.getElementById('chatbot-form');
-        const chatbotMessages = document.getElementById('chatbot-messages');
-        const chatbotInput = document.getElementById('chatbot-input');
+        // Mobile Menu Functionality - FIXED
         const menuIcon = document.querySelector('.menu-icon');
         const mobileMenu = document.querySelector('.mobile-menu');
         const closeIcon = document.querySelector('.close-icon');
 
-        // Menu icon toggle for mobile menu
-        menuIcon.addEventListener('click', function() {
-            mobileMenu.classList.toggle('active');
-        });
+        if (menuIcon && mobileMenu && closeIcon) {
+            menuIcon.addEventListener('click', function() {
+                mobileMenu.classList.add('active');
+                document.body.style.overflow = 'hidden';
+            });
 
-        // Close icon to hide mobile menu
-        closeIcon.addEventListener('click', function() {
-            mobileMenu.classList.remove('active');
-        });
-
-        // Close mobile menu when clicking outside
-        document.addEventListener('click', function(e) {
-            if (!mobileMenu.contains(e.target) && !menuIcon.contains(e.target) && mobileMenu.classList.contains('active')) {
+            closeIcon.addEventListener('click', function() {
                 mobileMenu.classList.remove('active');
+                document.body.style.overflow = '';
+            });
+
+            // Close mobile menu when clicking outside
+            document.addEventListener('click', function(e) {
+                if (!mobileMenu.contains(e.target) && !menuIcon.contains(e.target) && mobileMenu.classList.contains('active')) {
+                    mobileMenu.classList.remove('active');
+                    document.body.style.overflow = '';
+                }
+            });
+
+            // Close mobile menu with Escape key
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && mobileMenu.classList.contains('active')) {
+                    mobileMenu.classList.remove('active');
+                    document.body.style.overflow = '';
+                }
+            });
+        }
+
+        // Notifications Dropdown
+        const notificationsBtn = document.querySelector('.notifications-btn');
+        const notificationsDropdown = document.querySelector('.notifications-dropdown');
+        
+        if (notificationsBtn && notificationsDropdown) {
+            notificationsBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                notificationsDropdown.classList.toggle('active');
+            });
+
+            // Close dropdown when clicking outside
+            document.addEventListener('click', function(e) {
+                if (!notificationsBtn.contains(e.target) && !notificationsDropdown.contains(e.target)) {
+                    notificationsDropdown.classList.remove('active');
+                }
+            });
+        }
+
+        // FAQ functionality
+        document.querySelectorAll('.faq-question').forEach(question => {
+            question.addEventListener('click', function() {
+                const faqItem = this.parentElement;
+                faqItem.classList.toggle('active');
+                
+                const icon = this.querySelector('i');
+                if (faqItem.classList.contains('active')) {
+                    icon.className = 'fas fa-chevron-up';
+                } else {
+                    icon.className = 'fas fa-chevron-down';
+                }
+            });
+        });
+
+        // Newsletter subscription
+        const newsletterForm = document.getElementById('newsletter-form');
+        if (newsletterForm) {
+            newsletterForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const formData = new FormData(this);
+                
+                fetch('index.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    alert(data.message);
+                    if (data.success) {
+                        newsletterForm.reset();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred. Please try again.');
+                });
+            });
+        }
+
+        // Enhanced Product Modal functionality
+        const productModal = document.getElementById('product-modal');
+        const productModalClose = document.getElementById('product-modal-close');
+        const productImages = document.querySelectorAll('.product-image');
+        
+        // Sample data for demonstration
+        const sampleReviews = [
+            { name: "John Student", rating: 5, date: "2024-01-15", comment: "Excellent quality! Fast delivery to my dorm." },
+            { name: "Sarah Johnson", rating: 4, date: "2024-01-10", comment: "Good product, reasonable price for students." },
+            { name: "Mike Davis", rating: 5, date: "2024-01-08", comment: "Perfect for campus life. Highly recommended!" }
+        ];
+
+        // Get all products for related products
+        const allProducts = [];
+        <?php
+        $allProductsStmt = $conn->prepare("SELECT id, name, price, image_path, category FROM products");
+        $allProductsStmt->execute();
+        $allProductsResult = $allProductsStmt->get_result();
+        while ($product = $allProductsResult->fetch_assoc()) {
+            echo "allProducts.push(" . json_encode($product) . ");";
+        }
+        $allProductsStmt->close();
+        ?>
+
+        function openProductModal(productData) {
+            // Set main product details
+            document.getElementById('product-modal-image').src = productData.image;
+            document.getElementById('product-modal-title').textContent = productData.title;
+            document.getElementById('product-modal-price').textContent = productData.price;
+            document.getElementById('product-modal-caption').textContent = productData.caption;
+            
+            // Set thumbnails
+            const thumbnailsContainer = document.getElementById('product-thumbnails');
+            thumbnailsContainer.innerHTML = '';
+            for (let i = 0; i < 3; i++) {
+                const thumbnail = document.createElement('img');
+                thumbnail.src = productData.image;
+                thumbnail.alt = `Thumbnail ${i + 1}`;
+                thumbnail.className = 'thumbnail' + (i === 0 ? ' active' : '');
+                thumbnail.addEventListener('click', function() {
+                    document.getElementById('product-modal-image').src = this.src;
+                    document.querySelectorAll('.thumbnail').forEach(t => t.classList.remove('active'));
+                    this.classList.add('active');
+                });
+                thumbnailsContainer.appendChild(thumbnail);
+            }
+            
+            // Set reviews
+            const reviewsList = document.getElementById('reviews-list');
+            reviewsList.innerHTML = '';
+            sampleReviews.forEach(review => {
+                const reviewItem = document.createElement('div');
+                reviewItem.className = 'review-item';
+                reviewItem.innerHTML = `
+                    <div class="review-header">
+                        <span class="reviewer-name">${review.name}</span>
+                        <span class="review-date">${review.date}</span>
+                    </div>
+                    <div class="rating-stars">
+                        ${'<i class="fas fa-star"></i>'.repeat(review.rating)}
+                    </div>
+                    <p class="review-text">${review.comment}</p>
+                `;
+                reviewsList.appendChild(reviewItem);
+            });
+            
+            
+            // Set related products based on category
+            const relatedProductsContainer = document.getElementById('related-products');
+            relatedProductsContainer.innerHTML = '';
+            
+            const currentCategory = productData.category || 'general';
+            const relatedProducts = allProducts.filter(product => 
+                product.category === currentCategory && product.id != productData.productId
+            ).slice(0, 4);
+            
+            if (relatedProducts.length > 0) {
+                relatedProducts.forEach(product => {
+                    const productCard = document.createElement('div');
+                    productCard.className = 'related-product-card';
+                    productCard.innerHTML = `
+                        <img src="${product.image_path || 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+A8AAQAB3gB4cAAAAABJRU5ErkJggg=='}" 
+                             alt="${product.name}" class="related-product-image">
+                        <div class="related-product-name">${product.name}</div>
+                        <div class="related-product-price">UGX ${Number(product.price).toLocaleString()}</div>
+                    `;
+                    productCard.addEventListener('click', function() {
+                        // Find and open the clicked product
+                        const clickedProduct = allProducts.find(p => p.id == product.id);
+                        if (clickedProduct) {
+                            const productData = {
+                                productId: clickedProduct.id,
+                                image: clickedProduct.image_path || 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+A8AAQAB3gB4cAAAAABJRU5ErkJggg==',
+                                title: clickedProduct.name,
+                                caption: clickedProduct.caption || 'No description available',
+                                price: `UGX ${Number(clickedProduct.price).toLocaleString()}`,
+                                favorited: 'false',
+                                category: clickedProduct.category || 'general'
+                            };
+                            openProductModal(productData);
+                        }
+                    });
+                    relatedProductsContainer.appendChild(productCard);
+                });
+            } else {
+                relatedProductsContainer.innerHTML = '<p>No related products found</p>';
+            }
+            
+            // Set up action buttons
+            const addToCartBtn = document.getElementById('product-add-to-cart');
+            const favoriteBtn = document.getElementById('product-toggle-favorite');
+            
+            addToCartBtn.onclick = function() {
+                const quantity = document.getElementById('product-quantity').value;
+                // In real implementation, this would add to cart via AJAX
+                const formData = new FormData();
+                formData.append('product_id', productData.productId);
+                formData.append('quantity', quantity);
+                formData.append('add_to_cart', 'true');
+                
+                fetch('index.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => {
+                    alert(`Added ${quantity} ${productData.title} to cart!`);
+                    // Refresh page to update cart count
+                    window.location.reload();
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Failed to add to cart. Please try again.');
+                });
+            };
+            
+            favoriteBtn.onclick = function() {
+                const formData = new FormData();
+                formData.append('product_id', productData.productId);
+                formData.append('toggle_favorite', 'true');
+                
+                fetch('index.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => {
+                    favoriteBtn.classList.toggle('favorited');
+                    if (favoriteBtn.classList.contains('favorited')) {
+                        favoriteBtn.innerHTML = '<i class="fas fa-heart"></i> Favorited';
+                    } else {
+                        favoriteBtn.innerHTML = '<i class="fas fa-heart"></i> Favorite';
+                    }
+                    // Refresh page to update favorites count
+                    window.location.reload();
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Failed to update favorites. Please try again.');
+                });
+            };
+            
+            // Set initial favorite state
+            if (productData.favorited === 'true') {
+                favoriteBtn.classList.add('favorited');
+                favoriteBtn.innerHTML = '<i class="fas fa-heart"></i> Favorited';
+            }
+            
+            // Interactive Star Rating
+            const stars = document.querySelectorAll('.star-rating .star');
+            const ratingText = document.getElementById('rating-text');
+            let currentRating = 0;
+            
+            stars.forEach(star => {
+                star.addEventListener('click', function() {
+                    currentRating = parseInt(this.getAttribute('data-rating'));
+                    updateStarRating(currentRating);
+                    ratingText.textContent = `Rated ${currentRating} star${currentRating > 1 ? 's' : ''}`;
+                });
+                
+                star.addEventListener('mouseover', function() {
+                    const hoverRating = parseInt(this.getAttribute('data-rating'));
+                    updateStarRating(hoverRating, true);
+                });
+                
+                star.addEventListener('mouseout', function() {
+                    updateStarRating(currentRating);
+                });
+            });
+            
+            function updateStarRating(rating, isHover = false) {
+                stars.forEach((star, index) => {
+                    if (index < rating) {
+                        star.classList.add('active');
+                    } else {
+                        star.classList.remove('active');
+                    }
+                });
+                
+                if (!isHover && rating === 0) {
+                    ratingText.textContent = 'Click to rate';
+                }
+            }
+            
+            // Submit Review
+            const submitReviewBtn = document.getElementById('submit-review');
+            const reviewComment = document.getElementById('review-comment');
+            
+            submitReviewBtn.addEventListener('click', function() {
+                if (currentRating === 0) {
+                    alert('Please select a rating');
+                    return;
+                }
+                
+                if (!reviewComment.value.trim()) {
+                    alert('Please enter a review comment');
+                    return;
+                }
+                
+                // In real implementation, this would save to database
+                const newReview = {
+                    name: "<?php echo isset($_SESSION['username']) ? $_SESSION['username'] : 'Anonymous'; ?>",
+                    rating: currentRating,
+                    date: new Date().toISOString().split('T')[0],
+                    comment: reviewComment.value
+                };
+                
+                // Add new review to the list
+                const reviewItem = document.createElement('div');
+                reviewItem.className = 'review-item';
+                reviewItem.innerHTML = `
+                    <div class="review-header">
+                        <span class="reviewer-name">${newReview.name}</span>
+                        <span class="review-date">${newReview.date}</span>
+                    </div>
+                    <div class="rating-stars">
+                        ${'<i class="fas fa-star"></i>'.repeat(newReview.rating)}
+                    </div>
+                    <p class="review-text">${newReview.comment}</p>
+                `;
+                reviewsList.insertBefore(reviewItem, reviewsList.firstChild);
+                
+                // Reset form
+                currentRating = 0;
+                updateStarRating(0);
+                ratingText.textContent = 'Click to rate';
+                reviewComment.value = '';
+                
+                alert('Review submitted successfully!');
+            });
+            const menuIcon = document.querySelector('.menu-icon');
+            const mobileMenu = document.querySelector('.mobile-menu');
+            const closeIcon = document.querySelector('.close-icon');
+            const feedbackBtn = document.getElementById('floating-feedback-btn');
+            const mobileFeedbackBtn = document.getElementById('mobile-feedback-btn');
+            const feedbackModal = document.getElementById('feedback-modal');
+            const feedbackModalClose = document.getElementById('feedback-modal-close');
+            const feedbackForm = document.getElementById('feedback-form');
+            const feedbackMessage = document.getElementById('feedback-message');
+            const imageModal = document.getElementById('image-modal');
+            const imageModalClose = document.getElementById('image-modal-close');
+            const modalImage = document.getElementById('modal-image');
+            const modalTitle = document.getElementById('modal-title');
+            const modalCaption = document.getElementById('modal-caption');
+            const modalPrice = document.getElementById('modal-price');
+            const modalProductId = document.getElementById('modal-product-id');
+            const modalFavoriteBtn = document.getElementById('modal-favorite-btn');
+            const chatbotBtn = document.getElementById('floating-chatbot-btn');
+            const chatbotModal = document.getElementById('chatbot-modal');
+            const chatbotModalClose = document.getElementById('chatbot-modal-close');
+            const chatbotForm = document.getElementById('chatbot-form');
+            const chatbotMessages = document.getElementById('chatbot-messages');
+            const chatbotInput = document.getElementById('chatbot-input');
+            
+            // Set up share links
+            const shareUrl = `${window.location.origin}/product.php?id=${productData.productId}`;
+            const encodedUrl = encodeURIComponent(shareUrl);
+            const encodedText = encodeURIComponent(`Check out "${productData.title}" from Bugema CampusShop: ${shareUrl}`);
+            
+            document.querySelectorAll('.share-btn').forEach(btn => {
+                const platform = btn.getAttribute('data-platform');
+                let shareLink = '';
+                switch(platform) {
+                    case 'whatsapp':
+                        shareLink = `https://api.whatsapp.com/send?text=${encodedText}`;
+                        break;
+                    case 'facebook':
+                        shareLink = `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`;
+                        break;
+                    case 'telegram':
+                        shareLink = `https://t.me/share/url?url=${encodedUrl}&text=${encodedText}`;
+                        break;
+                    case 'twitter':
+                        shareLink = `https://twitter.com/intent/tweet?text=${encodedText}`;
+                        break;
+                }
+                btn.href = shareLink;
+            });
+            
+            productModal.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+        }
+
+        // Add click event to all product images
+        productImages.forEach(img => {
+            img.addEventListener('click', function() {
+                const productData = {
+                    productId: this.getAttribute('data-product-id'),
+                    image: this.src,
+                    title: this.getAttribute('data-title'),
+                    caption: this.getAttribute('data-caption'),
+                    price: this.getAttribute('data-price'),
+                    favorited: this.getAttribute('data-favorited'),
+                    category: this.getAttribute('data-category') || 'general'
+                };
+                openProductModal(productData);
+            });
+        });
+
+        productModalClose.addEventListener('click', function() {
+            productModal.style.display = 'none';
+            document.body.style.overflow = '';
+        });
+
+        productModal.addEventListener('click', function(e) {
+            if (e.target === productModal) {
+                productModal.style.display = 'none';
+                document.body.style.overflow = '';
             }
         });
 
+        // Rest of your existing JavaScript functionality
+        const searchInput = document.querySelectorAll('.search-input');
+        const searchResults = document.querySelectorAll('.search-results');
+
+        searchInput.forEach(input => {
+            input.addEventListener('input', function() {
+                // Your existing search implementation
+            });
+        });
+
+        // Modal management
+        const browseCategoriesBtn = document.getElementById('browse-categories-btn');
+        const categoriesModal = document.getElementById('categories-modal');
+        const modalCloseBtn = document.getElementById('modal-close-btn');
+
         browseCategoriesBtn.addEventListener('click', function() {
             categoriesModal.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
         });
 
         modalCloseBtn.addEventListener('click', function() {
             categoriesModal.style.display = 'none';
+            document.body.style.overflow = '';
         });
 
         categoriesModal.addEventListener('click', function(e) {
             if (e.target === categoriesModal) {
                 categoriesModal.style.display = 'none';
+                document.body.style.overflow = '';
             }
         });
 
-        feedbackBtn.addEventListener('click', function() {
-            feedbackModal.style.display = 'flex';
-            feedbackMessage.style.display = 'none';
-        });
-
-        mobileFeedbackBtn.addEventListener('click', function() {
-            feedbackModal.style.display = 'flex';
-            feedbackMessage.style.display = 'none';
-        });
-
-        feedbackModalClose.addEventListener('click', function() {
-            feedbackModal.style.display = 'none';
-            feedbackForm.reset();
-            feedbackMessage.style.display = 'none';
-        });
-
-        feedbackModal.addEventListener('click', function(e) {
-            if (e.target === feedbackModal) {
-                feedbackModal.style.display = 'none';
-                feedbackForm.reset();
-                feedbackMessage.style.display = 'none';
-            }
-        });
-
-        // Chatbot functionality
-        function openChatbotModal() {
-            chatbotModal.style.display = 'flex';
-            chatbotInput.focus();
-            scrollToBottom();
-        }
-
-        function closeChatbotModal() {
-            chatbotModal.style.display = 'none';
-            chatbotInput.value = '';
-        }
-
-        function scrollToBottom() {
-            chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
-        }
-
-        function addMessage(content, sender) {
-            const messageDiv = document.createElement('div');
-            messageDiv.classList.add('chatbot-message', sender);
-            messageDiv.innerHTML = `<p>${content}</p>`;
-            chatbotMessages.appendChild(messageDiv);
-            scrollToBottom();
-        }
-
-        const responses = {
-            'hello': 'Hi! How can I assist you today?',
-            'delivery': 'We offer fast campus delivery within 24 hours to your dorm or a campus pickup point. Would you like more details on delivery options?',
-            'discount': 'Bugema University students with a valid student ID can enjoy exclusive discounts. Verify your ID at checkout to apply them!',
-            'products': 'We offer textbooks, branded jumpers, pens, wall clocks, notebooks, T-shirts, and bottles. Browse categories via the "Browse Categories" button!',
-            'contact': 'You can reach us at campusshop@bugemauniv.ac.ug or via WhatsApp at +256 7550 87665. Want to call now?',
-            'help': 'I\'m here to assist! Ask about delivery, discounts, products, or anything else.',
-            'default': 'Sorry, I didn\'t understand that. Try asking about delivery, discounts, products, or contact info!'
-        };
-
-        chatbotBtn.addEventListener('click', openChatbotModal);
-
-        chatbotModalClose.addEventListener('click', closeChatbotModal);
-
-        chatbotModal.addEventListener('click', function(e) {
-            if (e.target === chatbotModal) {
-                closeChatbotModal();
-            }
-        });
-
-        chatbotForm.addEventListener('submit', function(e) {
-            e.preventDefault(); // Prevent form submission and page refresh
-            const message = chatbotInput.value.trim();
-            if (!message) {
-                addMessage('Please enter a message.', 'bot');
-                return;
-            }
-
-            // Add user message
-            addMessage(message, 'user');
-
-            // Get bot response
-            const lowerMessage = message.toLowerCase();
-            let response = responses['default'];
-            for (const key in responses) {
-                if (lowerMessage.includes(key)) {
-                    response = responses[key];
-                    break;
-                }
-            }
-
-            // Add bot response
-            setTimeout(() => {
-                addMessage(response, 'bot');
-            }, 500);
-
-            chatbotInput.value = '';
-            chatbotInput.focus();
-        });
-
-        chatbotInput.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                chatbotForm.dispatchEvent(new Event('submit'));
-            }
-        });
-
-        // Image modal functionality with debugging
-        document.querySelectorAll('.product-card img').forEach(img => {
-            img.addEventListener('click', function() {
-                console.log('Image clicked', this); // Debug log
-                const productId = this.getAttribute('data-product-id');
-                const title = this.getAttribute('data-title');
-                const caption = this.getAttribute('data-caption');
-                const price = this.getAttribute('data-price');
-                const favorited = this.getAttribute('data-favorited') === 'true';
-
-                if (!productId || !title || !price) {
-                    console.error('Missing data attributes', { productId, title, price });
-                    return;
-                }
-
-                modalImage.src = this.src;
-                modalImage.alt = title;
-                modalTitle.textContent = title;
-                modalCaption.textContent = caption || 'No description available';
-                modalPrice.textContent = price;
-                modalProductId.value = productId;
-                modalFavoriteBtn.classList.toggle('favorited', favorited);
-
-                // Update share links
-                const shareUrl = `${window.location.origin}/product.php?id=${productId}`;
-                const encodedUrl = encodeURIComponent(shareUrl);
-                const encodedText = encodeURIComponent(`Check out this product from Bugema CampusShop: ${title} - ${shareUrl}`);
-
-                const shareLinks = {
-                    whatsapp: `https://api.whatsapp.com/send?text=${encodedText}`,
-                    facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`,
-                    x: `https://x.com/intent/tweet?text=${encodedText}`,
-                    telegram: `https://t.me/share/url?url=${encodedUrl}&text=${encodedText}`
-                };
-
-                document.querySelectorAll('.share-btn').forEach(btn => {
-                    const platform = btn.getAttribute('data-platform');
-                    btn.href = shareLinks[platform];
-                });
-
-                imageModal.style.display = 'flex';
-                console.log('Modal displayed', imageModal); // Debug log
-            });
-        });
-
-        imageModalClose.addEventListener('click', function() {
-            imageModal.style.display = 'none';
-        });
-
-        imageModal.addEventListener('click', function(e) {
-            if (e.target === imageModal) {
-                imageModal.style.display = 'none';
-            }
-        });
-
+        // Close modals with Escape key
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
-                if (categoriesModal.style.display === 'flex') {
-                    categoriesModal.style.display = 'none';
+                document.querySelectorAll('.modal').forEach(modal => {
+                    modal.style.display = 'none';
+                    document.body.style.overflow = '';
+                });
+                // Also close notifications dropdown
+                if (notificationsDropdown) {
+                    notificationsDropdown.classList.remove('active');
                 }
-                if (feedbackModal.style.display === 'flex') {
-                    feedbackModal.style.display = 'none';
-                    feedbackForm.reset();
-                    feedbackMessage.style.display = 'none';
-                }
-                if (imageModal.style.display === 'flex') {
-                    imageModal.style.display = 'none';
-                }
-                if (chatbotModal.style.display === 'flex') {
-                    closeChatbotModal();
-                }
-                if (mobileMenu.classList.contains('active')) {
+                // Close mobile menu
+                if (mobileMenu) {
                     mobileMenu.classList.remove('active');
+                    document.body.style.overflow = '';
                 }
             }
         });
@@ -2667,24 +3169,8 @@ footer {
             setInterval(() => {
                 currentIndex = (currentIndex + 1) % (slides.length - visibleSlides + 1);
                 updateSlider();
-            }, 20000); // 20 seconds
+            }, 20000);
         }
-
-        // Screen reader only class for accessibility
-        const style = document.createElement('style');
-        style.textContent = `
-            .sr-only {
-                position: absolute;
-                width: 1px;
-                height: 1px;
-                padding: 0;
-                margin: -1px;
-                overflow: hidden;
-                clip: rect(0, 0, 0, 0);
-                border: 0;
-            }
-        `;
-        document.head.appendChild(style);
     });
     </script>
 </body>
