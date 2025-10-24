@@ -1885,12 +1885,12 @@ $user_email = '';
                             <input type="number" name="quantity" id="product-quantity" class="quantity-input" value="1" min="1" aria-label="Quantity">
                         </div>
                         <button type="button" class="action-btn primary" id="product-add-to-cart">
-                            <i class="fas fa-shopping-cart"></i> Add to Cart
+                            <i class="fas fa-shopping-cart"></i>
                         </button>
                         <form method="POST" action="favorites.php" style="display: inline;">
                             <input type="hidden" name="product_id" id="product-remove-id">
                             <button type="submit" name="remove_favorite" class="action-btn remove-btn">
-                                <i class="fas fa-trash"></i> Remove
+                                <i class="fas fa-trash"></i>
                             </button>
                         </form>
                     </div>

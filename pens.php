@@ -1879,10 +1879,10 @@ $user_email = '';
                             <input type="number" name="quantity" id="product-quantity" class="quantity-input" value="1" min="1" aria-label="Quantity">
                         </div>
                         <button type="button" class="action-btn primary" id="product-add-to-cart">
-                            <i class="fas fa-shopping-cart"></i> Add to Cart
+                            <i class="fas fa-shopping-cart"></i>
                         </button>
                         <button type="button" class="action-btn favorite-btn" id="product-toggle-favorite">
-                            <i class="fas fa-heart"></i> Favorite
+                            <i class="fas fa-heart"></i>
                         </button>
                     </div>
 
