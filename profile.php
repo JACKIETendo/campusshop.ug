@@ -37,6 +37,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
     // Handle profile picture upload
     if (isset($_FILES['profile_picture']) && $_FILES['profile_picture']['error'] === UPLOAD_ERR_OK) {
         $upload_dir = 'Uploads/';
+        // Create Uploads directory if it doesn't exist
+        if (!is_dir($upload_dir)) {
+            mkdir($upload_dir, 0755, true);
+        }
+        
         $allowed_types = ['image/jpeg', 'image/png', 'image/gif'];
         $max_size = 5 * 1024 * 1024; // 5MB
         $file_type = $_FILES['profile_picture']['type'];
@@ -46,14 +51,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
         $file_name = uniqid() . '.' . $file_ext;
         $file_path = $upload_dir . $file_name;
 
-        // Check if Uploads directory exists and is writable
-        if (!is_dir($upload_dir) || !is_writable($upload_dir)) {
-            $error = "Uploads directory does not exist or is not writable.";
-            error_log("Profile picture upload failed: Uploads directory issue");
+        // Check if Uploads directory is writable
+        if (!is_writable($upload_dir)) {
+            $error = "Uploads directory is not writable.";
+            error_log("Profile picture upload failed: Uploads directory not writable");
         } elseif (in_array($file_type, $allowed_types) && $file_size <= $max_size) {
             if (move_uploaded_file($file_tmp, $file_path)) {
-                // Delete old profile picture if exists
-                if ($profile_picture && file_exists($profile_picture)) {
+                // Delete old profile picture if exists and is not default
+                if ($profile_picture && file_exists($profile_picture) && $profile_picture !== 'default-avatar.png') {
                     unlink($profile_picture);
                 }
                 $profile_picture = $file_path;
@@ -77,6 +82,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
         if ($stmt->execute()) {
             $_SESSION['username'] = $new_username;
             $success = "Profile updated successfully!";
+            // Refresh user data
+            $stmt = $conn->prepare("SELECT username, profile_picture FROM users WHERE id = ?");
+            $stmt->bind_param("i", $user_id);
+            $stmt->execute();
+            $user = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
         } else {
             $error = "Failed to update profile: " . $stmt->error;
         }
@@ -127,32 +138,107 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
 }
 
 // Fetch notifications
+$notifications = [];
 $stmt = $conn->prepare("SELECT message, created_at FROM notifications WHERE user_id = ? OR user_id IS NULL ORDER BY created_at DESC LIMIT 5");
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$notifications = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-$stmt->close();
+if ($stmt) {
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $notifications = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+}
 
-// Fetch order history
-$stmt = $conn->prepare("SELECT o.id, o.order_date, o.total_amount, o.status FROM orders o WHERE o.user_id = ? ORDER BY o.order_date DESC LIMIT 5");
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$orders = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-$stmt->close();
+// Fetch order history with improved error handling
+$orders = [];
+$order_items = [];
+
+try {
+    // First check if orders table exists
+    $table_check = $conn->query("SHOW TABLES LIKE 'orders'");
+    if ($table_check->num_rows > 0) {
+        $stmt = $conn->prepare("SELECT o.id, o.order_date, o.total_amount, o.status, o.payment_method 
+                               FROM orders o 
+                               WHERE o.user_id = ? 
+                               ORDER BY o.order_date DESC 
+                               LIMIT 5");
+        if ($stmt) {
+            $stmt->bind_param("i", $user_id);
+            $stmt->execute();
+            $orders_result = $stmt->get_result();
+            $orders = $orders_result->fetch_all(MYSQLI_ASSOC);
+            $stmt->close();
+
+            // Fetch order items for each order
+            if (!empty($orders)) {
+                foreach ($orders as $order) {
+                    $order_id = $order['id'];
+                    $stmt_items = $conn->prepare("SELECT oi.product_name, oi.quantity, oi.price 
+                                                 FROM order_items oi 
+                                                 WHERE oi.order_id = ?");
+                    if ($stmt_items) {
+                        $stmt_items->bind_param("i", $order_id);
+                        $stmt_items->execute();
+                        $items_result = $stmt_items->get_result();
+                        $order_items[$order_id] = $items_result->fetch_all(MYSQLI_ASSOC);
+                        $stmt_items->close();
+                    }
+                }
+            }
+        }
+    } else {
+        error_log("Orders table does not exist");
+    }
+} catch (Exception $e) {
+    error_log("Error fetching orders: " . $e->getMessage());
+}
 
 // Get favorites count
+$favorites_count = 0;
 $stmt = $conn->prepare("SELECT COUNT(*) as count FROM favorites WHERE user_id = ?");
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$favorites_count = $stmt->get_result()->fetch_assoc()['count'];
-$stmt->close();
+if ($stmt) {
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $favorites_count = $stmt->get_result()->fetch_assoc()['count'];
+    $stmt->close();
+}
 
 // Get cart count
+$cart_count = 0;
 $stmt = $conn->prepare("SELECT SUM(quantity) as count FROM cart WHERE user_id = ?");
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$cart_count = $stmt->get_result()->fetch_assoc()['count'] ?? 0;
-$stmt->close();
+if ($stmt) {
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $cart_result = $stmt->get_result()->fetch_assoc();
+    $cart_count = $cart_result['count'] ?? 0;
+    $stmt->close();
+}
+
+// SQL to create orders table if it doesn't exist (for testing)
+$create_orders_table_sql = "
+CREATE TABLE IF NOT EXISTS orders (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    order_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    total_amount DECIMAL(10,2) NOT NULL,
+    status VARCHAR(50) DEFAULT 'pending',
+    payment_method VARCHAR(100),
+    shipping_address TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS order_items (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    order_id INT NOT NULL,
+    product_name VARCHAR(255) NOT NULL,
+    quantity INT NOT NULL,
+    price DECIMAL(10,2) NOT NULL,
+    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+);
+";
+
+// Uncomment the following lines to automatically create the tables (for testing only)
+// $conn->multi_query($create_orders_table_sql);
+// while ($conn->next_result()) {;} // flush multi_queries
 ?>
 
 <!DOCTYPE html>
@@ -163,7 +249,8 @@ $stmt->close();
     <title>User Profile - Bugema CampusShop</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        * {
+        /* Your existing CSS remains the same, just adding new styles for order details */
+         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
@@ -1061,10 +1148,69 @@ $stmt->close();
             from { opacity: 0; transform: translateY(20px); }
             to { opacity: 1; transform: translateY(0); }
         }
+        .order-details {
+            margin-top: 10px;
+            padding: 10px;
+            background: var(--light-gray);
+            border-radius: 8px;
+            display: none;
+        }
+        
+        .order-details.active {
+            display: block;
+        }
+        
+        .order-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .order-item:last-child {
+            border-bottom: none;
+        }
+        
+        .toggle-order-details {
+            background: var(--secondary-green);
+            color: var(--white);
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            margin-top: 5px;
+        }
+        
+        .toggle-order-details:hover {
+            background: var(--primary-green);
+        }
+        
+        .status-pending { color: #f39c12; }
+        .status-completed { color: var(--success-green); }
+        .status-cancelled { color: var(--error-red); }
+        .status-processing { color: #3498db; }
+        
+        .no-orders {
+            text-align: center;
+            padding: 20px;
+            color: var(--text-gray);
+        }
+        
+        .no-orders a {
+            color: var(--secondary-green);
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        .no-orders a:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
     <header>
+        <!-- Your existing header code remains the same -->
         <div class="container">
             <div class="header-top">
                 <div class="logo">
@@ -1175,7 +1321,7 @@ $stmt->close();
         <!-- LEFT SIDE - PROFILE -->
         <div class="profile-left">
             <center>
-                <img src="<?= htmlspecialchars($user['profile_picture'] ?? 'default-avatar.png'); ?>" alt="Profile Picture">
+                <img src="<?= htmlspecialchars($user['profile_picture'] ?? 'default-avatar.png'); ?>" alt="Profile Picture" onerror="this.src='default-avatar.png'">
                 <h2><?= htmlspecialchars($user['username']); ?></h2>
             </center>
 
@@ -1188,14 +1334,14 @@ $stmt->close();
 
                 <button type="submit" name="update_profile">Update Profile</button>
             </form>
+            
+            <?php if (isset($success)): ?>
+                <div class="message success"><?php echo htmlspecialchars($success); ?></div>
+            <?php endif; ?>
+            <?php if (isset($error)): ?>
+                <div class="message error"><?php echo htmlspecialchars($error); ?></div>
+            <?php endif; ?>
         </div>
-
-        <?php if (isset($success)): ?>
-            <div class="message success"><?php echo htmlspecialchars($success); ?></div>
-        <?php endif; ?>
-        <?php if (isset($error)): ?>
-            <div class="message error"><?php echo htmlspecialchars($error); ?></div>
-        <?php endif; ?>
 
         <!-- RIGHT SIDE -->
         <div class="profile-right">
@@ -1214,32 +1360,65 @@ $stmt->close();
                 <?php endif; ?>
             </div>
 
-            <!-- ORDER HISTORY -->
+            <!-- ORDER HISTORY - IMPROVED -->
             <div class="section">
                 <h3><i class="fas fa-history"></i> Order History</h3>
                 <?php if (!empty($orders)): ?>
                     <table>
                         <thead>
                             <tr>
-                                <th>ID</th>
+                                <th>Order ID</th>
                                 <th>Date</th>
                                 <th>Total (UGX)</th>
                                 <th>Status</th>
+                                <th>Payment Method</th>
+                                <th>Details</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php foreach ($orders as $order): ?>
                                 <tr>
-                                    <td><?= htmlspecialchars($order['id']); ?></td>
-                                    <td><?= htmlspecialchars($order['order_date']); ?></td>
+                                    <td>#<?= htmlspecialchars($order['id']); ?></td>
+                                    <td><?= htmlspecialchars(date('M j, Y g:i A', strtotime($order['order_date']))); ?></td>
                                     <td><?= htmlspecialchars(number_format($order['total_amount'], 0)); ?></td>
-                                    <td><?= htmlspecialchars($order['status']); ?></td>
+                                    <td>
+                                        <span class="status-<?= htmlspecialchars(strtolower($order['status'])); ?>">
+                                            <?= htmlspecialchars(ucfirst($order['status'])); ?>
+                                        </span>
+                                    </td>
+                                    <td><?= htmlspecialchars($order['payment_method'] ?? 'N/A'); ?></td>
+                                    <td>
+                                        <button class="toggle-order-details" data-order-id="<?= $order['id']; ?>">
+                                            View Items
+                                        </button>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td colspan="6">
+                                        <div class="order-details" id="order-details-<?= $order['id']; ?>">
+                                            <?php if (isset($order_items[$order['id']]) && !empty($order_items[$order['id']])): ?>
+                                                <h4>Order Items:</h4>
+                                                <?php foreach ($order_items[$order['id']] as $item): ?>
+                                                    <div class="order-item">
+                                                        <span><?= htmlspecialchars($item['product_name']); ?></span>
+                                                        <span>Qty: <?= htmlspecialchars($item['quantity']); ?></span>
+                                                        <span>UGX <?= htmlspecialchars(number_format($item['price'], 0)); ?></span>
+                                                    </div>
+                                                <?php endforeach; ?>
+                                            <?php else: ?>
+                                                <p>No items found for this order.</p>
+                                            <?php endif; ?>
+                                        </div>
+                                    </td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
                 <?php else: ?>
-                    <p>No orders found.</p>
+                    <div class="no-orders">
+                        <p>You haven't placed any orders yet.</p>
+                        <p><a href="index.php">Start shopping now!</a></p>
+                    </div>
                 <?php endif; ?>
             </div>
 
@@ -1248,25 +1427,25 @@ $stmt->close();
                 <h3><i class="fas fa-credit-card"></i> Payment Options</h3>
                 <div class="payment-options">
                     <div class="payment-option">
-                        <img src="images/mobile money.png" alt="Mobile Money">
+                        <img src="images/mobile money.png" alt="Mobile Money" onerror="this.style.display='none'">
                         <p>Mobile Money</p>
                     </div>
                     <div class="payment-option">
-                        <img src="images/paypal.png" alt="PayPal">
+                        <img src="images/paypal.png" alt="PayPal" onerror="this.style.display='none'">
                         <p>PayPal</p>
                     </div>
                     <div class="payment-option">
-                        <img src="images/visa.png" alt="Visa">
+                        <img src="images/visa.png" alt="Visa" onerror="this.style.display='none'">
                         <p>Visa</p>
                     </div>
                     <div class="payment-option">
-                        <img src="images/pay on delivery.jpeg" alt="Cash on Delivery">
+                        <img src="images/pay on delivery.jpeg" alt="Cash on Delivery" onerror="this.style.display='none'">
                         <p>Cash on Delivery</p>
                     </div>
                 </div>
             </div>
 
-            <!-- HELP CENTER - UPDATED -->
+            <!-- HELP CENTER -->
             <div class="section">
                 <h3><i class="fas fa-question-circle"></i> Help Center</h3>
                 <div class="help-center">
@@ -1323,10 +1502,18 @@ $stmt->close();
         <i class="fas fa-arrow-up"></i>
     </button>
 
-    
-
     <script>
     document.addEventListener('DOMContentLoaded', function() {
+        // ORDER DETAILS TOGGLE
+        document.querySelectorAll('.toggle-order-details').forEach(button => {
+            button.addEventListener('click', function() {
+                const orderId = this.getAttribute('data-order-id');
+                const detailsDiv = document.getElementById('order-details-' + orderId);
+                detailsDiv.classList.toggle('active');
+                this.textContent = detailsDiv.classList.contains('active') ? 'Hide Items' : 'View Items';
+            });
+        });
+
         // SCROLL TO TOP
         const scrollToTopBtn = document.getElementById('scrollToTop');
         window.addEventListener('scroll', function() {

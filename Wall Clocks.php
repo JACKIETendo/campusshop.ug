@@ -1113,7 +1113,7 @@ $user_email = '';
         .product-modal-caption {
             color: var(--text-gray);
             line-height: 1.6;
-        }
+        } 
 
         .product-actions {
             display: flex;
@@ -1128,14 +1128,7 @@ $user_email = '';
             gap: 0.5rem;
         }
 
-        .quantity-input {
-            width: 80px;
-            padding: 8px;
-            border: 1px solid var(--text-gray);
-            border-radius: 6px;
-            text-align: center;
-            font-size: 1rem;
-        }
+        
 
         .action-btn {
             padding: 10px 20px;

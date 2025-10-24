@@ -179,6 +179,37 @@ if (isset($_SESSION['user_id'])) {
     $cart_count = array_sum($_SESSION['guest_cart']);
 }
 
+// Get notifications count - with error handling for missing column
+$notifications_count = 0;
+if (isset($_SESSION['user_id'])) {
+    $user_id = $_SESSION['user_id'];
+    
+    // First, check if notifications table exists and has is_read column
+    $table_check = $conn->query("SHOW TABLES LIKE 'notifications'");
+    if ($table_check && $table_check->num_rows > 0) {
+        // Check if is_read column exists
+        $column_check = $conn->query("SHOW COLUMNS FROM notifications LIKE 'is_read'");
+        if ($column_check && $column_check->num_rows > 0) {
+            // Column exists, use the original query
+            $stmt = $conn->prepare("SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0");
+            $stmt->bind_param("i", $user_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $notifications_count = $result->fetch_assoc()['count'];
+            $stmt->close();
+        } else {
+            // Column doesn't exist, count all notifications for user
+            $stmt = $conn->prepare("SELECT COUNT(*) as count FROM notifications WHERE user_id = ?");
+            $stmt->bind_param("i", $user_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $notifications_count = $result->fetch_assoc()['count'];
+            $stmt->close();
+        }
+    }
+    // If notifications table doesn't exist, count remains 0
+}
+
 // Set user_email to empty string
 $user_email = '';
 ?>
@@ -454,12 +485,12 @@ $user_email = '';
             text-decoration: underline;
         }
 
-        .cart-btn, .favorites-btn {
+        .cart-btn, .favorites-btn, .notifications-btn {
             position: relative;
             font-size: 20px;
         }
 
-        .cart-count, .favorites-count {
+        .cart-count, .favorites-count, .notifications-count {
             position: absolute;
             top: -6px;
             right: -6px;
@@ -520,6 +551,7 @@ $user_email = '';
             flex-direction: column;
             gap: 10px;
             z-index: 1000;
+            font-size: 2rem;
         }
 
         .floating-btn {
@@ -618,8 +650,6 @@ $user_email = '';
 
         .bottom-bar-actions a, .bottom-bar-actions button {
             color: var(--dark-gray);
-            padding: 8px;
-            border-radius: 50%;
             text-decoration: none;
             font-weight: 500;
             font-size: 1.5rem;
@@ -628,14 +658,15 @@ $user_email = '';
             justify-content: center;
             width: 40px;
             height: 40px;
-            transition: background 0.3s ease, color 0.3s ease;
+            transition: color 0.3s ease, transform 0.2s ease;
             position: relative;
             border: none;
+            background: none;
         }
 
         .bottom-bar-actions a:hover, .bottom-bar-actions button:hover {
-            background: var(--secondary-green);
-            color: var(--white);
+            color: var(--secondary-green);
+            transform: scale(1.1);
         }
 
         .bottom-bar-actions a::after, .bottom-bar-actions button::after {
@@ -720,6 +751,101 @@ $user_email = '';
         .feedback-message.error {
             background: var(--error-red);
             color: var(--white);
+        }
+
+        /* Chatbot styles */
+        .chatbot-modal-content {
+            max-width: 600px;
+            width: 90%;
+            padding: 1.5rem;
+            text-align: left;
+        }
+
+        .chatbot-container {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            max-height: 60vh;
+        }
+
+        .chatbot-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+            background: var(--light-gray);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .chatbot-message {
+            padding: 0.75rem;
+            border-radius: 8px;
+            max-width: 80%;
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+
+        .chatbot-message.bot {
+            background: var(--primary-green);
+            color: var(--white);
+            align-self: flex-start;
+        }
+
+        .chatbot-message.user {
+            background: var(--accent-yellow);
+            color: var(--dark-gray);
+            align-self: flex-end;
+        }
+
+        .chatbot-form {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .chatbot-form input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid var(--text-gray);
+            border-radius: 8px;
+            font-size: 0.9rem;
+            color: var(--dark-gray);
+        }
+
+        .chatbot-form button {
+            background: var(--accent-yellow);
+            color: var(--dark-gray);
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s ease, color 0.3s ease;
+        }
+
+        .chatbot-form button:hover {
+            background: var(--secondary-green);
+            color: var(--white);
+        }
+
+        .chatbot-messages::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .chatbot-messages::-webkit-scrollbar-track {
+            background: var(--light-gray);
+            border-radius: 8px;
+        }
+
+        .chatbot-messages::-webkit-scrollbar-thumb {
+            background: var(--primary-green);
+            border-radius: 8px;
+        }
+
+        .chatbot-messages::-webkit-scrollbar-thumb:hover {
+            background: var(--secondary-green);
         }
 
         .cart-container {
@@ -1407,6 +1533,12 @@ $user_email = '';
                             <i class="fas fa-shopping-cart"></i>
                             <span class="cart-count"><?php echo $cart_count; ?></span>
                         </a>
+                        <a href="profile.php" class="header-btn notifications-btn">
+                            <i class="fas fa-bell"></i>
+                            <?php if ($notifications_count > 0): ?>
+                                <span class="notifications-count"><?php echo $notifications_count; ?></span>
+                            <?php endif; ?>
+                        </a>
                     <?php else: ?>
                         <a href="login.php" class="header-btn"><i class="fas fa-sign-in-alt"></i></a>
                         <a href="favorites.php" class="header-btn favorites-btn">
@@ -1469,7 +1601,13 @@ $user_email = '';
                 <a href="profile.php" data-tooltip="Profile"><i class="fas fa-user"></i></a>
                 <a href="favorites.php" data-tooltip="Favorites"><i class="fas fa-heart"></i> <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
                 <a href="cart.php" data-tooltip="Cart" class="active"><i class="fas fa-shopping-cart"></i> <span class="cart-count"><?php echo $cart_count; ?></span></a>
+                <a href="profile.php" data-tooltip="Notifications"><i class="fas fa-bell"></i> 
+                    <?php if ($notifications_count > 0): ?>
+                        <span class="notifications-count"><?php echo $notifications_count; ?></span>
+                    <?php endif; ?>
+                </a>
                 <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback"><i class="fas fa-comments"></i></button>
+                <button class="chatbot-btn" id="mobile-chatbot-btn" data-tooltip="Chat with Us"><i class="fas fa-robot"></i></button>
                 <a href="https://wa.me/+256755087665" target="_blank" data-tooltip="Help"><i class="fab fa-whatsapp"></i></a>
             <?php else: ?>
                 <a href="profile.php" data-tooltip="Profile"><i class="fas fa-user"></i></a>
@@ -1477,6 +1615,7 @@ $user_email = '';
                 <a href="cart.php" data-tooltip="Cart" class="active"><i class="fas fa-shopping-cart"></i> <span class="cart-count"><?php echo array_sum($_SESSION['guest_cart']); ?></span></a>
                 <a href="login.php" data-tooltip="Login"><i class="fas fa-sign-in-alt"></i></a>
                 <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback"><i class="fas fa-comments"></i></button>
+                <button class="chatbot-btn" id="mobile-chatbot-btn" data-tooltip="Chat with Us"><i class="fas fa-robot"></i></button>
                 <a href="https://wa.me/+256755087665" target="_blank" data-tooltip="Help"><i class="fab fa-whatsapp"></i></a>
             <?php endif; ?>
         </div>
@@ -1484,6 +1623,7 @@ $user_email = '';
 
     <div class="floating-buttons">
         <button class="floating-btn feedback-btn" id="floating-feedback-btn" data-tooltip="Feedback"><i class="fas fa-comments"></i></button>
+        <button class="floating-btn chatbot-btn" id="floating-chatbot-btn" data-tooltip="Chat with Us"><i class="fas fa-robot"></i></button>
         <a href="https://wa.me/+256755087665" class="floating-btn" target="_blank" data-tooltip="Help"><i class="fab fa-whatsapp"></i></a>
     </div>
 
@@ -1501,6 +1641,25 @@ $user_email = '';
                 <textarea id="feedback_message" name="feedback_message" required></textarea>
                 <button type="submit" name="submit_feedback">Submit Feedback</button>
             </form>
+        </div>
+    </div>
+
+    <div class="modal" id="chatbot-modal" role="dialog" aria-labelledby="chatbot-title" aria-modal="true">
+        <div class="modal-content chatbot-modal-content">
+            <button class="modal-close" id="chatbot-modal-close" aria-label="Close chatbot">&times;</button>
+            <h2 id="chatbot-title">CampusShop Assistant</h2>
+            <div class="chatbot-container">
+                <div class="chatbot-messages" id="chatbot-messages">
+                    <div class="chatbot-message bot">
+                        <p>Hello! Welcome to Bugema CampusShop's Assistant. How can I help you today? Try asking about products, delivery, or discounts!</p>
+                    </div>
+                </div>
+                <form id="chatbot-form" class="chatbot-form">
+                    <label for="chatbot-input" class="sr-only">Type your question</label>
+                    <input type="text" id="chatbot-input" placeholder="Type your question..." autocomplete="off" required aria-required="true">
+                    <button type="submit" aria-label="Send message">Send</button>
+                </form>
+            </div>
         </div>
     </div>
 
@@ -1836,6 +1995,13 @@ $user_email = '';
             const modalProductId = document.getElementById('modal-product-id');
             const modalQuantity = document.getElementById('modal-quantity');
             const modalCheckoutBtn = document.getElementById('modal-checkout-btn');
+            const chatbotBtn = document.getElementById('floating-chatbot-btn');
+            const mobileChatbotBtn = document.getElementById('mobile-chatbot-btn');
+            const chatbotModal = document.getElementById('chatbot-modal');
+            const chatbotModalClose = document.getElementById('chatbot-modal-close');
+            const chatbotForm = document.getElementById('chatbot-form');
+            const chatbotMessages = document.getElementById('chatbot-messages');
+            const chatbotInput = document.getElementById('chatbot-input');
 
             menuIcon.addEventListener('click', function() {
                 mobileMenu.classList.add('active');
@@ -1881,6 +2047,88 @@ $user_email = '';
                 }
             });
 
+            // Chatbot functionality
+            function openChatbotModal() {
+                chatbotModal.style.display = 'flex';
+                chatbotInput.focus();
+                scrollToBottom();
+            }
+
+            function closeChatbotModal() {
+                chatbotModal.style.display = 'none';
+                chatbotInput.value = '';
+            }
+
+            function scrollToBottom() {
+                chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
+            }
+
+            function addMessage(content, sender) {
+                const messageDiv = document.createElement('div');
+                messageDiv.classList.add('chatbot-message', sender);
+                messageDiv.innerHTML = `<p>${content}</p>`;
+                chatbotMessages.appendChild(messageDiv);
+                scrollToBottom();
+            }
+
+            const responses = {
+                'hello': 'Hi! How can I assist you today?',
+                'delivery': 'We offer fast campus delivery within 24 hours to your dorm or a campus pickup point. Would you like more details on delivery options?',
+                'discount': 'Bugema University students with a valid student ID can enjoy exclusive discounts. Verify your ID at checkout to apply them!',
+                'products': 'We offer textbooks, branded jumpers, pens, wall clocks, notebooks, T-shirts, and bottles. Browse categories via the "Browse Categories" button!',
+                'contact': 'You can reach us at campusshop@bugemauniv.ac.ug or via WhatsApp at +256 7550 87665. Want to call now?',
+                'help': 'I\'m here to assist! Ask about delivery, discounts, products, or anything else.',
+                'default': 'Sorry, I didn\'t understand that. Try asking about delivery, discounts, products, or contact info!'
+            };
+
+            chatbotBtn.addEventListener('click', openChatbotModal);
+            mobileChatbotBtn.addEventListener('click', openChatbotModal);
+
+            chatbotModalClose.addEventListener('click', closeChatbotModal);
+
+            chatbotModal.addEventListener('click', function(e) {
+                if (e.target === chatbotModal) {
+                    closeChatbotModal();
+                }
+            });
+
+            chatbotForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const message = chatbotInput.value.trim();
+                if (!message) {
+                    addMessage('Please enter a message.', 'bot');
+                    return;
+                }
+
+                // Add user message
+                addMessage(message, 'user');
+
+                // Get bot response
+                const lowerMessage = message.toLowerCase();
+                let response = responses['default'];
+                for (const key in responses) {
+                    if (lowerMessage.includes(key)) {
+                        response = responses[key];
+                        break;
+                    }
+                }
+
+                // Add bot response
+                setTimeout(() => {
+                    addMessage(response, 'bot');
+                }, 500);
+
+                chatbotInput.value = '';
+                chatbotInput.focus();
+            });
+
+            chatbotInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    chatbotForm.dispatchEvent(new Event('submit'));
+                }
+            });
+
             document.addEventListener('keydown', function(e) {
                 if (e.key === 'Escape') {
                     if (feedbackModal.style.display === 'flex') {
@@ -1891,6 +2139,12 @@ $user_email = '';
                     if (imageModal.style.display === 'flex') {
                         imageModal.style.display = 'none';
                     }
+                    if (chatbotModal.style.display === 'flex') {
+                        closeChatbotModal();
+                    }
+                    if (mobileMenu.classList.contains('active')) {
+                        mobileMenu.classList.remove('active');
+                    }
                 }
             });
 
@@ -1898,13 +2152,13 @@ $user_email = '';
                 e.preventDefault();
                 const formData = new FormData(feedbackForm);
                 formData.append('submit_feedback', 'true');
-                fetch('Bottles.php', {
+                fetch('cart.php', {
                     method: 'POST',
                     body: formData
                 })
                 .then(response => {
                     if (!response.ok) {
-                        throw new Error('Network response was not ok: ' + response.statusText);
+                        throw new Error('Network response was not ok: ' . response.statusText);
                     }
                     return response.json();
                 })

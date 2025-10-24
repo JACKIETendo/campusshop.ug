@@ -2175,6 +2175,15 @@ footer {
                 <div class="header-actions">
                     <?php if (isset($_SESSION['username'])): ?>
                         <span class="username"><a href="profile.php">Hi, <?php echo htmlspecialchars($_SESSION['username']); ?></a></span>
+                        <a href="logout.php" class="header-btn"><i class="fas fa-sign-out-alt"></i></a>
+                        <a href="favorites.php" class="header-btn favorites-btn">
+                            <i class="fas fa-heart"></i>
+                            <span class="favorites-count"><?php echo $favorites_count; ?></span>
+                        </a>
+                        <a href="cart.php" class="header-btn cart-btn">
+                            <i class="fas fa-shopping-cart"></i>
+                            <span class="cart-count"><?php echo $cart_count; ?></span>
+                        </a>
                         <div class="notifications-wrapper" style="position: relative;">
                             <a href="profile.php?tab=notifications" class="header-btn notifications-btn">
                                 <i class="fas fa-bell"></i>
@@ -2199,15 +2208,6 @@ footer {
                                 <a href="profile.php?tab=notifications" class="view-all-notifications">View All Notifications</a>
                             </div>
                         </div>
-                        <a href="logout.php" class="header-btn"><i class="fas fa-sign-out-alt"></i></a>
-                        <a href="favorites.php" class="header-btn favorites-btn">
-                            <i class="fas fa-heart"></i>
-                            <span class="favorites-count"><?php echo $favorites_count; ?></span>
-                        </a>
-                        <a href="cart.php" class="header-btn cart-btn">
-                            <i class="fas fa-shopping-cart"></i>
-                            <span class="cart-count"><?php echo $cart_count; ?></span>
-                        </a>
                     <?php else: ?>
                         <a href="login.php" class="header-btn"><i class="fas fa-sign-in-alt"></i></a>
                         <a href="favorites.php" class="header-btn favorites-btn">
@@ -2250,20 +2250,20 @@ footer {
                     <div class="search-results"></div>
                 </div>
                 <div class="mobile-nav">
-                    <a href="index.php" class="active"><i class="fas fa-home"></i> Home</a>
-                    <a href="textbooks.php"><i class="fas fa-book"></i> Textbooks</a>
-                    <a href="Branded Jumpers.php"><i class="fas fa-tshirt"></i> Branded Jumpers</a>
-                    <a href="Pens.php"><i class="fas fa-pen"></i> Pens</a>
-                    <a href="Wall Clocks.php"><i class="fas fa-clock"></i> Wall Clocks</a>
-                    <a href="Note Books.php"><i class="fas fa-sticky-note"></i> Note Books</a>
-                    <a href="T-Shirts.php"><i class="fas fa-tshirt"></i> T-Shirts</a>
-                    <a href="Bottles.php"><i class="fas fa-wine-bottle"></i> Bottles</a>
-                    <a href="favorites.php"><i class="fas fa-heart"></i> Favorites</a>
-                    <a href="profile.php?tab=notifications"><i class="fas fa-bell"></i> Notifications</a>
+                    <a href="index.php" class="active"> Home</a>
+                    <a href="textbooks.php"> Textbooks</a>
+                    <a href="Branded Jumpers.php"> Branded Jumpers</a>
+                    <a href="Pens.php"> Pens</a>
+                    <a href="Wall Clocks.php"> Wall Clocks</a>
+                    <a href="Note Books.php"> Note Books</a>
+                    <a href="T-Shirts.php"> T-Shirts</a>
+                    <a href="Bottles.php"> Bottles</a>
+                    <a href="favorites.php"> Favorites</a>
+                    <a href="profile.php?tab=notifications"> Notifications</a>
                     <?php if (isset($_SESSION['username'])): ?>
-                        <a href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a>
+                        <a href="logout.php"> Logout</a>
                     <?php else: ?>
-                        <a href="login.php"><i class="fas fa-sign-in-alt"></i> Login</a>
+                        <a href="login.php"> Login</a>
                     <?php endif; ?>
                 </div>
             </div>
@@ -2397,10 +2397,10 @@ footer {
                             <input type="number" name="quantity" id="product-quantity" class="quantity-input" value="1" min="1" aria-label="Quantity">
                         </div>
                         <button type="button" class="action-btn primary" id="product-add-to-cart">
-                            <i class="fas fa-shopping-cart"></i> Add to Cart
+                            <i class="fas fa-shopping-cart"></i>
                         </button>
                         <button type="button" class="action-btn favorite-btn" id="product-toggle-favorite">
-                            <i class="fas fa-heart"></i> Favorite
+                            <i class="fas fa-heart"></i>
                         </button>
                     </div>
 
