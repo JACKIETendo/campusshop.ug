@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Oct 14, 2025 at 06:21 PM
+-- Generation Time: Oct 24, 2025 at 04:09 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -43,7 +43,11 @@ INSERT INTO `cart` (`id`, `user_id`, `product_id`, `session_id`, `quantity`) VAL
 (42, 1, 44, NULL, 1),
 (45, 1, 40, NULL, 1),
 (50, 1, 37, NULL, 1),
-(51, 1, 31, NULL, 1);
+(51, 1, 31, NULL, 1),
+(52, 1, 36, NULL, 1),
+(53, 1, 54, NULL, 1),
+(54, 1, 27, NULL, 1),
+(55, 1, 43, NULL, 1);
 
 -- --------------------------------------------------------
 
@@ -68,9 +72,9 @@ INSERT INTO `favorites` (`id`, `user_id`, `product_id`, `added_at`) VALUES
 (8, 1, 39, '2025-10-09 08:00:41'),
 (9, 1, 43, '2025-10-09 08:00:56'),
 (10, 1, 42, '2025-10-09 09:09:44'),
-(16, 1, 48, '2025-10-09 10:15:28'),
 (17, 1, 32, '2025-10-09 10:15:36'),
-(18, 1, 49, '2025-10-09 10:15:40');
+(19, 1, 47, '2025-10-23 16:41:53'),
+(21, 1, 30, '2025-10-23 18:14:48');
 
 -- --------------------------------------------------------
 
@@ -97,6 +101,18 @@ INSERT INTO `feedback` (`id`, `user_id`, `name`, `email`, `message`, `created_at
 (3, 1, 'Tendo', 'ntendo4343@gmail.com', 'wow', '2025-09-19 14:48:25'),
 (4, 1, 'Tendo', 'ntendo4343@gmail.com', 'wow', '2025-09-19 14:51:50'),
 (5, 1, 'Tendo', 'ntendo4343@gmail.com', 'yeah', '2025-09-19 14:54:49');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `newsletter_subscribers`
+--
+
+CREATE TABLE `newsletter_subscribers` (
+  `id` int(11) NOT NULL,
+  `email` varchar(255) DEFAULT NULL,
+  `subscribed_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
 
@@ -186,7 +202,9 @@ INSERT INTO `pending_deliveries` (`id`, `user_id`, `username`, `phone`, `payment
 (24, 1, 'Tendo', '0755087665', 'Mobile Money', 120000.00, 'Pending', '2025-10-13 12:36:54', 47, 'hostel A', NULL, NULL, 'Airtel'),
 (25, 1, 'Tendo', '0755087665', 'Pay on Delivery', NULL, 'Pending', '2025-10-13 12:37:50', 48, 'hostel A', NULL, NULL, ''),
 (26, 1, 'Tendo', '0765777269', 'Mobile Money', 15000.00, 'Pending', '2025-10-14 13:44:38', 49, 'Room 19', NULL, NULL, 'MTN'),
-(27, 1, 'Tendo', '0765777269', 'Pay on Delivery', NULL, 'Pending', '2025-10-14 13:46:04', 46, 'Room 19', NULL, NULL, '');
+(27, 1, 'Tendo', '0765777269', 'Pay on Delivery', NULL, 'Pending', '2025-10-14 13:46:04', 46, 'Room 19', NULL, NULL, ''),
+(28, 1, 'Tendo', '0755087665', 'Mobile Money', 15000.00, 'Pending', '2025-10-24 12:05:35', 56, 'hostel A', NULL, NULL, 'Airtel'),
+(29, 1, 'Tendo', '0765777269', 'Mobile Money', 12000.00, 'Pending', '2025-10-24 12:06:13', 57, 'Hostal B', NULL, NULL, 'MTN');
 
 -- --------------------------------------------------------
 
@@ -239,6 +257,21 @@ INSERT INTO `products` (`id`, `name`, `price`, `image_path`, `caption`, `categor
 (53, 'text book 7', 7000.00, 'images/1759934374_isidro-lam--4sTc8gIh_U-unsplash.jpg', 'the best boot', 'Textbooks', 0),
 (54, 'Introduction to E-commerce', 234567.00, 'images/1760449943_1757425682_designecologist-gh1IgGFnhSk-unsplash.jpg', '190 pages.\\\\\\\\r\\\\\\\\nIt is good for a student doing E-commerce and E-business', 'Textbooks', 3),
 (55, 'Introduction to UI design ', 20000.00, 'images/1760452004_1757425559_notebook_A4.jpeg', '190 pages. The book is good for UI designers.', 'Textbooks', 3);
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `product_reviews`
+--
+
+CREATE TABLE `product_reviews` (
+  `id` int(11) NOT NULL,
+  `product_id` int(11) DEFAULT NULL,
+  `user_id` int(11) DEFAULT NULL,
+  `rating` int(11) DEFAULT NULL,
+  `comment` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
 
@@ -298,6 +331,13 @@ ALTER TABLE `feedback`
   ADD KEY `user_id` (`user_id`);
 
 --
+-- Indexes for table `newsletter_subscribers`
+--
+ALTER TABLE `newsletter_subscribers`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `email` (`email`);
+
+--
 -- Indexes for table `notifications`
 --
 ALTER TABLE `notifications`
@@ -325,6 +365,14 @@ ALTER TABLE `products`
   ADD PRIMARY KEY (`id`);
 
 --
+-- Indexes for table `product_reviews`
+--
+ALTER TABLE `product_reviews`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `product_id` (`product_id`),
+  ADD KEY `user_id` (`user_id`);
+
+--
 -- Indexes for table `users`
 --
 ALTER TABLE `users`
@@ -339,19 +387,25 @@ ALTER TABLE `users`
 -- AUTO_INCREMENT for table `cart`
 --
 ALTER TABLE `cart`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=52;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=58;
 
 --
 -- AUTO_INCREMENT for table `favorites`
 --
 ALTER TABLE `favorites`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=19;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=22;
 
 --
 -- AUTO_INCREMENT for table `feedback`
 --
 ALTER TABLE `feedback`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+
+--
+-- AUTO_INCREMENT for table `newsletter_subscribers`
+--
+ALTER TABLE `newsletter_subscribers`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `notifications`
@@ -369,13 +423,19 @@ ALTER TABLE `orders`
 -- AUTO_INCREMENT for table `pending_deliveries`
 --
 ALTER TABLE `pending_deliveries`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=28;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=30;
 
 --
 -- AUTO_INCREMENT for table `products`
 --
 ALTER TABLE `products`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=56;
+
+--
+-- AUTO_INCREMENT for table `product_reviews`
+--
+ALTER TABLE `product_reviews`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `users`
@@ -424,6 +484,13 @@ ALTER TABLE `orders`
 --
 ALTER TABLE `pending_deliveries`
   ADD CONSTRAINT `pending_deliveries_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`);
+
+--
+-- Constraints for table `product_reviews`
+--
+ALTER TABLE `product_reviews`
+  ADD CONSTRAINT `product_reviews_ibfk_1` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`),
+  ADD CONSTRAINT `product_reviews_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`);
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
