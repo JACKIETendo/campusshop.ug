@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Nov 04, 2025 at 01:59 PM
+-- Generation Time: Nov 04, 2025 at 04:58 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -42,12 +42,7 @@ CREATE TABLE `cart` (
 INSERT INTO `cart` (`id`, `user_id`, `product_id`, `session_id`, `quantity`) VALUES
 (42, 1, 44, NULL, 1),
 (45, 1, 40, NULL, 1),
-(50, 1, 37, NULL, 1),
-(52, 1, 36, NULL, 1),
-(53, 1, 54, NULL, 1),
-(54, 1, 27, NULL, 1),
-(55, 1, 43, NULL, 1),
-(58, 1, 47, NULL, 1);
+(59, 1, 28, NULL, 1);
 
 -- --------------------------------------------------------
 
@@ -98,12 +93,11 @@ CREATE TABLE `feedback` (
 --
 
 INSERT INTO `feedback` (`id`, `user_id`, `name`, `email`, `message`, `created_at`, `status`, `admin_reply`, `replied_at`) VALUES
-(1, 1, 'Tendo', 'ntendo4343@gmail.com', 'goood', '2025-09-19 14:41:30', 'replied', 'yesss please good', '2025-11-04 12:45:03'),
-(2, 1, 'Tendo', 'ntendo4343@gmail.com', 'yeah', '2025-09-19 14:41:44', 'new', NULL, NULL),
+(2, 1, 'Tendo', 'ntendo4343@gmail.com', 'yeah', '2025-09-19 14:41:44', 'read', NULL, NULL),
 (3, 1, 'Tendo', 'ntendo4343@gmail.com', 'wow', '2025-09-19 14:48:25', 'new', NULL, NULL),
 (4, 1, 'Tendo', 'ntendo4343@gmail.com', 'wow', '2025-09-19 14:51:50', 'new', NULL, NULL),
 (5, 1, 'Tendo', 'ntendo4343@gmail.com', 'yeah', '2025-09-19 14:54:49', 'read', NULL, NULL),
-(6, 1, 'Tendo', 'ntendo4343@gmail.com', 'best work', '2025-11-04 14:37:37', 'read', NULL, NULL);
+(6, 1, 'Tendo', 'ntendo4343@gmail.com', 'best work', '2025-11-04 14:37:37', 'replied', 'sure', '2025-11-04 15:55:14');
 
 -- --------------------------------------------------------
 
@@ -139,7 +133,9 @@ INSERT INTO `notifications` (`id`, `user_id`, `message`, `created_at`) VALUES
 (2, NULL, 'new sales', '2025-10-08 17:00:39'),
 (4, NULL, 'good notification well good', '2025-10-08 19:02:48'),
 (6, NULL, 'hello dear customers', '2025-10-09 11:28:15'),
-(7, 1, 'We\'ve replied to your feedback: yesss please good', '2025-11-04 15:45:05');
+(7, 1, 'We\'ve replied to your feedback: yesss please good', '2025-11-04 15:45:05'),
+(8, 1, 'We\'ve replied to your feedback: sure', '2025-11-04 18:55:14'),
+(9, 1, 'We\'ve replied to your feedback: sure', '2025-11-04 18:55:16');
 
 -- --------------------------------------------------------
 
@@ -174,42 +170,25 @@ CREATE TABLE `pending_deliveries` (
   `location` varchar(255) DEFAULT NULL,
   `stripe_payment_intent_id` varchar(255) DEFAULT NULL,
   `paypal_order_id` varchar(255) DEFAULT NULL,
-  `network_provider` varchar(50) DEFAULT NULL
+  `network_provider` varchar(50) DEFAULT NULL,
+  `product_id` int(11) DEFAULT NULL,
+  `product_name` varchar(255) DEFAULT NULL,
+  `product_image` varchar(255) DEFAULT NULL,
+  `quantity` int(11) DEFAULT 1
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `pending_deliveries`
 --
 
-INSERT INTO `pending_deliveries` (`id`, `user_id`, `username`, `phone`, `payment_method`, `amount`, `status`, `created_at`, `cart_id`, `location`, `stripe_payment_intent_id`, `paypal_order_id`, `network_provider`) VALUES
-(1, 2, 'Ntendo', '0755087665', 'Pay on Delivery', NULL, 'Completed', '2025-08-28 09:47:49', NULL, NULL, NULL, NULL, NULL),
-(2, 2, 'Ntendo', '0755087665', 'Mobile Money', 50000.00, 'Pending', '2025-08-28 09:48:17', NULL, NULL, NULL, NULL, NULL),
-(3, 1, 'Tendo', '0755087665', 'Pay on Delivery', NULL, 'Pending', '2025-08-28 09:49:49', NULL, NULL, NULL, NULL, NULL),
-(4, 1, 'Tendo', '0755087665', 'Mobile Money', 15000.00, 'Pending', '2025-08-28 09:49:58', NULL, NULL, NULL, NULL, NULL),
-(5, 1, 'Tendo', '0755087665', 'Mobile Money', 2000.00, 'Pending', '2025-08-28 15:05:48', 5, NULL, NULL, NULL, NULL),
-(6, 1, 'Tendo', '0755087665', 'Mobile Money', 8000.00, 'Pending', '2025-08-28 15:06:30', 8, NULL, NULL, NULL, NULL),
-(7, 1, 'Tendo', '0755087665', 'Mobile Money', 10000.00, 'Pending', '2025-08-28 15:07:58', 10, NULL, NULL, NULL, NULL),
-(8, 1, 'Tendo', '0755087665', 'Pay on Delivery', NULL, 'Pending', '2025-08-28 15:08:14', 12, NULL, NULL, NULL, NULL),
-(9, 1, 'Tendo', '0755087665', 'Mobile Money', 15000.00, 'Pending', '2025-09-01 13:42:58', 1, 'hostel A', NULL, NULL, NULL),
-(12, 1, 'Tendo', '0755087665', 'Mobile Money', 6000.00, 'Completed', '2025-09-09 12:16:11', 20, 'hostel A', NULL, NULL, NULL),
-(13, 1, 'Tendo', '0755087665', 'Pay on Delivery', NULL, 'Pending', '2025-09-24 13:34:09', 25, 'hostel A', NULL, NULL, NULL),
-(14, 1, 'Tendo', '0755087665', 'Mobile Money', 20000.00, 'Completed', '2025-09-24 13:35:10', 35, 'hostel A', NULL, NULL, NULL),
-(15, 1, 'Tendo', '0755087665', 'Mobile Money', 40000.00, 'Completed', '2025-09-24 13:36:36', 34, 'Hostal B', NULL, NULL, NULL),
-(16, 1, 'Tendo', '0755087665', 'Mobile Money', 21000.00, 'Completed', '2025-09-29 15:25:58', 27, 'Hostal B', NULL, NULL, 'Airtel'),
-(17, 1, 'Tendo', '0755087665', 'Mobile Money', 646000.00, 'Pending', '2025-10-05 10:36:44', 26, 'bugema', NULL, NULL, 'Airtel'),
-(18, 1, 'Tendo', '0755087665', 'Mobile Money', 646000.00, 'Pending', '2025-10-05 10:36:44', 33, 'bugema', NULL, NULL, 'Airtel'),
-(19, 1, 'Tendo', '0755087665', 'Mobile Money', 646000.00, 'Completed', '2025-10-05 10:36:44', 37, 'bugema', NULL, NULL, 'Airtel'),
-(20, 1, 'Tendo', '0755087665', 'Mobile Money', 646000.00, 'Pending', '2025-10-05 10:36:45', 39, 'bugema', NULL, NULL, 'Airtel'),
-(21, 1, 'Tendo', '0755087665', 'Mobile Money', 646000.00, 'Completed', '2025-10-05 10:36:45', 40, 'bugema', NULL, NULL, 'Airtel'),
-(22, 1, 'Tendo', '0755087665', 'Pay on Delivery', NULL, 'Completed', '2025-10-05 10:37:51', 43, 'bugema', NULL, NULL, ''),
-(23, 1, 'Tendo', '0755097665', 'Mobile Money', 15000.00, 'Pending', '2025-10-08 16:05:32', 44, 'Room 19', NULL, NULL, 'Airtel'),
-(24, 1, 'Tendo', '0755087665', 'Mobile Money', 120000.00, 'Pending', '2025-10-13 12:36:54', 47, 'hostel A', NULL, NULL, 'Airtel'),
-(25, 1, 'Tendo', '0755087665', 'Pay on Delivery', NULL, 'Pending', '2025-10-13 12:37:50', 48, 'hostel A', NULL, NULL, ''),
-(26, 1, 'Tendo', '0765777269', 'Mobile Money', 15000.00, 'Pending', '2025-10-14 13:44:38', 49, 'Room 19', NULL, NULL, 'MTN'),
-(27, 1, 'Tendo', '0765777269', 'Pay on Delivery', NULL, 'Pending', '2025-10-14 13:46:04', 46, 'Room 19', NULL, NULL, ''),
-(28, 1, 'Tendo', '0755087665', 'Mobile Money', 15000.00, 'Pending', '2025-10-24 12:05:35', 56, 'hostel A', NULL, NULL, 'Airtel'),
-(29, 1, 'Tendo', '0765777269', 'Mobile Money', 12000.00, 'Pending', '2025-10-24 12:06:13', 57, 'Hostal B', NULL, NULL, 'MTN'),
-(30, 1, 'Tendo', '0755087665', 'Pay on Delivery', NULL, 'Pending', '2025-11-04 10:14:45', 51, 'Room 19', NULL, NULL, '');
+INSERT INTO `pending_deliveries` (`id`, `user_id`, `username`, `phone`, `payment_method`, `amount`, `status`, `created_at`, `cart_id`, `location`, `stripe_payment_intent_id`, `paypal_order_id`, `network_provider`, `product_id`, `product_name`, `product_image`, `quantity`) VALUES
+(24, 1, 'Tendo', '0755087665', 'Mobile Money', 120000.00, 'Pending', '2025-10-13 12:36:54', 47, 'hostel A', NULL, NULL, 'Airtel', NULL, NULL, NULL, 1),
+(27, 1, 'Tendo', '0765777269', 'Pay on Delivery', NULL, 'Completed', '2025-10-14 13:46:04', 46, 'Room 19', NULL, NULL, '', NULL, NULL, NULL, 1),
+(32, 1, 'Tendo', '0765777269', 'Mobile Money', 2000.00, 'Completed', '2025-11-04 13:51:46', 55, 'Room 19', NULL, NULL, 'MTN', NULL, NULL, NULL, 1),
+(33, 1, 'Tendo', '0755097665', 'Pay on Delivery', NULL, 'Completed', '2025-11-04 13:52:02', 54, 'hostel A', NULL, NULL, '', NULL, NULL, NULL, 1),
+(34, 1, 'Tendo', '0755087665', 'Mobile Money', 7000.00, 'Completed', '2025-11-04 15:07:04', 53, 'hostel A', NULL, NULL, 'Airtel', 54, 'Introduction to E-commerce', 'images/1760449943_1757425682_designecologist-gh1IgGFnhSk-unsplash.jpg', 1),
+(35, 1, 'Tendo', '0755087665', 'Pay on Delivery', NULL, 'Completed', '2025-11-04 15:07:43', 52, 'hostel A', NULL, NULL, '', 36, 'calculus 1', 'images/1757425454_organic chemistry.jpeg', 1),
+(36, 1, 'Tendo', '0765777269', 'Mobile Money', 100000.00, 'Completed', '2025-11-04 15:11:16', 50, 'Room 19', NULL, NULL, 'MTN', 37, 'note book 1', 'images/1757425559_notebook A4.jpeg', 5);
 
 -- --------------------------------------------------------
 
@@ -245,8 +224,8 @@ INSERT INTO `products` (`id`, `name`, `price`, `image_path`, `caption`, `categor
 (36, 'calculus 1', 16000.00, 'images/1757425454_organic chemistry.jpeg', 'goood book', 'Textbooks', 10),
 (37, 'note book 1', 20000.00, 'images/1757425559_notebook A4.jpeg', 'goooooood', 'Note Books', 10),
 (38, 'note book 2', 15000.00, 'images/1757425589_asterisk-kwon-q_gjDWf9ths-unsplash.jpg', 'gooooooooooooooooooooo', 'Note Books', 10),
-(39, 'note book 3', 2000.00, 'images/1757425682_designecologist-gh1IgGFnhSk-unsplash.jpg', 'dooooooooooooooo', 'Note Books', 10),
-(40, 'T-shirt 3', 40000.00, 'images/1757425736_alan-bowman-65QPpnFIssE-unsplash.jpg', 'wertyuiokkkkk', 'T-Shirts', 10),
+(39, 'note book 3', 8000.00, 'images/1757425682_designecologist-gh1IgGFnhSk-unsplash.jpg', 'dooooooooooooooo', 'Note Books', 10),
+(40, 'T-shirt 3', 25000.00, 'images/1757425736_alan-bowman-65QPpnFIssE-unsplash.jpg', 'wertyuiokkkkk', 'T-Shirts', 10),
 (41, 'T-shirt 4', 20000.00, 'images/1757425778_faith-yarn-Wr0TpKqf26s-unsplash.jpg', 'wooooooooooooooo', 'T-Shirts', 10),
 (42, 'T-shirt 5', 20500.00, 'images/1757425813_haryo-setyadi-acn5ERAeSb4-unsplash.jpg', 'rooooooooooooooooo', 'T-Shirts', 10),
 (43, 'pen 1', 2000.00, 'images/1757425846_ballpoint pen.jpeg', 'rooooooooooooo', 'Pens', 10),
@@ -255,13 +234,14 @@ INSERT INTO `products` (`id`, `name`, `price`, `image_path`, `caption`, `categor
 (46, 'pen 4', 2000.00, 'images/1757425951_faris-mohammed-PQinRWK1TgU-unsplash.jpg', 'wooooooooooooo', 'Pens', 10),
 (47, 'water bottle 1', 8000.00, 'images/1757426012_adnan-mistry-9kOhd1e608M-unsplash.jpg', 'wpppppppppppppppppppppp', 'Bottles', 10),
 (48, 'water bottle 2', 20000.00, 'images/1757426065_shrey-gupta-HFGdbcqBt_0-unsplash.jpg', 'eoooooooooooooooooo', 'Bottles', 10),
-(49, 'water bottle 3', 30000.00, 'images/1757426154_adnan-mistry-1EtGcA9uWDw-unsplash.jpg', 'eoooooooooo', 'Bottles', 10),
-(50, 'wall clock 1', 80000.00, 'images/1757426309_isidro-lam--4sTc8gIh_U-unsplash.jpg', 'rooooooooooooooooooooooooo', 'Wall Clocks', 10),
+(49, 'water bottle 3', 15000.00, 'images/1757426154_adnan-mistry-1EtGcA9uWDw-unsplash.jpg', 'eoooooooooo', 'Bottles', 10),
+(50, 'wall clock 1', 50000.00, 'images/1757426309_isidro-lam--4sTc8gIh_U-unsplash.jpg', 'rooooooooooooooooooooooooo', 'Wall Clocks', 10),
 (51, 'wall clock 2', 85000.00, 'images/1757426343_1757426309_isidro-lam--4sTc8gIh_U-unsplash.jpg', 'wooooooooooooooooooo', 'Wall Clocks', 10),
-(52, 'Wall Clock 7', 200000.00, 'images/1758721235_karl-callwood-KQONyIFXNZU-unsplash.jpg', 'goooooooooooooooooooooooooooooooooooooooooooo', 'Wall Clocks', 10),
-(53, 'text book 7', 7000.00, 'images/1759934374_isidro-lam--4sTc8gIh_U-unsplash.jpg', 'the best boot', 'Textbooks', 0),
-(54, 'Introduction to E-commerce', 234567.00, 'images/1760449943_1757425682_designecologist-gh1IgGFnhSk-unsplash.jpg', '190 pages.\\\\\\\\r\\\\\\\\nIt is good for a student doing E-commerce and E-business', 'Textbooks', 3),
-(55, 'Introduction to UI design ', 20000.00, 'images/1760452004_1757425559_notebook_A4.jpeg', '190 pages. The book is good for UI designers.', 'Textbooks', 3);
+(52, 'Wall Clock 7', 50000.00, 'images/1758721235_karl-callwood-KQONyIFXNZU-unsplash.jpg', 'goooooooooooooooooooooooooooooooooooooooooooo', 'Wall Clocks', 10),
+(53, 'text book 7', 50000.00, 'images/1759934374_isidro-lam--4sTc8gIh_U-unsplash.jpg', 'the best boot', 'Textbooks', 0),
+(54, 'Introduction to E-commerce', 7000.00, 'images/1760449943_1757425682_designecologist-gh1IgGFnhSk-unsplash.jpg', '190 pages.\\\\\\\\\\\\\\\\r\\\\\\\\\\\\\\\\nIt is good for a student doing E-commerce and E-business', 'Textbooks', 3),
+(55, 'Introduction to UI design ', 6000.00, 'images/1760452004_1757425559_notebook_A4.jpeg', '190 pages. The book is good for UI designers.', 'Textbooks', 3),
+(56, 'text book 8', 11000.00, 'images/1762266026_1760449943_1757425682_designecologist-gh1IgGFnhSk-unsplash.jpg', 'the best book in Uganda', 'Textbooks', 2);
 
 -- --------------------------------------------------------
 
@@ -361,7 +341,8 @@ ALTER TABLE `orders`
 --
 ALTER TABLE `pending_deliveries`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `user_id` (`user_id`);
+  ADD KEY `user_id` (`user_id`),
+  ADD KEY `product_id` (`product_id`);
 
 --
 -- Indexes for table `products`
@@ -392,7 +373,7 @@ ALTER TABLE `users`
 -- AUTO_INCREMENT for table `cart`
 --
 ALTER TABLE `cart`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=59;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=60;
 
 --
 -- AUTO_INCREMENT for table `favorites`
@@ -416,7 +397,7 @@ ALTER TABLE `newsletter_subscribers`
 -- AUTO_INCREMENT for table `notifications`
 --
 ALTER TABLE `notifications`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
 
 --
 -- AUTO_INCREMENT for table `orders`
@@ -428,13 +409,13 @@ ALTER TABLE `orders`
 -- AUTO_INCREMENT for table `pending_deliveries`
 --
 ALTER TABLE `pending_deliveries`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=31;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=37;
 
 --
 -- AUTO_INCREMENT for table `products`
 --
 ALTER TABLE `products`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=56;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=58;
 
 --
 -- AUTO_INCREMENT for table `product_reviews`
@@ -488,7 +469,8 @@ ALTER TABLE `orders`
 -- Constraints for table `pending_deliveries`
 --
 ALTER TABLE `pending_deliveries`
-  ADD CONSTRAINT `pending_deliveries_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`);
+  ADD CONSTRAINT `pending_deliveries_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`),
+  ADD CONSTRAINT `pending_deliveries_ibfk_2` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE SET NULL;
 
 --
 -- Constraints for table `product_reviews`
