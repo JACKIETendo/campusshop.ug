@@ -18,9 +18,9 @@ $is_single_item = isset($_GET['cart_id']) && is_numeric($_GET['cart_id']);
 // \Stripe\Stripe::setApiKey('your_stripe_secret_key');
 
 if ($is_single_item) {
-    // Fetch specific cart item
+    // Fetch specific cart item WITH PRODUCT ID
     $cart_id = (int)$_GET['cart_id'];
-    $stmt = $conn->prepare("SELECT c.id AS cart_id, p.name, p.price, p.image_path, c.quantity 
+    $stmt = $conn->prepare("SELECT c.id AS cart_id, p.id, p.name, p.price, p.image_path, c.quantity 
                             FROM cart c 
                             JOIN products p ON c.product_id = p.id 
                             WHERE c.id = ? AND c.user_id = ?");
@@ -35,8 +35,8 @@ if ($is_single_item) {
     $total = $cart_items[0]['price'] * $cart_items[0]['quantity'];
     $stmt->close();
 } else {
-    // Fetch all cart items for the user
-    $stmt = $conn->prepare("SELECT c.id AS cart_id, p.name, p.price, p.image_path, c.quantity 
+    // Fetch all cart items for the user WITH PRODUCT ID
+    $stmt = $conn->prepare("SELECT c.id AS cart_id, p.id, p.name, p.price, p.image_path, c.quantity 
                             FROM cart c 
                             JOIN products p ON c.product_id = p.id 
                             WHERE c.user_id = ?");
@@ -83,7 +83,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_feedback'])) {
     echo json_encode($response);
     exit();
 }
-
 // Process payment form submission (Mobile Money and Pay on Delivery only)
 if ($_SERVER["REQUEST_METHOD"] == "POST" && !isset($_POST['submit_feedback'])) {
     $payment_method = isset($_POST['payment_method']) ? $_POST['payment_method'] : '';
@@ -103,34 +102,69 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && !isset($_POST['submit_feedback'])) {
             $message = "Please select a network provider (Airtel or MTN).";
         } else {
             $amount = $payment_method === 'Mobile Money' ? floatval($_POST['amount']) : NULL;
+            $success_count = 0;
 
-            // Insert into pending_deliveries for each cart item
+            // Insert into pending_deliveries for each cart item WITH PRODUCT INFORMATION
             foreach ($cart_items as $item) {
                 $cart_id = $item['cart_id'];
-                $stmt = $conn->prepare("INSERT INTO pending_deliveries (user_id, username, phone, payment_method, amount, cart_id, location, status, network_provider) 
-                                        VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending', ?)");
-                $stmt->bind_param("isssdiss", $user_id, $username, $phone, $payment_method, $amount, $cart_id, $location, $network_provider);
-                if ($stmt->execute() === false) {
-                    $message = "Failed to save delivery details: " . $stmt->error;
-                    error_log("Failed to save delivery: " . $stmt->error);
-                    $stmt->close();
-                    break;
-                }
-                $stmt->close();
+                
+                // Use individual parameters to avoid bind_param issues
+                $product_id = $item['id'];
+                $product_name = $item['name'];
+                $product_image = $item['image_path'];
+                $quantity = $item['quantity'];
+                
+                // Insert into pending_deliveries with product information
+                $sql = "INSERT INTO pending_deliveries 
+                        (user_id, username, phone, payment_method, amount, cart_id, location, network_provider,
+                        product_id, product_name, product_image, quantity) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-                // Remove the item from cart
-                $stmt = $conn->prepare("DELETE FROM cart WHERE id = ? AND user_id = ?");
-                $stmt->bind_param("ii", $cart_id, $user_id);
-                $stmt->execute();
-                $stmt->close();
+                    $stmt = $conn->prepare($sql);
+
+                    if ($stmt) {
+                        $stmt->bind_param("isssdississi", 
+                            $user_id, 
+                            $username, 
+                            $phone, 
+                            $payment_method, 
+                            $amount, 
+                            $cart_id, 
+                            $location, 
+                            $network_provider, 
+                            $product_id, 
+                            $product_name, 
+                            $product_image, 
+                            $quantity
+                        );
+
+                        if ($stmt->execute()) {
+                            $success_count++;
+                            // Delete from cart
+                            $delete_stmt = $conn->prepare("DELETE FROM cart WHERE id = ? AND user_id = ?");
+                            $delete_stmt->bind_param("ii", $cart_id, $user_id);
+                            $delete_stmt->execute();
+                            $delete_stmt->close();
+                        }
+                        $stmt->close();
+                    } else {
+                    error_log("Failed to prepare statement: " . $conn->error);
+                }
             }
 
-            if (!isset($message)) {
+            if ($success_count > 0) {
                 if ($payment_method === 'Mobile Money') {
                     $message = "Payment of UGX " . number_format($amount) . " initiated via " . htmlspecialchars($network_provider) . " Mobile Money to " . htmlspecialchars($phone) . ". Please confirm on your phone.";
                 } else {
                     $message = "Pay on Delivery requested to " . htmlspecialchars($phone) . " at " . htmlspecialchars($location) . ". We will contact you to confirm delivery details.";
                 }
+                
+                // Redirect to success page after successful payment
+                $_SESSION['payment_success'] = $message;
+                header("Location: payment_success.php");
+                exit();
+            } else {
+                $message = "Failed to process your order. Please try again.";
             }
         }
     }

@@ -557,22 +557,21 @@ if (isset($_GET['delete_feedback'])) {
             if ($report_type === 'sales_summary') {
             $report_title = "Sales Summary Report";
             
-            // Updated query to include product information
+            // In the sales summary report section, update the query:
             $stmt = $conn->prepare("
                 SELECT 
                     DATE(pd.created_at) as sale_date,
-                    COALESCE(pd.product_name, p.name) as product_name,
-                    COALESCE(pd.product_id, p.id) as product_id,
-                    COALESCE(pd.product_image, p.image_path) as product_image,
+                    COALESCE(pd.product_name, 'Various Products') as product_name,
+                    pd.product_id,
+                    pd.product_image,
+                    pd.quantity,
                     COUNT(*) as order_count,
                     COALESCE(SUM(pd.amount), 0) as total_amount,
                     COALESCE(AVG(pd.amount), 0) as avg_order_value,
                     pd.status
                 FROM pending_deliveries pd
-                LEFT JOIN cart c ON pd.cart_id = c.id
-                LEFT JOIN products p ON COALESCE(pd.product_id, c.product_id) = p.id
                 WHERE DATE(pd.created_at) BETWEEN ? AND ?
-                GROUP BY DATE(pd.created_at), COALESCE(pd.product_id, p.id), pd.status
+                GROUP BY DATE(pd.created_at), pd.product_id, pd.status
                 ORDER BY sale_date DESC, product_name
             ");
             $stmt->bind_param("ss", $start_date, $end_date);
@@ -695,29 +694,33 @@ if ($res = $conn->query("SELECT id, username, amount, payment_method, status, cr
 
 // Products and pending lists for tables
 $products = []; if ($res = $conn->query("SELECT * FROM products WHERE name NOT LIKE 'CATEGORY_%' ORDER BY id DESC LIMIT 200")) while ($r=$res->fetch_assoc()) $products[] = $r;
-
 // Updated: Fetch pending deliveries with product information
-$pendingDeliveries = [];
+$pendingDeliveries = []; 
 if ($res = $conn->query("
     SELECT 
-        pd.id,
-        pd.username,
-        pd.phone,
-        pd.location,
-        pd.payment_method,
-        pd.amount,
-        pd.status,
+        pd.id, 
+        pd.username, 
+        pd.phone, 
+        pd.location, 
+        pd.payment_method, 
+        pd.amount, 
+        pd.status, 
         pd.created_at,
-        COALESCE(pd.product_id, c.product_id) AS product_id,
-        COALESCE(pd.product_name, p.name, 'Unknown Product') AS product_name,
-        COALESCE(pd.product_image, p.image_path, '') AS product_image
+        pd.product_id,
+        pd.product_name,
+        pd.product_image,
+        pd.quantity,
+        COALESCE(pd.product_name, 'Unknown Product') as display_product_name,
+        COALESCE(pd.product_image, '') as display_product_image
     FROM pending_deliveries pd
-    LEFT JOIN cart c ON pd.cart_id = c.id
-    LEFT JOIN products p ON c.product_id = p.id OR pd.product_id = p.id
-    ORDER BY pd.id DESC
-    LIMIT 200
+    ORDER BY pd.created_at DESC LIMIT 200
 ")) {
     while ($r = $res->fetch_assoc()) {
+        // Use product information from pending_deliveries
+        $r['product_name'] = $r['display_product_name'];
+        $r['product_image'] = $r['display_product_image'];
+        $r['product_id'] = $r['product_id'] ?? 'N/A';
+        $r['quantity'] = $r['quantity'] ?? 1;
         $pendingDeliveries[] = $r;
     }
 }
@@ -1252,9 +1255,9 @@ textarea { resize: vertical; min-height: 60px; }
             </div>
         </section>
 
-        <!-- Deliveries Section -->
+       <!-- Deliveries Section -->
 <section id="deliveriesSection" style="display:none;">
-    <div class="panel">
+    <div class="panel" style="margin-bottom:16px;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
             <h3 style="margin:0;">Pending Deliveries</h3>
             <div><a href="#deliveries" class="btn secondary small" onclick="document.querySelector('#deliveriesSection').scrollIntoView({behavior:'smooth'})">View All</a></div>
@@ -1267,6 +1270,7 @@ textarea { resize: vertical; min-height: 60px; }
                 <tr>
                     <th>ID</th>
                     <th>Product</th>
+                    <th>Quantity</th>
                     <th>User</th>
                     <th>Phone</th>
                     <th>Location</th>
@@ -1279,28 +1283,29 @@ textarea { resize: vertical; min-height: 60px; }
             </thead>
             <tbody id="pendingTable">
                 <?php if (count($pendingDeliveries) === 0): ?>
-                    <tr><td colspan="10">No pending deliveries.</td></tr>
+                    <tr><td colspan="11">No pending deliveries.</td></tr>
                 <?php else: foreach ($pendingDeliveries as $p): 
                     $product_image = !empty($p['product_image']) ? htmlspecialchars($p['product_image']) : '';
                     $product_name = !empty($p['product_name']) ? htmlspecialchars($p['product_name']) : 'Unknown Product';
-                    $product_id = !empty($p['product_id']) ? htmlspecialchars($p['product_id']) : 'N/A';
+                    $quantity = isset($p['quantity']) ? intval($p['quantity']) : 1;
                     $created_date = date('M j, Y g:i A', strtotime($p['created_at']));
                 ?>
                     <tr>
                         <td><?php echo htmlspecialchars($p['id']); ?></td>
                         <td>
                             <div style="display:flex; align-items:center; gap:8px; min-width:200px;">
-                                <?php if($product_image): ?>
+                                <?php if($product_image && file_exists($product_image)): ?>
                                     <img src="<?php echo $product_image; ?>" alt="Product image" style="width:40px; height:40px; object-fit:cover; border-radius:6px;">
                                 <?php else: ?>
                                     <div style="width:40px;height:40px;background:#eef3ff;border-radius:6px; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:10px;">No img</div>
                                 <?php endif; ?>
                                 <div>
                                     <div style="font-weight:600; font-size:13px;"><?php echo $product_name; ?></div>
-                                    <div style="font-size:11px; color:var(--muted);">ID: <?php echo $product_id; ?></div>
+                                    <div style="font-size:11px; color:var(--muted);">ID: <?php echo htmlspecialchars($p['product_id'] ?? 'N/A'); ?></div>
                                 </div>
                             </div>
                         </td>
+                        <td style="text-align:center;"><?php echo $quantity; ?></td>
                         <td><?php echo htmlspecialchars($p['username']); ?></td>
                         <td><?php echo htmlspecialchars($p['phone'] ?? 'N/A'); ?></td>
                         <td><?php echo htmlspecialchars($p['location'] ?? 'N/A'); ?></td>
