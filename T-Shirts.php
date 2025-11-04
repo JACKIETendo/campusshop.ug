@@ -1153,16 +1153,13 @@ $user_email = '';
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
 
-        .action-btn.favorite-btn {
+       .action-btn.favorite-btn {
             background: none;
-            border: 2px solid var(--text-gray);
             padding: 8px 12px;
         }
 
         .action-btn.favorite-btn.favorited {
-            background: var(--error-red);
-            border-color: var(--error-red);
-            color: var(--white);
+            color: red;
         }
 
         /* Enhanced Reviews Section */

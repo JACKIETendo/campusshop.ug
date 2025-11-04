@@ -1594,28 +1594,25 @@ $user_email = '';
             </div>
         </div>
     </header>
-
+ 
     <div class="bottom-bar">
         <div class="bottom-bar-actions">
             <?php if (isset($_SESSION['username'])): ?>
                 <a href="profile.php" data-tooltip="Profile"><i class="fas fa-user"></i></a>
                 <a href="favorites.php" data-tooltip="Favorites"><i class="fas fa-heart"></i> <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
-                <a href="cart.php" data-tooltip="Cart" class="active"><i class="fas fa-shopping-cart"></i> <span class="cart-count"><?php echo $cart_count; ?></span></a>
+                <a href="cart.php" data-tooltip="Cart"><i class="fas fa-shopping-cart"></i> <span class="cart-count"><?php echo $cart_count; ?></span></a>
                 <a href="profile.php" data-tooltip="Notifications"><i class="fas fa-bell"></i> 
                     <?php if ($notifications_count > 0): ?>
                         <span class="notifications-count"><?php echo $notifications_count; ?></span>
                     <?php endif; ?>
                 </a>
                 <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback"><i class="fas fa-comments"></i></button>
-                <button class="chatbot-btn" id="mobile-chatbot-btn" data-tooltip="Chat with Us"><i class="fas fa-robot"></i></button>
                 <a href="https://wa.me/+256755087665" target="_blank" data-tooltip="Help"><i class="fab fa-whatsapp"></i></a>
             <?php else: ?>
-                <a href="profile.php" data-tooltip="Profile"><i class="fas fa-user"></i></a>
-                <a href="favorites.php" data-tooltip="Favorites"><i class="fas fa-heart"></i> <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
-                <a href="cart.php" data-tooltip="Cart" class="active"><i class="fas fa-shopping-cart"></i> <span class="cart-count"><?php echo array_sum($_SESSION['guest_cart']); ?></span></a>
                 <a href="login.php" data-tooltip="Login"><i class="fas fa-sign-in-alt"></i></a>
+                <a href="favorites.php" data-tooltip="Favorites"><i class="fas fa-heart"></i> <span class="favorites-count"><?php echo $favorites_count; ?></span></a>
+                <a href="cart.php" data-tooltip="Cart"><i class="fas fa-shopping-cart"></i> <span class="cart-count"><?php echo $cart_count; ?></span></a>
                 <button class="feedback-btn" id="mobile-feedback-btn" data-tooltip="Feedback"><i class="fas fa-comments"></i></button>
-                <button class="chatbot-btn" id="mobile-chatbot-btn" data-tooltip="Chat with Us"><i class="fas fa-robot"></i></button>
                 <a href="https://wa.me/+256755087665" target="_blank" data-tooltip="Help"><i class="fab fa-whatsapp"></i></a>
             <?php endif; ?>
         </div>

@@ -748,7 +748,7 @@ nav {
     background: var(--secondary-green);
     border-radius: 8px;
     padding: 0.5rem;
-    padding-left: 6.5rem;
+    padding-left: 6.7rem;
 }
 
 .nav-links {
@@ -975,14 +975,11 @@ nav {
 
 .action-btn.favorite-btn {
     background: none;
-    border: 2px solid var(--text-gray);
     padding: 8px 12px;
 }
 
 .action-btn.favorite-btn.favorited {
-    background: var(--error-red);
-    border-color: var(--error-red);
-    color: var(--white);
+    color: red;
 }
 
 /* Enhanced Reviews Section */
@@ -2655,6 +2652,7 @@ footer {
                 scrollToTopBtn.classList.remove('show');
             }
         });
+
         scrollToTopBtn.addEventListener('click', function(e) {
             e.preventDefault();
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -2664,7 +2662,6 @@ footer {
         const menuIcon = document.querySelector('.menu-icon');
         const mobileMenu = document.querySelector('.mobile-menu');
         const closeIcon = document.querySelector('.close-icon');
-
         if (menuIcon && mobileMenu && closeIcon) {
             menuIcon.addEventListener('click', function() {
                 mobileMenu.classList.add('active');
@@ -2751,6 +2748,175 @@ footer {
             });
         }
 
+        // FIXED FEEDBACK FUNCTIONALITY
+        const feedbackBtn = document.getElementById('floating-feedback-btn');
+        const mobileFeedbackBtn = document.getElementById('mobile-feedback-btn');
+        const feedbackModal = document.getElementById('feedback-modal');
+        const feedbackModalClose = document.getElementById('feedback-modal-close');
+        const feedbackForm = document.getElementById('feedback-form');
+        const feedbackMessage = document.getElementById('feedback-message');
+
+        // Feedback Modal Open
+        if (feedbackBtn) {
+            feedbackBtn.addEventListener('click', () => {
+                feedbackModal.style.display = 'flex';
+                feedbackMessage.style.display = 'none';
+            });
+        }
+
+        if (mobileFeedbackBtn) {
+            mobileFeedbackBtn.addEventListener('click', () => {
+                feedbackModal.style.display = 'flex';
+                feedbackMessage.style.display = 'none';
+            });
+        }
+
+        // Close Feedback Modal
+        if (feedbackModalClose) {
+            feedbackModalClose.addEventListener('click', () => {
+                feedbackModal.style.display = 'none';
+                feedbackForm.reset();
+                feedbackMessage.style.display = 'none';
+            });
+        }
+
+        feedbackModal.addEventListener('click', (e) => {
+            if (e.target === feedbackModal) {
+                feedbackModal.style.display = 'none';
+                feedbackForm.reset();
+                feedbackMessage.style.display = 'none';
+            }
+        });
+
+        // FIXED FEEDBACK FORM SUBMISSION
+        feedbackForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(feedbackForm);
+            formData.append('submit_feedback', 'true');
+
+            fetch('index.php', {  // FIXED: Submit to current page
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok: ' + response.statusText);
+                }
+                return response.json();
+            })
+            .then(data => {
+                feedbackMessage.style.display = 'block';
+                feedbackMessage.className = `feedback-message ${data.success ? 'success' : 'error'}`;
+                feedbackMessage.textContent = data.message;
+                if (data.success) {
+                    feedbackForm.reset();
+                    setTimeout(() => {
+                        feedbackModal.style.display = 'none';
+                        feedbackMessage.style.display = 'none';
+                    }, 2000);
+                }
+            })
+            .catch(error => {
+                console.error('Error details:', error);
+                feedbackMessage.style.display = 'block';
+                feedbackMessage.className = 'feedback-message error';
+                feedbackMessage.textContent = 'An error occurred. Please try again.';
+            });
+        });
+
+        // FIXED CHATBOT FUNCTIONALITY
+        const chatbotBtn = document.getElementById('floating-chatbot-btn');
+        const chatbotModal = document.getElementById('chatbot-modal');
+        const chatbotModalClose = document.getElementById('chatbot-modal-close');
+        const chatbotForm = document.getElementById('chatbot-form');
+        const chatbotMessages = document.getElementById('chatbot-messages');
+        const chatbotInput = document.getElementById('chatbot-input');
+
+        function openChatbotModal() {
+            chatbotModal.style.display = 'flex';
+            chatbotInput.focus();
+            scrollToBottom();
+        }
+
+        function closeChatbotModal() {
+            chatbotModal.style.display = 'none';
+            chatbotInput.value = '';
+        }
+
+        function scrollToBottom() {
+            chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
+        }
+
+        function addMessage(content, sender) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('chatbot-message', sender);
+            messageDiv.innerHTML = `<p>${content}</p>`;
+            chatbotMessages.appendChild(messageDiv);
+            scrollToBottom();
+        }
+
+        const responses = {
+            'hello': 'Hi! How can I assist you today?',
+            'delivery': 'We offer fast campus delivery within 24 hours to your dorm or a campus pickup point. Would you like more details on delivery options?',
+            'discount': 'Bugema University students with a valid student ID can enjoy exclusive discounts. Verify your ID at checkout to apply them!',
+            'products': 'We offer textbooks, branded jumpers, pens, wall clocks, notebooks, T-shirts, and bottles. Browse categories via the "Browse Categories" button!',
+            'contact': 'You can reach us at campusshop@bugemauniv.ac.ug or via WhatsApp at +256 7550 87665. Want to call now?',
+            'help': 'I\'m here to assist! Ask about delivery, discounts, products, or anything else.',
+            'default': 'Sorry, I didn\'t understand that. Try asking about delivery, discounts, products, or contact info!'
+        };
+
+        // Chatbot event listeners
+        if (chatbotBtn) {
+            chatbotBtn.addEventListener('click', openChatbotModal);
+        }
+
+        if (chatbotModalClose) {
+            chatbotModalClose.addEventListener('click', closeChatbotModal);
+        }
+
+        chatbotModal.addEventListener('click', function(e) {
+            if (e.target === chatbotModal) {
+                closeChatbotModal();
+            }
+        });
+
+        chatbotForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const message = chatbotInput.value.trim();
+            if (!message) {
+                addMessage('Please enter a message.', 'bot');
+                return;
+            }
+
+            // Add user message
+            addMessage(message, 'user');
+
+            // Get bot response
+            const lowerMessage = message.toLowerCase();
+            let response = responses['default'];
+            for (const key in responses) {
+                if (lowerMessage.includes(key)) {
+                    response = responses[key];
+                    break;
+                }
+            }
+
+            // Add bot response
+            setTimeout(() => {
+                addMessage(response, 'bot');
+            }, 500);
+
+            chatbotInput.value = '';
+            chatbotInput.focus();
+        });
+
+        chatbotInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                chatbotForm.dispatchEvent(new Event('submit'));
+            }
+        });
+
         // Enhanced Product Modal functionality
         const productModal = document.getElementById('product-modal');
         const productModalClose = document.getElementById('product-modal-close');
@@ -2816,7 +2982,6 @@ footer {
                 `;
                 reviewsList.appendChild(reviewItem);
             });
-            
             
             // Set related products based on category
             const relatedProductsContainer = document.getElementById('related-products');
@@ -2999,30 +3164,7 @@ footer {
                 
                 alert('Review submitted successfully!');
             });
-            const menuIcon = document.querySelector('.menu-icon');
-            const mobileMenu = document.querySelector('.mobile-menu');
-            const closeIcon = document.querySelector('.close-icon');
-            const feedbackBtn = document.getElementById('floating-feedback-btn');
-            const mobileFeedbackBtn = document.getElementById('mobile-feedback-btn');
-            const feedbackModal = document.getElementById('feedback-modal');
-            const feedbackModalClose = document.getElementById('feedback-modal-close');
-            const feedbackForm = document.getElementById('feedback-form');
-            const feedbackMessage = document.getElementById('feedback-message');
-            const imageModal = document.getElementById('image-modal');
-            const imageModalClose = document.getElementById('image-modal-close');
-            const modalImage = document.getElementById('modal-image');
-            const modalTitle = document.getElementById('modal-title');
-            const modalCaption = document.getElementById('modal-caption');
-            const modalPrice = document.getElementById('modal-price');
-            const modalProductId = document.getElementById('modal-product-id');
-            const modalFavoriteBtn = document.getElementById('modal-favorite-btn');
-            const chatbotBtn = document.getElementById('floating-chatbot-btn');
-            const chatbotModal = document.getElementById('chatbot-modal');
-            const chatbotModalClose = document.getElementById('chatbot-modal-close');
-            const chatbotForm = document.getElementById('chatbot-form');
-            const chatbotMessages = document.getElementById('chatbot-messages');
-            const chatbotInput = document.getElementById('chatbot-input');
-            
+
             // Set up share links
             const shareUrl = `${window.location.origin}/product.php?id=${productData.productId}`;
             const encodedUrl = encodeURIComponent(shareUrl);
@@ -3083,7 +3225,6 @@ footer {
         // Rest of your existing JavaScript functionality
         const searchInput = document.querySelectorAll('.search-input');
         const searchResults = document.querySelectorAll('.search-results');
-
         searchInput.forEach(input => {
             input.addEventListener('input', function() {
                 // Your existing search implementation
@@ -3094,7 +3235,6 @@ footer {
         const browseCategoriesBtn = document.getElementById('browse-categories-btn');
         const categoriesModal = document.getElementById('categories-modal');
         const modalCloseBtn = document.getElementById('modal-close-btn');
-
         browseCategoriesBtn.addEventListener('click', function() {
             categoriesModal.style.display = 'flex';
             document.body.style.overflow = 'hidden';
@@ -3171,6 +3311,22 @@ footer {
                 updateSlider();
             }, 20000);
         }
+
+        // Add screen reader styles
+        const style = document.createElement('style');
+        style.textContent = `
+            .sr-only {
+                position: absolute;
+                width: 1px;
+                height: 1px;
+                padding: 0;
+                margin: -1px;
+                overflow: hidden;
+                clip: rect(0, 0, 0, 0);
+                border: 0;
+            }
+        `;
+        document.head.appendChild(style);
     });
     </script>
 </body>

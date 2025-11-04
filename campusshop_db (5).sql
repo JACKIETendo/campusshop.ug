@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Oct 24, 2025 at 04:09 PM
+-- Generation Time: Nov 04, 2025 at 01:59 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -43,11 +43,11 @@ INSERT INTO `cart` (`id`, `user_id`, `product_id`, `session_id`, `quantity`) VAL
 (42, 1, 44, NULL, 1),
 (45, 1, 40, NULL, 1),
 (50, 1, 37, NULL, 1),
-(51, 1, 31, NULL, 1),
 (52, 1, 36, NULL, 1),
 (53, 1, 54, NULL, 1),
 (54, 1, 27, NULL, 1),
-(55, 1, 43, NULL, 1);
+(55, 1, 43, NULL, 1),
+(58, 1, 47, NULL, 1);
 
 -- --------------------------------------------------------
 
@@ -67,7 +67,6 @@ CREATE TABLE `favorites` (
 --
 
 INSERT INTO `favorites` (`id`, `user_id`, `product_id`, `added_at`) VALUES
-(2, 1, 36, '2025-09-19 07:20:31'),
 (3, 1, 40, '2025-09-19 07:20:32'),
 (8, 1, 39, '2025-10-09 08:00:41'),
 (9, 1, 43, '2025-10-09 08:00:56'),
@@ -88,19 +87,23 @@ CREATE TABLE `feedback` (
   `name` varchar(100) NOT NULL,
   `email` varchar(100) NOT NULL,
   `message` text NOT NULL,
-  `created_at` datetime DEFAULT current_timestamp()
+  `created_at` datetime DEFAULT current_timestamp(),
+  `status` enum('new','read','replied') DEFAULT 'new',
+  `admin_reply` text DEFAULT NULL,
+  `replied_at` timestamp NULL DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `feedback`
 --
 
-INSERT INTO `feedback` (`id`, `user_id`, `name`, `email`, `message`, `created_at`) VALUES
-(1, 1, 'Tendo', 'ntendo4343@gmail.com', 'goood', '2025-09-19 14:41:30'),
-(2, 1, 'Tendo', 'ntendo4343@gmail.com', 'yeah', '2025-09-19 14:41:44'),
-(3, 1, 'Tendo', 'ntendo4343@gmail.com', 'wow', '2025-09-19 14:48:25'),
-(4, 1, 'Tendo', 'ntendo4343@gmail.com', 'wow', '2025-09-19 14:51:50'),
-(5, 1, 'Tendo', 'ntendo4343@gmail.com', 'yeah', '2025-09-19 14:54:49');
+INSERT INTO `feedback` (`id`, `user_id`, `name`, `email`, `message`, `created_at`, `status`, `admin_reply`, `replied_at`) VALUES
+(1, 1, 'Tendo', 'ntendo4343@gmail.com', 'goood', '2025-09-19 14:41:30', 'replied', 'yesss please good', '2025-11-04 12:45:03'),
+(2, 1, 'Tendo', 'ntendo4343@gmail.com', 'yeah', '2025-09-19 14:41:44', 'new', NULL, NULL),
+(3, 1, 'Tendo', 'ntendo4343@gmail.com', 'wow', '2025-09-19 14:48:25', 'new', NULL, NULL),
+(4, 1, 'Tendo', 'ntendo4343@gmail.com', 'wow', '2025-09-19 14:51:50', 'new', NULL, NULL),
+(5, 1, 'Tendo', 'ntendo4343@gmail.com', 'yeah', '2025-09-19 14:54:49', 'read', NULL, NULL),
+(6, 1, 'Tendo', 'ntendo4343@gmail.com', 'best work', '2025-11-04 14:37:37', 'read', NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -135,7 +138,8 @@ INSERT INTO `notifications` (`id`, `user_id`, `message`, `created_at`) VALUES
 (1, NULL, 'we have new branded jackets', '2025-09-25 10:50:29'),
 (2, NULL, 'new sales', '2025-10-08 17:00:39'),
 (4, NULL, 'good notification well good', '2025-10-08 19:02:48'),
-(6, NULL, 'hello dear customers', '2025-10-09 11:28:15');
+(6, NULL, 'hello dear customers', '2025-10-09 11:28:15'),
+(7, 1, 'We\'ve replied to your feedback: yesss please good', '2025-11-04 15:45:05');
 
 -- --------------------------------------------------------
 
@@ -204,7 +208,8 @@ INSERT INTO `pending_deliveries` (`id`, `user_id`, `username`, `phone`, `payment
 (26, 1, 'Tendo', '0765777269', 'Mobile Money', 15000.00, 'Pending', '2025-10-14 13:44:38', 49, 'Room 19', NULL, NULL, 'MTN'),
 (27, 1, 'Tendo', '0765777269', 'Pay on Delivery', NULL, 'Pending', '2025-10-14 13:46:04', 46, 'Room 19', NULL, NULL, ''),
 (28, 1, 'Tendo', '0755087665', 'Mobile Money', 15000.00, 'Pending', '2025-10-24 12:05:35', 56, 'hostel A', NULL, NULL, 'Airtel'),
-(29, 1, 'Tendo', '0765777269', 'Mobile Money', 12000.00, 'Pending', '2025-10-24 12:06:13', 57, 'Hostal B', NULL, NULL, 'MTN');
+(29, 1, 'Tendo', '0765777269', 'Mobile Money', 12000.00, 'Pending', '2025-10-24 12:06:13', 57, 'Hostal B', NULL, NULL, 'MTN'),
+(30, 1, 'Tendo', '0755087665', 'Pay on Delivery', NULL, 'Pending', '2025-11-04 10:14:45', 51, 'Room 19', NULL, NULL, '');
 
 -- --------------------------------------------------------
 
@@ -387,7 +392,7 @@ ALTER TABLE `users`
 -- AUTO_INCREMENT for table `cart`
 --
 ALTER TABLE `cart`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=58;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=59;
 
 --
 -- AUTO_INCREMENT for table `favorites`
@@ -399,7 +404,7 @@ ALTER TABLE `favorites`
 -- AUTO_INCREMENT for table `feedback`
 --
 ALTER TABLE `feedback`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- AUTO_INCREMENT for table `newsletter_subscribers`
@@ -411,7 +416,7 @@ ALTER TABLE `newsletter_subscribers`
 -- AUTO_INCREMENT for table `notifications`
 --
 ALTER TABLE `notifications`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
 
 --
 -- AUTO_INCREMENT for table `orders`
@@ -423,7 +428,7 @@ ALTER TABLE `orders`
 -- AUTO_INCREMENT for table `pending_deliveries`
 --
 ALTER TABLE `pending_deliveries`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=30;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=31;
 
 --
 -- AUTO_INCREMENT for table `products`

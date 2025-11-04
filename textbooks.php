@@ -940,16 +940,13 @@ $user_email = '';
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
 
-        .action-btn.favorite-btn {
+       .action-btn.favorite-btn {
             background: none;
-            border: 2px solid var(--text-gray);
             padding: 8px 12px;
         }
 
         .action-btn.favorite-btn.favorited {
-            background: var(--error-red);
-            border-color: var(--error-red);
-            color: var(--white);
+            color: red;
         }
 
         /* Enhanced Reviews Section */
@@ -1848,20 +1845,20 @@ $user_email = '';
                     <div class="search-results"></div>
                 </div>
                 <div class="mobile-nav">
-                    <a href="index.php"><i class="fas fa-home"></i> Home</a>
-                    <a href="textbooks.php" class="active"><i class="fas fa-book"></i> Textbooks</a>
-                    <a href="Branded Jumpers.php"><i class="fas fa-tshirt"></i> Branded Jumpers</a>
-                    <a href="Pens.php"><i class="fas fa-pen"></i> Pens</a>
-                    <a href="Wall Clocks.php"><i class="fas fa-clock"></i> Wall Clocks</a>
-                    <a href="Note Books.php"><i class="fas fa-sticky-note"></i> Note Books</a>
-                    <a href="T-Shirts.php"><i class="fas fa-tshirt"></i> T-Shirts</a>
-                    <a href="Bottles.php"><i class="fas fa-wine-bottle"></i> Bottles</a>
-                    <a href="favorites.php"><i class="fas fa-heart"></i> Favorites</a>
-                    <a href="profile.php?tab=notifications"><i class="fas fa-bell"></i> Notifications</a>
+                    <a href="index.php">Home</a>
+                    <a href="textbooks.php" class="active">Textbooks</a>
+                    <a href="Branded Jumpers.php">Branded Jumpers</a>
+                    <a href="Pens.php">Pens</a>
+                    <a href="Wall Clocks.php"> Clocks</a>
+                    <a href="Note Books.php">Note Books</a>
+                    <a href="T-Shirts.php">T-Shirts</a>
+                    <a href="Bottles.php">Bottles</a>
+                    <a href="favorites.php">Favorites</a>
+                    <a href="profile.php?tab=notifications">Notifications</a>
                     <?php if (isset($_SESSION['username'])): ?>
-                        <a href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a>
+                        <a href="logout.php">Logout</a>
                     <?php else: ?>
-                        <a href="login.php"><i class="fas fa-sign-in-alt"></i> Login</a>
+                        <a href="login.php">Login</a>
                     <?php endif; ?>
                 </div>
             </div>

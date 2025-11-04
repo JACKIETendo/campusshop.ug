@@ -1,11 +1,12 @@
 <?php
-// admin_dashboard.php (single-file dashboard: Products, Categories, Deliveries, Reports, Notifications)
+// admin_dashboard.php (single-file dashboard: Products, Categories, Deliveries, Reports, Notifications, Feedback)
 // Requires: db_connect.php (creates $conn mysqli connection)
 // Database: campusshop_db
 // Tables required:
 //  - products(id, name, price, stock, category, caption, image_path)
 //  - pending_deliveries(id, username, amount, payment_method, status, created_at)
 //  - notifications(id, user_id, message, created_at)
+//  - feedback(id, user_id, name, email, message, created_at, status, admin_reply)
 
 session_start();
 include 'db_connect.php';
@@ -20,6 +21,81 @@ if (!isset($_SESSION['username']) || $_SESSION['role'] !== 'admin') {
     error_log("Unauthorized access attempt: " . print_r($_SESSION, true));
     header("Location: index.php");
     exit;
+}
+// ==================== EMAIL FUNCTION ====================
+function sendFeedbackReplyEmail($userEmail, $userName, $userMessage, $adminReply) {
+    $to = $userEmail;
+    $subject = "Reply to Your Feedback - Bugema CampusShop";
+    
+    $message = "
+    <html>
+    <head>
+        <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: #091bbe; color: white; padding: 20px; text-align: center; }
+            .content { background: #f9f9f9; padding: 20px; border-left: 4px solid #091bbe; }
+            .footer { background: #f1f1f1; padding: 15px; text-align: center; font-size: 12px; color: #666; }
+            .user-message { background: white; padding: 15px; margin: 15px 0; border-radius: 5px; border-left: 3px solid #e6eefc; }
+            .admin-reply { background: #e8f4fd; padding: 15px; margin: 15px 0; border-radius: 5px; border-left: 3px solid #091bbe; }
+        </style>
+    </head>
+    <body>
+        <div class='container'>
+            <div class='header'>
+                <h1>Bugema CampusShop</h1>
+                <p>Response to Your Feedback</p>
+            </div>
+            <div class='content'>
+                <p>Dear $userName,</p>
+                <p>Thank you for your feedback. Here is our response:</p>
+                
+                <div class='user-message'>
+                    <strong>Your original message:</strong><br>
+                    <em>" . nl2br(htmlspecialchars($userMessage)) . "</em>
+                </div>
+                
+                <div class='admin-reply'>
+                    <strong>Our response:</strong><br>
+                    " . nl2br(htmlspecialchars($adminReply)) . "
+                </div>
+                
+                <p>If you have any further questions, please don't hesitate to contact us.</p>
+                
+                <p>Best regards,<br>
+                Bugema CampusShop Team</p>
+            </div>
+            <div class='footer'>
+                <p>Bugema CampusShop - Bugema University<br>
+                Email: campusshop@bugemauniv.ac.ug | Phone: +256 7550 87665</p>
+                <p><small>This is an automated message. Please do not reply to this email.</small></p>
+            </div>
+        </div>
+    </body>
+    </html>
+    ";
+    
+    $headers = "MIME-Version: 1.0" . "\r\n";
+    $headers .= "Content-type:text/html;charset=UTF-8" . "\r\n";
+    $headers .= "From: Bugema CampusShop <noreply@campusshop.ug>" . "\r\n";
+    $headers .= "Reply-To: campusshop@bugemauniv.ac.ug" . "\r\n";
+    $headers .= "X-Mailer: PHP/" . phpversion();
+    
+    // For debugging, you can log instead of actually sending
+    error_log("Attempting to send email to: $userEmail");
+    
+    return mail($to, $subject, $message, $headers);
+}
+
+// ==================== NOTIFICATION FUNCTION ====================
+function createUserNotification($userId, $message) {
+    global $conn;
+    if ($userId) {
+        $stmt = $conn->prepare("INSERT INTO notifications (user_id, message, created_at) VALUES (?, ?, NOW())");
+        $stmt->bind_param("is", $userId, $message);
+        return $stmt->execute();
+    }
+    return false;
 }
 
 // Lightweight JSON endpoint for product fetch (used by openEditProduct)
@@ -364,55 +440,184 @@ if (isset($_GET['delete_notification'])) {
     }
 }
 
-// --------------------
-// PRINT SALES REPORT
-// --------------------
-if (isset($_GET['print_report'])) {
-    $report_type = $_GET['print_report'];
-    $start_date = $_GET['start_date'] ?? date('Y-m-01');
-    $end_date = $_GET['end_date'] ?? date('Y-m-t');
+// ==================== FEEDBACK MANAGEMENT ====================
+
+// Handle admin reply to feedback
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reply_feedback'])) {
+    $feedback_id = intval(post_val('feedback_id', 0));
+    $admin_reply = trim($conn->real_escape_string(post_val('admin_reply', '')));
     
-    // Generate report data
-    $report_data = [];
-    $report_title = "";
-    
-    if ($report_type === 'sales_summary') {
-        $report_title = "Sales Summary Report";
-        $stmt = $conn->prepare("
-            SELECT 
-                DATE(created_at) as sale_date,
-                COUNT(*) as order_count,
-                SUM(amount) as total_amount,
-                AVG(amount) as avg_order_value
-            FROM pending_deliveries 
-            WHERE status = 'Completed' AND created_at BETWEEN ? AND ?
-            GROUP BY DATE(created_at)
-            ORDER BY sale_date DESC
-        ");
-        $stmt->bind_param("ss", $start_date, $end_date);
+    if ($feedback_id <= 0) {
+        $message = "Invalid feedback ID.";
+    } elseif (empty($admin_reply)) {
+        $message = "Reply message cannot be empty.";
+    } else {
+        // First get user details and original message
+        $stmt = $conn->prepare("SELECT user_id, name, email, message FROM feedback WHERE id = ?");
+        $stmt->bind_param("i", $feedback_id);
         $stmt->execute();
         $result = $stmt->get_result();
-        while ($row = $result->fetch_assoc()) {
-            $report_data[] = $row;
+        
+        if ($result->num_rows > 0) {
+            $feedback = $result->fetch_assoc();
+            $userName = $feedback['name'];
+            $userEmail = $feedback['email'];
+            $userMessage = $feedback['message'];
+            $userId = $feedback['user_id'];
+            
+            // Update the feedback with admin reply
+            $update_stmt = $conn->prepare("UPDATE feedback SET admin_reply = ?, status = 'replied', replied_at = NOW() WHERE id = ?");
+            $update_stmt->bind_param("si", $admin_reply, $feedback_id);
+            
+            if ($update_stmt->execute()) {
+                $emailSent = false;
+                $notificationCreated = false;
+                
+                // Send email notification if user provided email
+                if (!empty($userEmail) && filter_var($userEmail, FILTER_VALIDATE_EMAIL)) {
+                    $emailSent = sendFeedbackReplyEmail($userEmail, $userName, $userMessage, $admin_reply);
+                    error_log("Email send attempt result: " . ($emailSent ? "SUCCESS" : "FAILED"));
+                } else {
+                    error_log("No valid email provided for feedback ID: $feedback_id");
+                }
+                
+                // Create in-app notification if user is registered
+                if ($userId) {
+                    $notificationMessage = "We've replied to your feedback: " . (strlen($admin_reply) > 50 ? substr($admin_reply, 0, 50) . "..." : $admin_reply);
+                    $notificationCreated = createUserNotification($userId, $notificationMessage);
+                }
+                
+                // Build success message
+                if ($emailSent && $notificationCreated) {
+                    $message = "Reply sent successfully! User notified via email and in-app notification.";
+                } elseif ($emailSent) {
+                    $message = "Reply sent successfully! User notified via email.";
+                } elseif ($notificationCreated) {
+                    $message = "Reply saved successfully! User notified via in-app notification.";
+                } else {
+                    $message = "Reply saved successfully! (No notifications sent - user has no email or account)";
+                }
+                
+            } else {
+                $message = "Failed to save reply: " . $update_stmt->error;
+                error_log("Reply feedback failed: " . $update_stmt->error);
+            }
+            $update_stmt->close();
+        } else {
+            $message = "Feedback not found.";
         }
         $stmt->close();
-    } elseif ($report_type === 'category_sales') {
+    }
+}
+
+// Mark feedback as read
+if (isset($_GET['mark_feedback_read'])) {
+    $feedback_id = intval($_GET['mark_feedback_read']);
+    if ($feedback_id > 0) {
+        $stmt = $conn->prepare("UPDATE feedback SET status = 'read' WHERE id = ?");
+        $stmt->bind_param("i", $feedback_id);
+        if ($stmt->execute()) {
+            $message = "Feedback marked as read.";
+        } else {
+            $message = "Failed to update feedback: " . $stmt->error;
+            error_log("Mark feedback read failed: " . $stmt->error);
+        }
+        $stmt->close();
+    }
+}
+
+// Delete feedback
+if (isset($_GET['delete_feedback'])) {
+    $feedback_id = intval($_GET['delete_feedback']);
+    if ($feedback_id > 0) {
+        $stmt = $conn->prepare("DELETE FROM feedback WHERE id = ?");
+        $stmt->bind_param("i", $feedback_id);
+        if ($stmt->execute()) {
+            $message = "Feedback deleted successfully.";
+        } else {
+            $message = "Failed to delete feedback: " . $stmt->error;
+            error_log("Delete feedback failed: " . $stmt->error);
+        }
+        $stmt->close();
+    }
+}
+
+        // --------------------
+        // PRINT SALES REPORT
+        // --------------------
+        if (isset($_GET['print_report'])) {
+            $report_type = $_GET['print_report'];
+            $start_date = $_GET['start_date'] ?? date('Y-m-01');
+            $end_date = $_GET['end_date'] ?? date('Y-m-t');
+            
+            // Generate report data
+            $report_data = [];
+            $report_title = "";
+            
+            if ($report_type === 'sales_summary') {
+            $report_title = "Sales Summary Report";
+            
+            // Updated query to include product information
+            $stmt = $conn->prepare("
+                SELECT 
+                    DATE(pd.created_at) as sale_date,
+                    COALESCE(pd.product_name, p.name) as product_name,
+                    COALESCE(pd.product_id, p.id) as product_id,
+                    COALESCE(pd.product_image, p.image_path) as product_image,
+                    COUNT(*) as order_count,
+                    COALESCE(SUM(pd.amount), 0) as total_amount,
+                    COALESCE(AVG(pd.amount), 0) as avg_order_value,
+                    pd.status
+                FROM pending_deliveries pd
+                LEFT JOIN cart c ON pd.cart_id = c.id
+                LEFT JOIN products p ON COALESCE(pd.product_id, c.product_id) = p.id
+                WHERE DATE(pd.created_at) BETWEEN ? AND ?
+                GROUP BY DATE(pd.created_at), COALESCE(pd.product_id, p.id), pd.status
+                ORDER BY sale_date DESC, product_name
+            ");
+            $stmt->bind_param("ss", $start_date, $end_date);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            while ($row = $result->fetch_assoc()) {
+                $report_data[] = $row;
+            }
+            $stmt->close();
+            
+            // If no data found, show empty message
+            if (empty($report_data)) {
+                $report_data[] = [
+                    'sale_date' => $start_date,
+                    'product_name' => 'No products',
+                    'order_count' => 0,
+                    'total_amount' => 0,
+                    'avg_order_value' => 0,
+                    'status' => 'No data found'
+                ];
+            }
+        } elseif ($report_type === 'category_sales') {
         $report_title = "Category Sales Report";
-        // Note: This query assumes you have a product_id in pending_deliveries table
-        // For now, we'll use a simplified version
+        
+        // Simplified category sales report
         $stmt = $conn->prepare("
             SELECT 
                 category,
                 COUNT(*) as product_count,
-                SUM(price * stock) as estimated_value
+                COALESCE(SUM(price * stock), 0) as inventory_value,
+                COALESCE(AVG(price), 0) as avg_price
             FROM products 
+            WHERE name NOT LIKE 'CATEGORY_%'
             GROUP BY category
-            ORDER BY estimated_value DESC
+            ORDER BY inventory_value DESC
         ");
         $stmt->execute();
         $result = $stmt->get_result();
         while ($row = $result->fetch_assoc()) {
-            $report_data[] = $row;
+            $report_data[] = [
+                'category' => $row['category'],
+                'product_count' => $row['product_count'],
+                'total_sales' => $row['inventory_value'],
+                'avg_price' => $row['avg_price']
+            ];
         }
         $stmt->close();
     }
@@ -435,8 +640,8 @@ if (isset($_GET['print_report'])) {
 // FETCH DASHBOARD DATA
 // --------------------
 $totalSales = 0;
-if ($res = $conn->query("SELECT SUM(amount) AS total_sales FROM pending_deliveries WHERE status = 'Completed'")) {
-    $r = $res->fetch_assoc(); $totalSales = $r['total_sales'] ? floatval($r['total_sales']) : 0;
+if ($res = $conn->query("SELECT COALESCE(SUM(amount), 0) AS total_sales FROM pending_deliveries WHERE status = 'Completed'")) {
+    $r = $res->fetch_assoc(); $totalSales = floatval($r['total_sales']);
 }
 
 $totalProducts = 0;
@@ -448,10 +653,17 @@ if ($res = $conn->query("SELECT COUNT(*) AS cnt FROM pending_deliveries WHERE st
 $notifCount = 0;
 if ($res = $conn->query("SELECT COUNT(*) AS cnt FROM notifications WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)")) { $r = $res->fetch_assoc(); $notifCount = intval($r['cnt']); }
 
-// Sales by month (last 12 months)
+// Feedback counts
+$unreadFeedbackCount = 0;
+if ($res = $conn->query("SELECT COUNT(*) AS cnt FROM feedback WHERE status = 'new'")) { $r = $res->fetch_assoc(); $unreadFeedbackCount = intval($r['cnt']); }
+
+$totalFeedbackCount = 0;
+if ($res = $conn->query("SELECT COUNT(*) AS cnt FROM feedback")) { $r = $res->fetch_assoc(); $totalFeedbackCount = intval($r['cnt']); }
+
+// Sales by month (last 12 months) - FIXED with COALESCE
 $salesLabels = []; $salesData = [];
 $months_sql = "
-    SELECT DATE_FORMAT(created_at, '%Y-%m') AS ym, SUM(amount) AS total
+    SELECT DATE_FORMAT(created_at, '%Y-%m') AS ym, COALESCE(SUM(amount), 0) AS total
     FROM pending_deliveries
     WHERE status = 'Completed' AND created_at >= DATE_SUB(CURDATE(), INTERVAL 11 MONTH)
     GROUP BY ym
@@ -483,7 +695,32 @@ if ($res = $conn->query("SELECT id, username, amount, payment_method, status, cr
 
 // Products and pending lists for tables
 $products = []; if ($res = $conn->query("SELECT * FROM products WHERE name NOT LIKE 'CATEGORY_%' ORDER BY id DESC LIMIT 200")) while ($r=$res->fetch_assoc()) $products[] = $r;
-$pendingDeliveries = []; if ($res = $conn->query("SELECT id, username, phone, location, payment_method, amount, status, created_at FROM pending_deliveries ORDER BY id DESC LIMIT 200")) while ($r=$res->fetch_assoc()) $pendingDeliveries[] = $r;
+
+// Updated: Fetch pending deliveries with product information
+$pendingDeliveries = [];
+if ($res = $conn->query("
+    SELECT 
+        pd.id,
+        pd.username,
+        pd.phone,
+        pd.location,
+        pd.payment_method,
+        pd.amount,
+        pd.status,
+        pd.created_at,
+        COALESCE(pd.product_id, c.product_id) AS product_id,
+        COALESCE(pd.product_name, p.name, 'Unknown Product') AS product_name,
+        COALESCE(pd.product_image, p.image_path, '') AS product_image
+    FROM pending_deliveries pd
+    LEFT JOIN cart c ON pd.cart_id = c.id
+    LEFT JOIN products p ON c.product_id = p.id OR pd.product_id = p.id
+    ORDER BY pd.id DESC
+    LIMIT 200
+")) {
+    while ($r = $res->fetch_assoc()) {
+        $pendingDeliveries[] = $r;
+    }
+}
 
 // Notifications list
 $notifications = [];
@@ -496,6 +733,14 @@ $categories = [];
 if ($res = $conn->query("SELECT DISTINCT category, COUNT(*) as product_count FROM products WHERE name NOT LIKE 'CATEGORY_%' GROUP BY category ORDER BY category")) {
     while ($r = $res->fetch_assoc()) {
         $categories[] = $r;
+    }
+}
+
+// Fetch feedback for management
+$feedbackList = [];
+if ($res = $conn->query("SELECT id, user_id, name, email, message, admin_reply, status, created_at, replied_at FROM feedback ORDER BY created_at DESC LIMIT 200")) {
+    while ($r = $res->fetch_assoc()) {
+        $feedbackList[] = $r;
     }
 }
 
@@ -609,6 +854,66 @@ body.dark .modal {
     width: 100%;
 }
 
+/* Feedback specific styles */
+.feedback-item {
+    border: 1px solid #e6eefc;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 12px;
+    background: #fafbfe;
+}
+
+.feedback-item.unread {
+    background: #e8f4fd;
+    border-left: 4px solid var(--primary);
+}
+
+.feedback-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 10px;
+}
+
+.feedback-user {
+    font-weight: 600;
+    color: var(--primary);
+}
+
+.feedback-date {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.feedback-message {
+    background: white;
+    padding: 12px;
+    border-radius: 6px;
+    margin-bottom: 10px;
+    border-left: 3px solid #e6eefc;
+}
+
+.feedback-reply {
+    background: #f0f7ff;
+    padding: 12px;
+    border-radius: 6px;
+    margin-top: 10px;
+    border-left: 3px solid var(--success);
+}
+
+.feedback-status {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-new { background: #ffebee; color: #d32f2f; }
+.status-read { background: #e3f2fd; color: #1976d2; }
+.status-replied { background: #e8f5e8; color: #388e3c; }
+
 /* Print Styles */
 @media print {
     body * {
@@ -645,6 +950,10 @@ body.dark .modal {
 body.dark{ background:#071029; color:#dbeafe }
 body.dark .panel, body.dark .stat-card, body.dark .search, body.dark .modal{ background:#071229; color:#e6f0ff; box-shadow:none; border:1px solid rgba(255,255,255,0.03) }
 body.dark th{ background: linear-gradient(90deg,#0b2b5b,#08306d) }
+body.dark .feedback-item { background: #0a1a3a; border-color: #1e3a5f; }
+body.dark .feedback-item.unread { background: #0a2342; }
+body.dark .feedback-message { background: #071229; }
+body.dark .feedback-reply { background: #0a2a4a; }
 
 /* messages */
 .message{ padding:10px 12px; border-radius:8px; margin-bottom:12px }
@@ -672,6 +981,13 @@ textarea { resize: vertical; min-height: 60px; }
             <a href="#" data-section="deliveries"><i class="fa fa-truck"></i> Deliveries</a>
             <a href="#" data-section="reports"><i class="fa fa-chart-line"></i> Reports</a>
             <a href="#" data-section="notifications"><i class="fa fa-bell"></i> Notifications</a>
+            <a href="#" data-section="feedback"><i class="fa fa-comments"></i> User Feedback 
+                <?php if ($unreadFeedbackCount > 0): ?>
+                    <span style="background:#ff4757; color:white; border-radius:50%; width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; font-size:10px; margin-left:auto;">
+                        <?php echo $unreadFeedbackCount; ?>
+                    </span>
+                <?php endif; ?>
+            </a>
             <a href="logout.php"><i class="fa fa-sign-out-alt"></i> Log Out</a>
         </nav>
 
@@ -734,9 +1050,11 @@ textarea { resize: vertical; min-height: 60px; }
                     <div style="color:var(--muted); margin-top:8px; font-size:13px;">Awaiting completion</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-label">Notifications (30d)</div>
-                    <div class="stat-value"><?php echo $notifCount; ?></div>
-                    <div style="color:var(--muted); margin-top:8px; font-size:13px;">Recent messages</div>
+                    <div class="stat-label">User Feedback</div>
+                    <div class="stat-value"><?php echo $totalFeedbackCount; ?></div>
+                    <div style="color:var(--muted); margin-top:8px; font-size:13px;">
+                        <?php echo $unreadFeedbackCount; ?> unread
+                    </div>
                 </div>
             </div>
 
@@ -935,41 +1253,85 @@ textarea { resize: vertical; min-height: 60px; }
         </section>
 
         <!-- Deliveries Section -->
-        <section id="deliveriesSection" style="display:none;">
-            <div class="panel">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <h3 style="margin:0;">Pending Deliveries</h3>
-                    <div><a href="#deliveries" class="btn secondary small" onclick="document.querySelector('#deliveriesSection').scrollIntoView({behavior:'smooth'})">View All</a></div>
-                </div>
-            </div>
+<section id="deliveriesSection" style="display:none;">
+    <div class="panel">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3 style="margin:0;">Pending Deliveries</h3>
+            <div><a href="#deliveries" class="btn secondary small" onclick="document.querySelector('#deliveriesSection').scrollIntoView({behavior:'smooth'})">View All</a></div>
+        </div>
+    </div>
 
-            <div class="panel">
-                <table>
-                    <thead><tr><th>ID</th><th>User</th><th>Phone</th><th>Location</th><th>Payment</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead>
-                    <tbody id="pendingTable">
-                        <?php if (count($pendingDeliveries) === 0): ?>
-                            <tr><td colspan="8">No pending deliveries.</td></tr>
-                        <?php else: foreach ($pendingDeliveries as $p): ?>
-                            <tr>
-                                <td><?php echo htmlspecialchars($p['id']); ?></td>
-                                <td><?php echo htmlspecialchars($p['username']); ?></td>
-                                <td><?php echo htmlspecialchars($p['phone'] ?? 'N/A'); ?></td>
-                                <td><?php echo htmlspecialchars($p['location'] ?? 'N/A'); ?></td>
-                                <td><?php echo htmlspecialchars($p['payment_method'] ?? 'N/A'); ?></td>
-                                <td><?php echo $p['amount'] ? 'UGX '.number_format($p['amount']):'N/A'; ?></td>
-                                <td><?php echo htmlspecialchars($p['status']); ?></td>
-                                <td>
-                                    <?php if ($p['status'] === 'Pending'): ?>
-                                        <a class="small btn secondary" href="?complete_delivery=<?php echo $p['id'];?>" onclick="return confirm('Mark completed?')">Complete</a>
-                                    <?php endif; ?>
-                                    <a class="small btn" style="background:#ff5b5b" href="?delete_delivery=<?php echo $p['id'];?>" onclick="return confirm('Delete delivery?')">Delete</a>
-                                </td>
-                            </tr>
-                        <?php endforeach; endif; ?>
-                    </tbody>
-                </table>
-            </div>
-        </section>
+    <div class="panel">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Product</th>
+                    <th>User</th>
+                    <th>Phone</th>
+                    <th>Location</th>
+                    <th>Payment</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="pendingTable">
+                <?php if (count($pendingDeliveries) === 0): ?>
+                    <tr><td colspan="10">No pending deliveries.</td></tr>
+                <?php else: foreach ($pendingDeliveries as $p): 
+                    $product_image = !empty($p['product_image']) ? htmlspecialchars($p['product_image']) : '';
+                    $product_name = !empty($p['product_name']) ? htmlspecialchars($p['product_name']) : 'Unknown Product';
+                    $product_id = !empty($p['product_id']) ? htmlspecialchars($p['product_id']) : 'N/A';
+                    $created_date = date('M j, Y g:i A', strtotime($p['created_at']));
+                ?>
+                    <tr>
+                        <td><?php echo htmlspecialchars($p['id']); ?></td>
+                        <td>
+                            <div style="display:flex; align-items:center; gap:8px; min-width:200px;">
+                                <?php if($product_image): ?>
+                                    <img src="<?php echo $product_image; ?>" alt="Product image" style="width:40px; height:40px; object-fit:cover; border-radius:6px;">
+                                <?php else: ?>
+                                    <div style="width:40px;height:40px;background:#eef3ff;border-radius:6px; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:10px;">No img</div>
+                                <?php endif; ?>
+                                <div>
+                                    <div style="font-weight:600; font-size:13px;"><?php echo $product_name; ?></div>
+                                    <div style="font-size:11px; color:var(--muted);">ID: <?php echo $product_id; ?></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td><?php echo htmlspecialchars($p['username']); ?></td>
+                        <td><?php echo htmlspecialchars($p['phone'] ?? 'N/A'); ?></td>
+                        <td><?php echo htmlspecialchars($p['location'] ?? 'N/A'); ?></td>
+                        <td><?php echo htmlspecialchars($p['payment_method'] ?? 'N/A'); ?></td>
+                        <td><?php echo $p['amount'] ? 'UGX '.number_format($p['amount']):'N/A'; ?></td>
+                        <td>
+                            <span style="padding:4px 8px; border-radius:12px; font-size:11px; font-weight:600; text-transform:uppercase; 
+                                <?php if($p['status'] === 'Completed'): ?>
+                                    background:#e8f5e8; color:#388e3c;
+                                <?php elseif($p['status'] === 'Pending'): ?>
+                                    background:#fff3cd; color:#856404;
+                                <?php else: ?>
+                                    background:#f8d7da; color:#721c24;
+                                <?php endif; ?>
+                            ">
+                                <?php echo htmlspecialchars($p['status']); ?>
+                            </span>
+                        </td>
+                        <td style="font-size:12px; color:var(--muted);"><?php echo $created_date; ?></td>
+                        <td>
+                            <?php if ($p['status'] === 'Pending'): ?>
+                                <a class="small btn secondary" href="?complete_delivery=<?php echo $p['id'];?>" onclick="return confirm('Mark this delivery as completed?')">Complete</a>
+                            <?php endif; ?>
+                            <a class="small btn" style="background:#ff5b5b" href="?delete_delivery=<?php echo $p['id'];?>" onclick="return confirm('Delete this delivery?')">Delete</a>
+                        </td>
+                    </tr>
+                <?php endforeach; endif; ?>
+            </tbody>
+        </table>
+    </div>
+</section>
 
         <!-- Reports Section -->
         <section id="reportsSection" style="display:none;">
@@ -1031,6 +1393,8 @@ textarea { resize: vertical; min-height: 60px; }
                     <thead>
                         <tr style="background:linear-gradient(90deg,var(--primary),var(--primary-2)); color:#fff;">
                             <th style="padding:12px; text-align:left;">Date</th>
+                            <th style="padding:12px; text-align:left;">Product</th>
+                            <th style="padding:12px; text-align:left;">Status</th>
                             <th style="padding:12px; text-align:right;">Orders</th>
                             <th style="padding:12px; text-align:right;">Total Amount</th>
                             <th style="padding:12px; text-align:right;">Avg. Order Value</th>
@@ -1041,18 +1405,49 @@ textarea { resize: vertical; min-height: 60px; }
                         $grand_total = 0;
                         $total_orders = 0;
                         foreach ($report['data'] as $row): 
-                            $grand_total += $row['total_amount'];
-                            $total_orders += $row['order_count'];
+                            // Ensure we have numeric values
+                            $order_count = intval($row['order_count'] ?? 0);
+                            $total_amount = floatval($row['total_amount'] ?? 0);
+                            $avg_value = floatval($row['avg_order_value'] ?? 0);
+                            
+                            $grand_total += $total_amount;
+                            $total_orders += $order_count;
                         ?>
                         <tr style="border-bottom:1px solid #f1f5f9;">
-                            <td style="padding:10px;"><?php echo htmlspecialchars($row['sale_date']); ?></td>
-                            <td style="padding:10px; text-align:right;"><?php echo number_format($row['order_count']); ?></td>
-                            <td style="padding:10px; text-align:right;">UGX <?php echo number_format($row['total_amount'], 2); ?></td>
-                            <td style="padding:10px; text-align:right;">UGX <?php echo number_format($row['avg_order_value'], 2); ?></td>
+                            <td style="padding:10px;"><?php echo htmlspecialchars($row['sale_date'] ?? 'N/A'); ?></td>
+                            <td style="padding:10px;">
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <?php if(!empty($row['product_image'])): ?>
+                                        <img src="<?php echo htmlspecialchars($row['product_image']); ?>" alt="Product" style="width:30px; height:30px; object-fit:cover; border-radius:4px;">
+                                    <?php endif; ?>
+                                    <div>
+                                        <div style="font-weight:600;"><?php echo htmlspecialchars($row['product_name'] ?? 'Various Products'); ?></div>
+                                        <?php if(!empty($row['product_id'])): ?>
+                                            <div style="font-size:11px; color:var(--muted);">ID: <?php echo htmlspecialchars($row['product_id']); ?></div>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                            </td>
+                            <td style="padding:10px;">
+                                <span style="padding:3px 6px; border-radius:8px; font-size:10px; font-weight:600; text-transform:uppercase;
+                                    <?php if(($row['status'] ?? '') === 'Completed'): ?>
+                                        background:#e8f5e8; color:#388e3c;
+                                    <?php elseif(($row['status'] ?? '') === 'Pending'): ?>
+                                        background:#fff3cd; color:#856404;
+                                    <?php else: ?>
+                                        background:#f8d7da; color:#721c24;
+                                    <?php endif; ?>
+                                ">
+                                    <?php echo htmlspecialchars($row['status'] ?? 'Unknown'); ?>
+                                </span>
+                            </td>
+                            <td style="padding:10px; text-align:right;"><?php echo number_format($order_count); ?></td>
+                            <td style="padding:10px; text-align:right;">UGX <?php echo number_format($total_amount, 2); ?></td>
+                            <td style="padding:10px; text-align:right;">UGX <?php echo number_format($avg_value, 2); ?></td>
                         </tr>
                         <?php endforeach; ?>
                         <tr style="background:#f8fafc; font-weight:bold;">
-                            <td style="padding:12px;">TOTAL</td>
+                            <td style="padding:12px;" colspan="3">TOTAL</td>
                             <td style="padding:12px; text-align:right;"><?php echo number_format($total_orders); ?></td>
                             <td style="padding:12px; text-align:right;">UGX <?php echo number_format($grand_total, 2); ?></td>
                             <td style="padding:12px; text-align:right;">UGX <?php echo number_format($total_orders > 0 ? $grand_total / $total_orders : 0, 2); ?></td>
@@ -1065,7 +1460,8 @@ textarea { resize: vertical; min-height: 60px; }
                         <tr style="background:linear-gradient(90deg,var(--primary),var(--primary-2)); color:#fff;">
                             <th style="padding:12px; text-align:left;">Category</th>
                             <th style="padding:12px; text-align:right;">Products</th>
-                            <th style="padding:12px; text-align:right;">Estimated Value</th>
+                            <th style="padding:12px; text-align:right;">Inventory Value</th>
+                            <th style="padding:12px; text-align:right;">Avg. Price</th>
                             <th style="padding:12px; text-align:right;">Percentage</th>
                         </tr>
                     </thead>
@@ -1073,15 +1469,19 @@ textarea { resize: vertical; min-height: 60px; }
                         <?php 
                         $grand_total = 0;
                         foreach ($report['data'] as $row) {
-                            $grand_total += $row['estimated_value'];
+                            $grand_total += floatval($row['total_sales'] ?? 0);
                         }
                         foreach ($report['data'] as $row): 
-                            $percentage = $grand_total > 0 ? ($row['estimated_value'] / $grand_total) * 100 : 0;
+                            $product_count = intval($row['product_count'] ?? 0);
+                            $inventory_value = floatval($row['total_sales'] ?? 0);
+                            $avg_price = floatval($row['avg_price'] ?? 0);
+                            $percentage = $grand_total > 0 ? ($inventory_value / $grand_total) * 100 : 0;
                         ?>
                         <tr style="border-bottom:1px solid #f1f5f9;">
-                            <td style="padding:10px;"><?php echo htmlspecialchars($row['category']); ?></td>
-                            <td style="padding:10px; text-align:right;"><?php echo number_format($row['product_count']); ?></td>
-                            <td style="padding:10px; text-align:right;">UGX <?php echo number_format($row['estimated_value'], 2); ?></td>
+                            <td style="padding:10px;"><?php echo htmlspecialchars($row['category'] ?? 'N/A'); ?></td>
+                            <td style="padding:10px; text-align:right;"><?php echo number_format($product_count); ?></td>
+                            <td style="padding:10px; text-align:right;">UGX <?php echo number_format($inventory_value, 2); ?></td>
+                            <td style="padding:10px; text-align:right;">UGX <?php echo number_format($avg_price, 2); ?></td>
                             <td style="padding:10px; text-align:right;"><?php echo number_format($percentage, 1); ?>%</td>
                         </tr>
                         <?php endforeach; ?>
@@ -1089,6 +1489,7 @@ textarea { resize: vertical; min-height: 60px; }
                             <td style="padding:12px;">TOTAL</td>
                             <td style="padding:12px; text-align:right;"><?php echo number_format(array_sum(array_column($report['data'], 'product_count'))); ?></td>
                             <td style="padding:12px; text-align:right;">UGX <?php echo number_format($grand_total, 2); ?></td>
+                            <td style="padding:12px; text-align:right;">—</td>
                             <td style="padding:12px; text-align:right;">100%</td>
                         </tr>
                     </tbody>
@@ -1159,6 +1560,85 @@ textarea { resize: vertical; min-height: 60px; }
             </div>
         </section>
 
+        <!-- Feedback Section -->
+        <section id="feedbackSection" style="display:none;">
+            <div class="panel" style="margin-bottom:16px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h3 style="margin:0;">User Feedback Management</h3>
+                    <div>
+                        <span class="btn secondary small">
+                            Total: <?php echo $totalFeedbackCount; ?> | 
+                            Unread: <span style="color:#ff4757;"><?php echo $unreadFeedbackCount; ?></span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <?php if (count($feedbackList) === 0): ?>
+                    <div style="text-align:center; padding:40px; color:var(--muted);">
+                        <i class="fa fa-comments" style="font-size:48px; margin-bottom:16px; opacity:0.5;"></i>
+                        <p>No user feedback received yet.</p>
+                    </div>
+                <?php else: ?>
+                    <?php foreach ($feedbackList as $feedback): ?>
+                        <div class="feedback-item <?php echo $feedback['status'] === 'new' ? 'unread' : ''; ?>">
+                            <div class="feedback-header">
+                                <div>
+                                    <span class="feedback-user">
+                                        <?php echo htmlspecialchars($feedback['name']); ?>
+                                        <?php if ($feedback['user_id']): ?>
+                                            <small>(User ID: <?php echo $feedback['user_id']; ?>)</small>
+                                        <?php endif; ?>
+                                    </span>
+                                    <div class="feedback-date">
+                                        <?php echo htmlspecialchars(date('M j, Y g:i A', strtotime($feedback['created_at']))); ?>
+                                        <?php if ($feedback['status'] === 'new'): ?>
+                                            <span class="feedback-status status-new">New</span>
+                                        <?php elseif ($feedback['status'] === 'read'): ?>
+                                            <span class="feedback-status status-read">Read</span>
+                                        <?php elseif ($feedback['status'] === 'replied'): ?>
+                                            <span class="feedback-status status-replied">Replied</span>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                                <div style="display:flex; gap:8px;">
+                                    <?php if ($feedback['status'] === 'new'): ?>
+                                        <a href="?mark_feedback_read=<?php echo $feedback['id']; ?>" class="small btn secondary">Mark Read</a>
+                                    <?php endif; ?>
+                                    <button class="small btn secondary reply-feedback-btn" 
+                                            data-id="<?php echo $feedback['id']; ?>"
+                                            data-email="<?php echo htmlspecialchars($feedback['email']); ?>"
+                                            data-name="<?php echo htmlspecialchars($feedback['name']); ?>">
+                                        <?php echo $feedback['admin_reply'] ? 'Edit Reply' : 'Reply'; ?>
+                                    </button>
+                                    <a href="?delete_feedback=<?php echo $feedback['id']; ?>" class="small btn" style="background:#ff5b5b;" onclick="return confirm('Delete this feedback?')">Delete</a>
+                                </div>
+                            </div>
+                            
+                            <div class="feedback-message">
+                                <strong>Message:</strong><br>
+                                <?php echo nl2br(htmlspecialchars($feedback['message'])); ?>
+                            </div>
+                            
+                            <?php if ($feedback['email']): ?>
+                                <div style="margin-top:8px; font-size:13px; color:var(--muted);">
+                                    <strong>Email:</strong> <?php echo htmlspecialchars($feedback['email']); ?>
+                                </div>
+                            <?php endif; ?>
+                            
+                            <?php if ($feedback['admin_reply']): ?>
+                                <div class="feedback-reply">
+                                    <strong>Your Reply (<?php echo htmlspecialchars(date('M j, Y g:i A', strtotime($feedback['replied_at']))); ?>):</strong><br>
+                                    <?php echo nl2br(htmlspecialchars($feedback['admin_reply'])); ?>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </div>
+        </section>
+
         <!-- Edit Product Modal -->
         <div id="editProductModal" style="display:none;">
             <div class="modal-overlay">
@@ -1216,6 +1696,43 @@ textarea { resize: vertical; min-height: 60px; }
             </div>
         </div>
 
+        <!-- Reply Feedback Modal -->
+        <div id="replyFeedbackModal" style="display:none;">
+            <div class="modal-overlay" id="replyOverlay">
+                <div class="modal" role="dialog" aria-modal="true" aria-label="Reply to feedback">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                        <h3>Reply to Feedback</h3>
+                        <button class="btn secondary" id="closeReplyModal">Close</button>
+                    </div>
+                    <form id="replyForm" method="POST" action="admin_dashboard.php">
+                        <input type="hidden" name="reply_feedback" value="1">
+                        <input type="hidden" id="feedback_id" name="feedback_id">
+                        
+                        <div style="margin-bottom:15px;">
+                            <strong>To:</strong> 
+                            <span id="replyUserName"></span> 
+                            (<span id="replyUserEmail"></span>)
+                        </div>
+                        
+                        <div style="background:#f8f9fa; padding:12px; border-radius:6px; margin-bottom:15px;">
+                            <strong>Original Message:</strong>
+                            <div id="originalMessage" style="margin-top:8px; font-style:italic;"></div>
+                        </div>
+                        
+                        <label for="admin_reply">Your Reply:</label>
+                        <textarea id="admin_reply" name="admin_reply" rows="6" required 
+                                  placeholder="Type your response to the user..."
+                                  style="width:100%; padding:12px; border-radius:8px; border:1px solid #e6eefc; margin-top:8px;"></textarea>
+                        
+                        <div style="text-align:right; margin-top:15px;">
+                            <button type="submit" class="btn">Send Reply</button>
+                            <button type="button" class="btn secondary" id="cancelReply">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
         <!-- Virtual Card Modal (client demo) -->
         <div id="cardModal" style="display:none;">
             <div class="modal-overlay" id="cardOverlay">
@@ -1252,6 +1769,7 @@ textarea { resize: vertical; min-height: 60px; }
         deliveries: document.getElementById('deliveriesSection'),
         reports: document.getElementById('reportsSection'),
         notifications: document.getElementById('notificationsSection'),
+        feedback: document.getElementById('feedbackSection'),
     };
 
     function showSection(name) {
@@ -1290,6 +1808,11 @@ textarea { resize: vertical; min-height: 60px; }
         document.querySelectorAll('#notificationsSection table tbody tr').forEach(r => {
             const txt = r.innerText.toLowerCase();
             r.style.display = txt.includes(q) ? '' : 'none';
+        });
+        // Search in feedback section
+        document.querySelectorAll('.feedback-item').forEach(item => {
+            const txt = item.innerText.toLowerCase();
+            item.style.display = txt.includes(q) ? '' : 'none';
         });
     });
 
@@ -1448,6 +1971,43 @@ textarea { resize: vertical; min-height: 60px; }
 
     if (closeNotifModal) closeNotifModal.addEventListener('click', () => editNotificationModal.style.display = 'none');
     if (cancelEdit) cancelEdit.addEventListener('click', () => editNotificationModal.style.display = 'none');
+
+    // Feedback Reply Functionality
+    const replyFeedbackModal = document.getElementById('replyFeedbackModal');
+    const closeReplyModal = document.getElementById('closeReplyModal');
+    const cancelReply = document.getElementById('cancelReply');
+    const replyBtns = document.querySelectorAll('.reply-feedback-btn');
+
+    replyBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const feedbackId = btn.getAttribute('data-id');
+            const userName = btn.getAttribute('data-name');
+            const userEmail = btn.getAttribute('data-email');
+            
+            // Find the original message from the feedback item
+            const feedbackItem = btn.closest('.feedback-item');
+            const originalMessage = feedbackItem.querySelector('.feedback-message').innerText.replace('Message:\n', '').trim();
+            
+            // Populate the reply form
+            document.getElementById('feedback_id').value = feedbackId;
+            document.getElementById('replyUserName').textContent = userName;
+            document.getElementById('replyUserEmail').textContent = userEmail;
+            document.getElementById('originalMessage').textContent = originalMessage;
+            document.getElementById('admin_reply').value = ''; // Clear previous reply
+            
+            // Show existing reply if editing
+            const existingReply = feedbackItem.querySelector('.feedback-reply');
+            if (existingReply) {
+                const replyText = existingReply.innerText.replace(/Your Reply.*:\n/, '').trim();
+                document.getElementById('admin_reply').value = replyText;
+            }
+            
+            replyFeedbackModal.style.display = 'block';
+        });
+    });
+
+    if (closeReplyModal) closeReplyModal.addEventListener('click', () => replyFeedbackModal.style.display = 'none');
+    if (cancelReply) cancelReply.addEventListener('click', () => replyFeedbackModal.style.display = 'none');
 
     // Sales charts
     const salesLabels = <?php echo $salesLabelsJson; ?>;

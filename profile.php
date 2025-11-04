@@ -537,7 +537,7 @@ CREATE TABLE IF NOT EXISTS order_items (
             background: var(--secondary-green);
             border-radius: 8px;
             padding: 0.5rem;
-            padding-left: 6.5rem;
+            
         }
 
         .nav-links {
