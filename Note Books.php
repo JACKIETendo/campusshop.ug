@@ -1859,6 +1859,10 @@ $user_email = '';
                     <div class="product-modal-thumbnails" id="product-thumbnails">
                         <!-- Thumbnails will be populated by JavaScript -->
                     </div>
+                    <br>
+                    <div class="reviews-list" id="reviews-list">
+                        <!-- Reviews will be populated by JavaScript -->
+                    </div>
                 </div>
                 <div class="product-modal-right">
                     <div class="product-modal-header">
@@ -1879,7 +1883,7 @@ $user_email = '';
                             <i class="fas fa-heart"></i>
                         </button>
                     </div>
-
+                    <br><br><br><br><br><br>
                     <div class="product-reviews">
                         <div class="reviews-header">
                             <h4>Customer Reviews</h4>
@@ -1911,10 +1915,6 @@ $user_email = '';
                             </div>
                             <textarea id="review-comment" placeholder="Share your experience with this product..."></textarea>
                             <button type="button" class="submit-review-btn" id="submit-review">Submit Review</button>
-                        </div>
-
-                        <div class="reviews-list" id="reviews-list">
-                            <!-- Reviews will be populated by JavaScript -->
                         </div>
                     </div>
 

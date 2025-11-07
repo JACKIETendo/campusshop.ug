@@ -91,7 +91,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
         } else {
             $error = "Failed to update profile: " . $stmt->error;
         }
-        $stmt->close();
     }
 }
 
