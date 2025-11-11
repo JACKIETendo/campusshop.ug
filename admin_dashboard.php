@@ -22,6 +22,7 @@ if (!isset($_SESSION['username']) || $_SESSION['role'] !== 'admin') {
     header("Location: index.php");
     exit;
 }
+
 // ==================== EMAIL FUNCTION ====================
 function sendFeedbackReplyEmail($userEmail, $userName, $userMessage, $adminReply) {
     $to = $userEmail;
@@ -378,15 +379,63 @@ if (isset($_GET['delete_category'])) {
     }
 }
 
-// Mark delivery complete
+// ==================== DELIVERY COMPLETION WITH STOCK REDUCTION ====================
 if (isset($_GET['complete_delivery'])) {
     $id = intval($_GET['complete_delivery']);
     if ($id > 0) {
-        $stmt = $conn->prepare("UPDATE pending_deliveries SET status = 'Completed' WHERE id = ?");
-        $stmt->bind_param("i",$id);
-        if ($stmt->execute()) $message = "Delivery marked completed.";
-        else { $message = "Failed to update delivery: ".$stmt->error; error_log("Complete delivery failed: ".$stmt->error); }
-        $stmt->close();
+        // Start transaction for data consistency
+        $conn->begin_transaction();
+        
+        try {
+            // Get delivery details including product_id and quantity
+            $stmt = $conn->prepare("SELECT product_id, quantity FROM pending_deliveries WHERE id = ?");
+            $stmt->bind_param("i", $id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            
+            if ($result->num_rows > 0) {
+                $delivery = $result->fetch_assoc();
+                $product_id = $delivery['product_id'];
+                $quantity = $delivery['quantity'];
+                
+                // Update delivery status
+                $update_stmt = $conn->prepare("UPDATE pending_deliveries SET status = 'Completed' WHERE id = ?");
+                $update_stmt->bind_param("i", $id);
+                $update_stmt->execute();
+                
+                // Reduce product stock if product_id exists
+                if ($product_id && $product_id !== 'N/A') {
+                    $stock_stmt = $conn->prepare("UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?");
+                    $stock_stmt->bind_param("iii", $quantity, $product_id, $quantity);
+                    
+                    if ($stock_stmt->execute()) {
+                        if ($stock_stmt->affected_rows > 0) {
+                            $message = "Delivery marked completed and stock reduced successfully.";
+                        } else {
+                            // If stock reduction failed (not enough stock), rollback
+                            throw new Exception("Not enough stock to complete this delivery.");
+                        }
+                    } else {
+                        throw new Exception("Failed to update product stock: " . $stock_stmt->error);
+                    }
+                    $stock_stmt->close();
+                } else {
+                    $message = "Delivery marked completed (no stock adjustment - product ID missing).";
+                }
+                
+                $update_stmt->close();
+            } else {
+                throw new Exception("Delivery not found.");
+            }
+            
+            $stmt->close();
+            $conn->commit();
+            
+        } catch (Exception $e) {
+            $conn->rollback();
+            $message = "Failed to complete delivery: " . $e->getMessage();
+            error_log("Complete delivery failed: " . $e->getMessage());
+        }
     }
 }
 
@@ -659,6 +708,22 @@ if ($res = $conn->query("SELECT COUNT(*) AS cnt FROM feedback WHERE status = 'ne
 $totalFeedbackCount = 0;
 if ($res = $conn->query("SELECT COUNT(*) AS cnt FROM feedback")) { $r = $res->fetch_assoc(); $totalFeedbackCount = intval($r['cnt']); }
 
+// ==================== STOCK DATA ====================
+$totalStockValue = 0;
+if ($res = $conn->query("SELECT COALESCE(SUM(price * stock), 0) AS total_value FROM products WHERE name NOT LIKE 'CATEGORY_%'")) { 
+    $r = $res->fetch_assoc(); $totalStockValue = floatval($r['total_value']); 
+}
+
+$totalStockItems = 0;
+if ($res = $conn->query("SELECT COALESCE(SUM(stock), 0) AS total_items FROM products WHERE name NOT LIKE 'CATEGORY_%'")) { 
+    $r = $res->fetch_assoc(); $totalStockItems = intval($r['total_items']); 
+}
+
+$lowStockCount = 0;
+if ($res = $conn->query("SELECT COUNT(*) AS cnt FROM products WHERE stock <= 5 AND name NOT LIKE 'CATEGORY_%'")) { 
+    $r = $res->fetch_assoc(); $lowStockCount = intval($r['cnt']); 
+}
+
 // Sales by month (last 12 months) - FIXED with COALESCE
 $salesLabels = []; $salesData = [];
 $months_sql = "
@@ -769,7 +834,7 @@ $catDataJson = json_encode($catData);
 <style>
 :root{
     --primary:#091bbe; --primary-2:#1231d1; --accent:#4591e7; --muted:#6b7280;
-    --bg:#f3f4f6; --card:#fff; --success:#1059b9; --danger:#dc2626;
+    --bg:#f3f4f6; --card:#fff; --success:#1059b9; --danger:#dc2626; --warning:#f59e0b;
     --sidebar-width:260px; --base-font:16px;
 }
 *{box-sizing:border-box;font-family: 'Poppins', Arial, sans-serif}
@@ -805,10 +870,12 @@ a{color:inherit;text-decoration:none}
 .search input{ border:0; outline:0; font-size:15px; width:100% }
 .top-actions{ display:flex; align-items:center; gap:10px }
 
-.card-row{ display:grid; grid-template-columns: repeat(4, 1fr); gap:16px; margin-bottom:20px }
+.card-row{ display:grid; grid-template-columns: repeat(5, 1fr); gap:16px; margin-bottom:20px }
 .stat-card{ background:var(--card); padding:18px; border-radius:12px; box-shadow:0 6px 24px rgba(17,24,39,0.04) }
 .stat-label{ color:var(--muted); font-size:14px }
 .stat-value{ font-size:20px; font-weight:700; margin-top:6px }
+.stat-warning { color: var(--warning); }
+.stat-danger { color: var(--danger); }
 
 /* Grid and panels */
 .grid{ display:grid; grid-template-columns: 2fr 1fr; gap:16px; margin-bottom:18px }
@@ -821,6 +888,7 @@ td img{ width:56px; height:56px; object-fit:cover; border-radius:8px }
 
 .btn{ display:inline-block; padding:8px 12px; border-radius:8px; background:var(--primary); color:#fff; font-weight:700; border:none; cursor:pointer }
 .btn.secondary{ background:#eef3ff; color:var(--primary); font-weight:700 }
+.btn.warning{ background:var(--warning); color:#fff; }
 .small{ font-size:0.85rem; padding:6px 8px; border-radius:6px }
 
 .modal-overlay {
@@ -917,6 +985,10 @@ body.dark .modal {
 .status-read { background: #e3f2fd; color: #1976d2; }
 .status-replied { background: #e8f5e8; color: #388e3c; }
 
+/* Stock warning styles */
+.stock-warning { color: var(--warning); font-weight: 600; }
+.stock-danger { color: var(--danger); font-weight: 600; }
+
 /* Print Styles */
 @media print {
     body * {
@@ -962,6 +1034,7 @@ body.dark .feedback-reply { background: #0a2a4a; }
 .message{ padding:10px 12px; border-radius:8px; margin-bottom:12px }
 .success{ background: rgba(16,89,185,0.08); color:var(--success); border:1px solid rgba(16,89,185,0.2) }
 .error{ background: rgba(220,38,38,0.06); color:var(--danger); border:1px solid rgba(220,38,38,0.2) }
+.warning{ background: rgba(245,158,11,0.08); color:var(--warning); border:1px solid rgba(245,158,11,0.2) }
 
 textarea { resize: vertical; min-height: 60px; }
 </style>
@@ -1029,7 +1102,11 @@ textarea { resize: vertical; min-height: 60px; }
 
         <!-- show message if exists -->
         <?php if (isset($message) && $message): ?>
-            <div class="message <?php echo (stripos($message,'success')!==false || stripos($message,'added')!==false || stripos($message,'updated')!==false) ? 'success' : 'error'; ?>">
+            <div class="message <?php 
+                if (stripos($message,'success')!==false || stripos($message,'added')!==false || stripos($message,'updated')!==false) echo 'success';
+                elseif (stripos($message,'warning')!==false || stripos($message,'stock')!==false) echo 'warning';
+                else echo 'error'; 
+            ?>">
                 <?php echo htmlspecialchars($message); ?>
             </div>
         <?php endif; ?>
@@ -1048,16 +1125,25 @@ textarea { resize: vertical; min-height: 60px; }
                     <div style="color:var(--muted); margin-top:8px; font-size:13px;">Items in catalog</div>
                 </div>
                 <div class="stat-card">
+                    <div class="stat-label">Stock Value</div>
+                    <div class="stat-value">UGX <?php echo number_format($totalStockValue); ?></div>
+                    <div style="color:var(--muted); margin-top:8px; font-size:13px;">Total inventory value</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Items in Stock</div>
+                    <div class="stat-value <?php echo $totalStockItems < 100 ? 'stat-warning' : ''; ?>"><?php echo number_format($totalStockItems); ?></div>
+                    <div style="color:var(--muted); margin-top:8px; font-size:13px;">
+                        <?php if ($lowStockCount > 0): ?>
+                            <span class="stock-warning"><?php echo $lowStockCount; ?> low stock items</span>
+                        <?php else: ?>
+                            Stock levels good
+                        <?php endif; ?>
+                    </div>
+                </div>
+                <div class="stat-card">
                     <div class="stat-label">Pending Deliveries</div>
                     <div class="stat-value"><?php echo $pendingCount; ?></div>
                     <div style="color:var(--muted); margin-top:8px; font-size:13px;">Awaiting completion</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">User Feedback</div>
-                    <div class="stat-value"><?php echo $totalFeedbackCount; ?></div>
-                    <div style="color:var(--muted); margin-top:8px; font-size:13px;">
-                        <?php echo $unreadFeedbackCount; ?> unread
-                    </div>
                 </div>
             </div>
 
@@ -1102,12 +1188,32 @@ textarea { resize: vertical; min-height: 60px; }
                     </div>
 
                     <div class="panel">
-                        <h4 style="margin:0 0 10px 0;">Upcoming Payments</h4>
-                        <ul style="padding:0; list-style:none; margin:0;">
-                            <li style="padding:8px 0; border-bottom:1px dashed #f1f5f9;">Payonner — UGX 1,200,000</li>
-                            <li style="padding:8px 0; border-bottom:1px dashed #f1f5f9;">Easy Pay — UGX 822,823</li>
-                            <li style="padding:8px 0;">FastSpring — UGX 421,038</li>
-                        </ul>
+                        <h4 style="margin:0 0 10px 0;">Stock Alerts</h4>
+                        <?php
+                        $lowStockProducts = [];
+                        if ($res = $conn->query("SELECT name, stock FROM products WHERE stock <= 5 AND name NOT LIKE 'CATEGORY_%' ORDER BY stock ASC LIMIT 5")) {
+                            while ($row = $res->fetch_assoc()) {
+                                $lowStockProducts[] = $row;
+                            }
+                        }
+                        ?>
+                        <?php if (count($lowStockProducts) > 0): ?>
+                            <ul style="padding:0; list-style:none; margin:0;">
+                                <?php foreach ($lowStockProducts as $product): ?>
+                                    <li style="padding:8px 0; border-bottom:1px dashed #f1f5f9;">
+                                        <span style="font-weight:600;"><?php echo htmlspecialchars($product['name']); ?></span>
+                                        <span class="<?php echo $product['stock'] == 0 ? 'stock-danger' : 'stock-warning'; ?>" style="float:right;">
+                                            <?php echo $product['stock']; ?> left
+                                        </span>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                            <div style="margin-top:10px;">
+                                <a href="?section=products" class="btn warning small">Manage Stock</a>
+                            </div>
+                        <?php else: ?>
+                            <p style="color:var(--muted); margin:0;">No stock alerts. All products have sufficient stock.</p>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
@@ -1144,6 +1250,9 @@ textarea { resize: vertical; min-height: 60px; }
                         <?php else: foreach ($products as $p):
                             $image_path = !empty($p['image_path']) ? htmlspecialchars($p['image_path']) : '';
                             $caption = htmlspecialchars($p['caption'] ?? 'No caption');
+                            $stock_class = '';
+                            if ($p['stock'] == 0) $stock_class = 'stock-danger';
+                            elseif ($p['stock'] <= 5) $stock_class = 'stock-warning';
                         ?>
                         <tr>
                             <td><?php echo htmlspecialchars($p['id']); ?></td>
@@ -1157,7 +1266,7 @@ textarea { resize: vertical; min-height: 60px; }
                             <td><?php echo htmlspecialchars($p['name']); ?></td>
                             <td title="<?php echo $caption; ?>"><?php echo strlen($caption) > 30 ? substr($caption, 0, 30) . '...' : $caption; ?></td>
                             <td>UGX <?php echo number_format($p['price']); ?></td>
-                            <td><?php echo htmlspecialchars($p['stock']); ?></td>
+                            <td class="<?php echo $stock_class; ?>"><?php echo htmlspecialchars($p['stock']); ?></td>
                             <td><?php echo htmlspecialchars($p['category']); ?></td>
                             <td>
                                 <button class="small btn secondary" onclick="openEditProduct(<?php echo $p['id'];?>)">Edit</button>
@@ -1289,6 +1398,19 @@ textarea { resize: vertical; min-height: 60px; }
                     $product_name = !empty($p['product_name']) ? htmlspecialchars($p['product_name']) : 'Unknown Product';
                     $quantity = isset($p['quantity']) ? intval($p['quantity']) : 1;
                     $created_date = date('M j, Y g:i A', strtotime($p['created_at']));
+                    
+                    // Check stock availability for pending deliveries
+                    $stock_available = true;
+                    if ($p['status'] === 'Pending' && $p['product_id'] && $p['product_id'] !== 'N/A') {
+                        $stock_check = $conn->prepare("SELECT stock FROM products WHERE id = ?");
+                        $stock_check->bind_param("i", $p['product_id']);
+                        $stock_check->execute();
+                        $stock_result = $stock_check->get_result();
+                        if ($stock_row = $stock_result->fetch_assoc()) {
+                            $stock_available = ($stock_row['stock'] >= $quantity);
+                        }
+                        $stock_check->close();
+                    }
                 ?>
                     <tr>
                         <td><?php echo htmlspecialchars($p['id']); ?></td>
@@ -1323,11 +1445,18 @@ textarea { resize: vertical; min-height: 60px; }
                             ">
                                 <?php echo htmlspecialchars($p['status']); ?>
                             </span>
+                            <?php if ($p['status'] === 'Pending' && !$stock_available): ?>
+                                <br><small style="color:var(--danger); font-size:10px;">Insufficient stock</small>
+                            <?php endif; ?>
                         </td>
                         <td style="font-size:12px; color:var(--muted);"><?php echo $created_date; ?></td>
                         <td>
                             <?php if ($p['status'] === 'Pending'): ?>
-                                <a class="small btn secondary" href="?complete_delivery=<?php echo $p['id'];?>" onclick="return confirm('Mark this delivery as completed?')">Complete</a>
+                                <?php if ($stock_available): ?>
+                                    <a class="small btn secondary" href="?complete_delivery=<?php echo $p['id'];?>" onclick="return confirm('Mark this delivery as completed? This will reduce the product stock.')">Complete</a>
+                                <?php else: ?>
+                                    <button class="small btn secondary" disabled title="Insufficient stock to complete delivery">Complete</button>
+                                <?php endif; ?>
                             <?php endif; ?>
                             <a class="small btn" style="background:#ff5b5b" href="?delete_delivery=<?php echo $p['id'];?>" onclick="return confirm('Delete this delivery?')">Delete</a>
                         </td>
@@ -1359,6 +1488,7 @@ textarea { resize: vertical; min-height: 60px; }
                             <select name="print_report" required style="width:100%; padding:10px; border-radius:8px; border:1px solid #e6eefc;">
                                 <option value="sales_summary">Sales Summary</option>
                                 <option value="category_sales">Category Sales</option>
+                                <option value="stock_report">Stock Report</option>
                             </select>
                         </div>
                         <div>
@@ -1496,6 +1626,54 @@ textarea { resize: vertical; min-height: 60px; }
                             <td style="padding:12px; text-align:right;">UGX <?php echo number_format($grand_total, 2); ?></td>
                             <td style="padding:12px; text-align:right;">—</td>
                             <td style="padding:12px; text-align:right;">100%</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <?php elseif ($report['type'] === 'stock_report'): ?>
+                <table style="width:100%; border-collapse:collapse; margin-top:15px;">
+                    <thead>
+                        <tr style="background:linear-gradient(90deg,var(--primary),var(--primary-2)); color:#fff;">
+                            <th style="padding:12px; text-align:left;">Product</th>
+                            <th style="padding:12px; text-align:left;">Category</th>
+                            <th style="padding:12px; text-align:right;">Price</th>
+                            <th style="padding:12px; text-align:right;">Stock</th>
+                            <th style="padding:12px; text-align:right;">Value</th>
+                            <th style="padding:12px; text-align:center;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php 
+                        $total_stock_value = 0;
+                        $total_items = 0;
+                        foreach ($report['data'] as $row): 
+                            $stock = intval($row['stock'] ?? 0);
+                            $price = floatval($row['price'] ?? 0);
+                            $value = $stock * $price;
+                            $total_stock_value += $value;
+                            $total_items += $stock;
+                        ?>
+                        <tr style="border-bottom:1px solid #f1f5f9;">
+                            <td style="padding:10px;"><?php echo htmlspecialchars($row['name'] ?? 'N/A'); ?></td>
+                            <td style="padding:10px;"><?php echo htmlspecialchars($row['category'] ?? 'N/A'); ?></td>
+                            <td style="padding:10px; text-align:right;">UGX <?php echo number_format($price, 2); ?></td>
+                            <td style="padding:10px; text-align:right;"><?php echo number_format($stock); ?></td>
+                            <td style="padding:10px; text-align:right;">UGX <?php echo number_format($value, 2); ?></td>
+                            <td style="padding:10px; text-align:center;">
+                                <?php if ($stock == 0): ?>
+                                    <span style="color:var(--danger); font-weight:600;">Out of Stock</span>
+                                <?php elseif ($stock <= 5): ?>
+                                    <span style="color:var(--warning); font-weight:600;">Low Stock</span>
+                                <?php else: ?>
+                                    <span style="color:var(--success); font-weight:600;">In Stock</span>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                        <tr style="background:#f8fafc; font-weight:bold;">
+                            <td style="padding:12px;" colspan="3">TOTAL</td>
+                            <td style="padding:12px; text-align:right;"><?php echo number_format($total_items); ?></td>
+                            <td style="padding:12px; text-align:right;">UGX <?php echo number_format($total_stock_value, 2); ?></td>
+                            <td style="padding:12px; text-align:center;">—</td>
                         </tr>
                     </tbody>
                 </table>
@@ -1882,7 +2060,7 @@ textarea { resize: vertical; min-height: 60px; }
         fetch('admin_dashboard.php?fetch_product=' + encodeURIComponent(id))
             .then(response => {
                 if (!response.ok) {
-                    throw new Error('Network response was not ok: ' + response.status + ' ' + response.statusText);
+                    throw new Error('Network response was not ok: ' . response.status + ' ' . response.statusText);
                 }
                 return response.json();
             })
