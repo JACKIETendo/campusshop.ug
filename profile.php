@@ -94,6 +94,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
     }
 }
 
+// Handle discount code application
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['apply_discount'])) {
+    $discount_code = trim($_POST['discount_code']);
+    
+    // Validate discount code
+    $valid_codes = [
+        'WELCOMEBUGEMA' => 10, // 10% discount
+        'STUDENT10' => 10,     // 10% discount
+        'FIRSTORDER' => 15,    // 15% discount
+        'CAMPUS2024' => 20     // 20% discount
+    ];
+    
+    if (array_key_exists(strtoupper($discount_code), $valid_codes)) {
+        $discount_percent = $valid_codes[strtoupper($discount_code)];
+        $_SESSION['discount_code'] = $discount_code;
+        $_SESSION['discount_percent'] = $discount_percent;
+        $discount_success = "Discount code applied! You'll get $discount_percent% off your next order.";
+    } else {
+        $discount_error = "Invalid discount code. Please try again.";
+    }
+}
+
 // Handle feedback submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
     if (!$conn || $conn->connect_error) {
@@ -136,6 +158,106 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
     exit();
 }
 
+// Handle receipt generation
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_receipt'])) {
+    $order_id = (int)$_POST['order_id'];
+    
+    // Fetch order details
+    $stmt = $conn->prepare("SELECT o.*, u.username, u.email FROM orders o JOIN users u ON o.user_id = u.id WHERE o.id = ? AND o.user_id = ?");
+    $stmt->bind_param("ii", $order_id, $user_id);
+    $stmt->execute();
+    $order = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    
+    if ($order) {
+        // Fetch order items
+        $stmt = $conn->prepare("SELECT * FROM order_items WHERE order_id = ?");
+        $stmt->bind_param("i", $order_id);
+        $stmt->execute();
+        $order_items = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+        $stmt->close();
+        
+        // Generate receipt HTML
+        ob_start();
+        ?>
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Order Receipt - Bugema CampusShop</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 20px; }
+                .header { text-align: center; margin-bottom: 20px; }
+                .order-info { margin-bottom: 20px; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                th { background-color: #f2f2f2; }
+                .total { font-weight: bold; text-align: right; }
+                .footer { margin-top: 30px; text-align: center; font-size: 0.9em; color: #666; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>Bugema CampusShop</h1>
+                <h2>Order Receipt</h2>
+            </div>
+            
+            <div class="order-info">
+                <p><strong>Order ID:</strong> #<?= $order['id'] ?></p>
+                <p><strong>Order Date:</strong> <?= date('F j, Y g:i A', strtotime($order['order_date'])) ?></p>
+                <p><strong>Customer:</strong> <?= htmlspecialchars($order['username']) ?></p>
+                <p><strong>Email:</strong> <?= htmlspecialchars($order['email']) ?></p>
+                <p><strong>Status:</strong> <?= ucfirst($order['status']) ?></p>
+                <p><strong>Payment Method:</strong> <?= htmlspecialchars($order['payment_method'] ?? 'N/A') ?></p>
+            </div>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>Quantity</th>
+                        <th>Price (UGX)</th>
+                        <th>Subtotal (UGX)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach($order_items as $item): ?>
+                    <tr>
+                        <td><?= htmlspecialchars($item['product_name']) ?></td>
+                        <td><?= $item['quantity'] ?></td>
+                        <td><?= number_format($item['price'], 0) ?></td>
+                        <td><?= number_format($item['price'] * $item['quantity'], 0) ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="3" class="total">Total:</td>
+                        <td><?= number_format($order['total_amount'], 0) ?> UGX</td>
+                    </tr>
+                </tfoot>
+            </table>
+            
+            <div class="footer">
+                <p>Thank you for shopping with Bugema CampusShop!</p>
+                <p>For any inquiries, contact us at +256 7550 87665 or campusshop@bugemauniv.ac.ug</p>
+            </div>
+        </body>
+        </html>
+        <?php
+        $receipt_html = ob_get_clean();
+        
+        // Store receipt in session for printing
+        $_SESSION['receipt_html'] = $receipt_html;
+        $_SESSION['receipt_order_id'] = $order_id;
+        
+        $receipt_success = "Receipt generated successfully! You can now print it.";
+    } else {
+        $receipt_error = "Order not found.";
+    }
+}
+
 // Fetch notifications
 $notifications = [];
 $stmt = $conn->prepare("SELECT message, created_at FROM notifications WHERE user_id = ? OR user_id IS NULL ORDER BY created_at DESC LIMIT 5");
@@ -146,7 +268,7 @@ if ($stmt) {
     $stmt->close();
 }
 
-// Fetch order history with improved error handling
+// Fetch order history with improved error handling - FIXED QUERY
 $orders = [];
 $order_items = [];
 
@@ -154,25 +276,33 @@ try {
     // First check if orders table exists
     $table_check = $conn->query("SHOW TABLES LIKE 'orders'");
     if ($table_check->num_rows > 0) {
-        $stmt = $conn->prepare("SELECT o.id, o.order_date, o.total_amount, o.status, o.payment_method 
+        // FIXED: Added proper error handling and debugging
+        $stmt = $conn->prepare("SELECT o.id, o.order_date, o.total_amount, o.status, o.payment_method, o.tracking_number
                                FROM orders o 
                                WHERE o.user_id = ? 
                                ORDER BY o.order_date DESC 
-                               LIMIT 5");
+                               LIMIT 10");
         if ($stmt) {
             $stmt->bind_param("i", $user_id);
-            $stmt->execute();
-            $orders_result = $stmt->get_result();
-            $orders = $orders_result->fetch_all(MYSQLI_ASSOC);
+            if ($stmt->execute()) {
+                $orders_result = $stmt->get_result();
+                $orders = $orders_result->fetch_all(MYSQLI_ASSOC);
+                error_log("Fetched " . count($orders) . " orders for user $user_id");
+                
+                // Debug: Log order statuses
+                foreach ($orders as $order) {
+                    error_log("Order ID: " . $order['id'] . ", Status: " . $order['status']);
+                }
+            } else {
+                error_log("Error executing orders query: " . $stmt->error);
+            }
             $stmt->close();
 
             // Fetch order items for each order
             if (!empty($orders)) {
                 foreach ($orders as $order) {
                     $order_id = $order['id'];
-                    $stmt_items = $conn->prepare("SELECT oi.product_name, oi.quantity, oi.price 
-                                                 FROM order_items oi 
-                                                 WHERE oi.order_id = ?");
+                    $stmt_items = $conn->prepare("SELECT product_name, quantity, price FROM order_items WHERE order_id = ?");
                     if ($stmt_items) {
                         $stmt_items->bind_param("i", $order_id);
                         $stmt_items->execute();
@@ -182,6 +312,8 @@ try {
                     }
                 }
             }
+        } else {
+            error_log("Failed to prepare orders query: " . $conn->error);
         }
     } else {
         error_log("Orders table does not exist");
@@ -211,33 +343,9 @@ if ($stmt) {
     $stmt->close();
 }
 
-// SQL to create orders table if it doesn't exist (for testing)
-$create_orders_table_sql = "
-CREATE TABLE IF NOT EXISTS orders (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    order_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-    total_amount DECIMAL(10,2) NOT NULL,
-    status VARCHAR(50) DEFAULT 'pending',
-    payment_method VARCHAR(100),
-    shipping_address TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS order_items (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    order_id INT NOT NULL,
-    product_name VARCHAR(255) NOT NULL,
-    quantity INT NOT NULL,
-    price DECIMAL(10,2) NOT NULL,
-    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
-);
-";
-
-// Uncomment the following lines to automatically create the tables (for testing only)
-// $conn->multi_query($create_orders_table_sql);
-// while ($conn->next_result()) {;} // flush multi_queries
+// Get active discount if any
+$active_discount_code = $_SESSION['discount_code'] ?? null;
+$active_discount_percent = $_SESSION['discount_percent'] ?? 0;
 ?>
 
 <!DOCTYPE html>
@@ -248,8 +356,8 @@ CREATE TABLE IF NOT EXISTS order_items (
     <title>User Profile - Bugema CampusShop</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        /* Your existing CSS remains the same, just adding new styles for order details */
-         * {
+        /* Your existing CSS remains the same, with FIXES for header and responsive design */
+        * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
@@ -273,7 +381,7 @@ CREATE TABLE IF NOT EXISTS order_items (
             line-height: 1.6;
             color: var(--dark-gray);
             background: var(--white);
-            padding-bottom: 100px;
+            padding-bottom: 0;
         }
 
         .container {
@@ -282,6 +390,7 @@ CREATE TABLE IF NOT EXISTS order_items (
             padding: 0 15px;
         }
 
+        /* FIXED: Ensure header stays static at top */
         header {
             background: var(--primary-green);
             color: var(--white);
@@ -479,7 +588,7 @@ CREATE TABLE IF NOT EXISTS order_items (
         .header-btn {
             background: var(--accent-yellow);
             color: var(--dark-gray);
-           padding: 8px 15px;
+            padding: 8px 15px;
             border-radius: 8px;
             text-decoration: none;
             font-weight: 500;
@@ -536,7 +645,6 @@ CREATE TABLE IF NOT EXISTS order_items (
             background: var(--secondary-green);
             border-radius: 8px;
             padding: 0.5rem;
-            
         }
 
         .nav-links {
@@ -566,6 +674,7 @@ CREATE TABLE IF NOT EXISTS order_items (
             display: flex;
             min-height: calc(100vh - 70px);
             gap: 20px;
+            margin-top: 20px;
         }
 
         .profile-left {
@@ -697,11 +806,17 @@ CREATE TABLE IF NOT EXISTS order_items (
             font-style: italic;
         }
 
+        /* FIXED: Responsive table for order history */
+        .table-container {
+            overflow-x: auto;
+            margin-top: 15px;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 15px;
             background: var(--white);
+            min-width: 600px; /* Ensure table doesn't get too small */
         }
 
         th, td {
@@ -725,6 +840,21 @@ CREATE TABLE IF NOT EXISTS order_items (
 
         tr:hover {
             background-color: var(--light-gray);
+        }
+
+        /* Mobile table styles */
+        @media (max-width: 768px) {
+            table {
+                font-size: 0.8rem;
+            }
+            th, td {
+                padding: 8px 5px;
+            }
+            .order-actions {
+                display: flex;
+                flex-direction: column;
+                gap: 5px;
+            }
         }
 
         .payment-options {
@@ -1076,7 +1206,7 @@ CREATE TABLE IF NOT EXISTS order_items (
             color: var(--text-gray);
         }
 
-        /* RESPONSIVE */
+        /* RESPONSIVE - IMPROVED */
         @media (max-width: 900px) {
             .profile-container {
                 flex-direction: column;
@@ -1087,6 +1217,7 @@ CREATE TABLE IF NOT EXISTS order_items (
                 top: 0;
                 max-height: none;
                 margin-bottom: 20px;
+                margin-left: 0;
             }
             .profile-right {
                 margin-left: 0;
@@ -1103,7 +1234,8 @@ CREATE TABLE IF NOT EXISTS order_items (
 
         @media (max-width: 768px) {
             .container {
-                max-width: 90%;
+                max-width: 95%;
+                padding: 0 10px;
             }
             .menu-icon {
                 display: block;
@@ -1125,15 +1257,21 @@ CREATE TABLE IF NOT EXISTS order_items (
             .return-policy li {
                 font-size: 0.85rem;
             }
+            .section {
+                padding: 15px;
+                margin-bottom: 20px;
+            }
+            .profile-right {
+                padding: 15px;
+            }
         }
 
         @media (max-width: 480px) {
             .profile-left {
-                padding: 20px;
-                margin-left: 0;
+                padding: 15px;
             }
             .account-settings a {
-                width: 50%;
+                width: 100%;
             }
             .bottom-bar-actions a,
             .bottom-bar-actions button {
@@ -1141,12 +1279,17 @@ CREATE TABLE IF NOT EXISTS order_items (
                 height: 36px;
                 font-size: 1.2rem;
             }
+            .section h3 {
+                font-size: 1.3rem;
+            }
         }
 
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(20px); }
             to { opacity: 1; transform: translateY(0); }
         }
+        
+        /* NEW STYLES FOR ORDER TRACKING, RECEIPTS AND DISCOUNTS */
         .order-details {
             margin-top: 10px;
             padding: 10px;
@@ -1189,6 +1332,8 @@ CREATE TABLE IF NOT EXISTS order_items (
         .status-completed { color: var(--success-green); }
         .status-cancelled { color: var(--error-red); }
         .status-processing { color: #3498db; }
+        .status-ready { color: #9b59b6; }
+        .status-delivered { color: var(--success-green); }
         
         .no-orders {
             text-align: center;
@@ -1205,23 +1350,219 @@ CREATE TABLE IF NOT EXISTS order_items (
         .no-orders a:hover {
             text-decoration: underline;
         }
+        
+        /* Order tracking styles */
+        .tracking-container {
+            margin-top: 15px;
+            padding: 15px;
+            background: var(--light-gray);
+            border-radius: 8px;
+        }
+        
+        .tracking-steps {
+            display: flex;
+            justify-content: space-between;
+            position: relative;
+            margin: 20px 0;
+        }
+        
+        .tracking-steps::before {
+            content: '';
+            position: absolute;
+            top: 15px;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--border-color);
+            z-index: 1;
+        }
+        
+        .tracking-step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            z-index: 2;
+            flex: 1;
+        }
+        
+        .step-icon {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 5px;
+            color: var(--white);
+        }
+        
+        .step-icon.active {
+            background: var(--primary-green);
+        }
+        
+        .step-icon.completed {
+            background: var(--success-green);
+        }
+        
+        .step-label {
+            font-size: 0.7rem;
+            text-align: center;
+            color: var(--text-gray);
+            word-break: break-word;
+        }
+        
+        .step-label.active {
+            color: var(--primary-green);
+            font-weight: 600;
+        }
+        
+        .tracking-number {
+            font-family: monospace;
+            background: var(--dark-gray);
+            color: var(--white);
+            padding: 5px 10px;
+            border-radius: 4px;
+            display: inline-block;
+            margin-top: 5px;
+            font-size: 0.8rem;
+        }
+        
+        /* Discount section styles */
+        .discount-section {
+            background: var(--white);
+            border: 2px solid var(--accent-yellow);
+            padding: 20px;
+            border-radius: 12px;
+            margin-top: 20px;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s ease;
+        }
+
+        .discount-section:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(250, 204, 21, 0.2);
+        }
+
+        .discount-section h3 {
+            color: var(--primary-green);
+            margin-bottom: 10px;
+        }
+
+        .discount-section p {
+            color: var(--text-gray);
+            font-size: 0.95rem;
+        }
+        
+        .discount-form {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .discount-form input {
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 0.9rem;
+            min-width: 200px;
+            flex: 1;
+        }
+        
+        .discount-form button {
+            background: var(--primary-green);
+            color: var(--white);
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s ease;
+            white-space: nowrap;
+        }
+        
+        .discount-form button:hover {
+            background: var(--secondary-green);
+        }
+        
+        .active-discount {
+            background: var(--success-green);
+            color: var(--white);
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            display: inline-block;
+        }
+        
+        /* Receipt styles */
+        .receipt-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .receipt-btn {
+            background: var(--secondary-green);
+            color: var(--white);
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            white-space: nowrap;
+        }
+        
+        .receipt-btn:hover {
+            background: var(--primary-green);
+        }
+        
+        /* Print receipt styles */
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #receipt-print, #receipt-print * {
+                visibility: visible;
+            }
+            #receipt-print {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }
+        }
+
+        /* Order actions for mobile */
+        .order-actions {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
     </style>
 </head>
 <body>
     <header>
-        <!-- Your existing header code remains the same -->
         <div class="container">
             <div class="header-top">
                 <div class="logo">
                     <div class="logo-icon">
-                        <img style="height: 50px; width: 50px; border-radius:25px;" src="images/download.png" alt="">
+                        <img style="height: 50px; width: 50px; border-radius:25px;" src="images/download.png" alt="Bugema CampusShop Logo">
                     </div>
                     <span>Bugema CampusShop</span>
                 </div>
                 <button class="menu-icon">☰</button>
                 <div class="search-bar">
-                    <input type="text" class="search-input" placeholder="Search for Textbooks, Branded Jumpers, Pens...">
-                    <button class="search-btn">🔍</button>
+                    <input type="text" class="search-input" placeholder="Search for Bags, Branded Jumpers, Pens...">
+                    <button class="search-btn"><i class="fas fa-search"></i></button>
                     <div class="search-results"></div>
                 </div>
                 <div class="header-actions">
@@ -1240,10 +1581,10 @@ CREATE TABLE IF NOT EXISTS order_items (
             <nav>
                 <ul class="nav-links">
                     <li><a href="index.php">Home</a></li>
-                    <li><a href="textbooks.php">Textbooks</a></li>
+                    <li><a href="Bags.php">Bags</a></li>
                     <li><a href="Branded Jumpers.php">Branded Jumpers</a></li>
                     <li><a href="Pens.php">Pens</a></li>
-                    <li><a href="Wall Clocks.php">Wall Clocks</a></li>
+                    <li><a href="Wall Clocks.php">Clocks</a></li>
                     <li><a href="Note Books.php">Note Books</a></li>
                     <li><a href="T-Shirts.php">T-Shirts</a></li>
                     <li><a href="Bottles.php">Bottles</a></li>
@@ -1254,16 +1595,16 @@ CREATE TABLE IF NOT EXISTS order_items (
                 <button class="close-icon">✖</button>
                 <span class="mobile-username"><a href="profile.php">Hi, <?php echo htmlspecialchars($_SESSION['username']); ?></a></span>
                 <div class="mobile-search-bar">
-                    <input type="text" class="search-input" placeholder="Search for Textbooks, Branded Jumpers, Pens...">
-                    <button class="search-btn">🔍</button>
+                    <input type="text" class="search-input" placeholder="Search for Bags, Branded Jumpers, Pens...">
+                    <button class="search-btn"><i class="fas fa-search"></i></button>
                     <div class="search-results"></div>
                 </div>
                 <div class="mobile-nav">
                     <a href="index.php">Home</a>
-                    <a href="textbooks.php">Textbooks</a>
+                    <a href="Bags.php">Bags</a>
                     <a href="Branded Jumpers.php">Branded Jumpers</a>
                     <a href="Pens.php">Pens</a>
-                    <a href="Wall Clocks.php">Wall Clocks</a>
+                    <a href="Wall Clocks.php">Clocks</a>
                     <a href="Note Books.php">Note Books</a>
                     <a href="T-Shirts.php">T-Shirts</a>
                     <a href="Bottles.php">Bottles</a>
@@ -1316,6 +1657,21 @@ CREATE TABLE IF NOT EXISTS order_items (
         </div>
     </div>
 
+    <!-- RECEIPT PRINT MODAL -->
+    <div class="modal" id="receipt-modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <button class="modal-close" id="receipt-modal-close">&times;</button>
+            <h2>Order Receipt</h2>
+            <div id="receipt-content">
+                <!-- Receipt content will be loaded here -->
+            </div>
+            <div class="receipt-actions" style="margin-top: 20px;">
+                <button id="print-receipt" class="receipt-btn"><i class="fas fa-print"></i> Print Receipt</button>
+                <button id="email-receipt" class="receipt-btn"><i class="fas fa-envelope"></i> Email Receipt</button>
+            </div>
+        </div>
+    </div>
+
     <section class="profile-container">
         <!-- LEFT SIDE - PROFILE -->
         <div class="profile-left">
@@ -1359,60 +1715,148 @@ CREATE TABLE IF NOT EXISTS order_items (
                 <?php endif; ?>
             </div>
 
-            <!-- ORDER HISTORY - IMPROVED -->
+            <!-- ORDER HISTORY & TRACKING - IMPROVED -->
             <div class="section">
-                <h3><i class="fas fa-history"></i> Order History</h3>
+                <h3><i class="fas fa-history"></i> Order History & Tracking</h3>
                 <?php if (!empty($orders)): ?>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Order ID</th>
-                                <th>Date</th>
-                                <th>Total (UGX)</th>
-                                <th>Status</th>
-                                <th>Payment Method</th>
-                                <th>Details</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($orders as $order): ?>
+                    <div class="table-container">
+                        <table>
+                            <thead>
                                 <tr>
-                                    <td>#<?= htmlspecialchars($order['id']); ?></td>
-                                    <td><?= htmlspecialchars(date('M j, Y g:i A', strtotime($order['order_date']))); ?></td>
-                                    <td><?= htmlspecialchars(number_format($order['total_amount'], 0)); ?></td>
-                                    <td>
-                                        <span class="status-<?= htmlspecialchars(strtolower($order['status'])); ?>">
-                                            <?= htmlspecialchars(ucfirst($order['status'])); ?>
-                                        </span>
-                                    </td>
-                                    <td><?= htmlspecialchars($order['payment_method'] ?? 'N/A'); ?></td>
-                                    <td>
-                                        <button class="toggle-order-details" data-order-id="<?= $order['id']; ?>">
-                                            View Items
-                                        </button>
-                                    </td>
+                                    <th>Order ID</th>
+                                    <th>Date</th>
+                                    <th>Total (UGX)</th>
+                                    <th>Status</th>
+                                    <th>Tracking</th>
+                                    <th>Actions</th>
                                 </tr>
-                                <tr>
-                                    <td colspan="6">
-                                        <div class="order-details" id="order-details-<?= $order['id']; ?>">
-                                            <?php if (isset($order_items[$order['id']]) && !empty($order_items[$order['id']])): ?>
-                                                <h4>Order Items:</h4>
-                                                <?php foreach ($order_items[$order['id']] as $item): ?>
-                                                    <div class="order-item">
-                                                        <span><?= htmlspecialchars($item['product_name']); ?></span>
-                                                        <span>Qty: <?= htmlspecialchars($item['quantity']); ?></span>
-                                                        <span>UGX <?= htmlspecialchars(number_format($item['price'], 0)); ?></span>
-                                                    </div>
-                                                <?php endforeach; ?>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($orders as $order): ?>
+                                    <tr>
+                                        <td>#<?= htmlspecialchars($order['id']); ?></td>
+                                        <td><?= htmlspecialchars(date('M j, Y g:i A', strtotime($order['order_date']))); ?></td>
+                                        <td><?= htmlspecialchars(number_format($order['total_amount'], 0)); ?></td>
+                                        <td>
+                                            <span class="status-<?= htmlspecialchars(strtolower($order['status'])); ?>">
+                                                <?= htmlspecialchars(ucfirst($order['status'])); ?>
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <?php if (!empty($order['tracking_number'])): ?>
+                                                <span class="tracking-number"><?= htmlspecialchars($order['tracking_number']); ?></span>
                                             <?php else: ?>
-                                                <p>No items found for this order.</p>
+                                                <span>N/A</span>
                                             <?php endif; ?>
-                                        </div>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
+                                        </td>
+                                        <td>
+                                            <div class="order-actions">
+                                                <button class="toggle-order-details" data-order-id="<?= $order['id']; ?>">
+                                                    View Items
+                                                </button>
+                                                <form method="POST" style="display: inline;">
+                                                    <input type="hidden" name="order_id" value="<?= $order['id']; ?>">
+                                                    <button type="submit" name="generate_receipt" class="receipt-btn" style="margin-top: 0;">
+                                                        <i class="fas fa-receipt"></i> Receipt
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td colspan="6">
+                                            <div class="order-details" id="order-details-<?= $order['id']; ?>">
+                                                <?php if (isset($order_items[$order['id']]) && !empty($order_items[$order['id']])): ?>
+                                                    <h4>Order Items:</h4>
+                                                    <?php foreach ($order_items[$order['id']] as $item): ?>
+                                                        <div class="order-item">
+                                                            <span><?= htmlspecialchars($item['product_name']); ?></span>
+                                                            <span>Qty: <?= htmlspecialchars($item['quantity']); ?></span>
+                                                            <span>UGX <?= htmlspecialchars(number_format($item['price'], 0)); ?></span>
+                                                        </div>
+                                                    <?php endforeach; ?>
+                                                    
+                                                    <!-- Order Tracking Visualization -->
+                                                    <div class="tracking-container">
+                                                        <h4>Order Tracking:</h4>
+                                                        <div class="tracking-steps">
+                                                            <?php
+                                                            // Define all possible statuses in order
+                                                            $all_statuses = ['pending', 'processing', 'ready', 'delivered', 'cancelled'];
+                                                            $status_icons = [
+                                                                'pending'     => 'fas fa-clock',
+                                                                'processing'  => 'fas fa-cog',
+                                                                'ready'       => 'fas fa-box',
+                                                                'delivered'   => 'fas fa-check',
+                                                                'cancelled'   => 'fas fa-times'
+                                                            ];
+                                                            $status_labels = [
+                                                                'pending'     => 'Pending',
+                                                                'processing'  => 'Processing',
+                                                                'ready'       => 'Ready',
+                                                                'delivered'   => 'Delivered',
+                                                                'cancelled'   => 'Cancelled'
+                                                            ];
+
+                                                            $current_status = strtolower($order['status']);
+                                                            $current_index = array_search($current_status, $all_statuses);
+                                                            if ($current_index === false) $current_index = -1;
+
+                                                            foreach ($all_statuses as $idx => $status):
+                                                                $is_completed = $idx < $current_index;
+                                                                $is_active    = $idx == $current_index;
+                                                                $icon = $status_icons[$status] ?? 'fas fa-question';
+                                                                $label = $status_labels[$status] ?? ucfirst($status);
+                                                            ?>
+                                                                <div class="tracking-step">
+                                                                    <div class="step-icon <?= $is_completed ? 'completed' : ($is_active ? 'active' : '') ?>">
+                                                                        <i class="<?= $icon ?>"></i>
+                                                                    </div>
+                                                                    <div class="step-label <?= $is_active ? 'active' : '' ?>">
+                                                                        <?= $label ?>
+                                                                    </div>
+                                                                </div>
+                                                            <?php endforeach; ?>
+                                                        </div>
+
+                                                        <!-- Tracking Number -->
+                                                        <?php if (!empty($order['tracking_number'])): ?>
+                                                            <p><strong>Tracking #:</strong> <span class="tracking-number"><?= htmlspecialchars($order['tracking_number']) ?></span></p>
+                                                        <?php endif; ?>
+
+                                                        <!-- Status Message -->
+                                                        <?php
+                                                        $messages = [
+                                                            'pending'     => 'Your order has been received and is awaiting confirmation.',
+                                                            'processing'  => 'We are preparing your items. Ready in 1–2 days.',
+                                                            'ready'       => 'Your order is ready! Pick up at CampusShop or expect delivery.',
+                                                            'delivered'   => 'Delivered successfully. Enjoy your items!',
+                                                            'cancelled'   => 'This order was cancelled.'
+                                                        ];
+                                                        ?>
+                                                        <p><?= $messages[$current_status] ?? 'Status update coming soon.' ?></p>
+                                                    </div>
+                                                <?php else: ?>
+                                                    <p>No items found for this order.</p>
+                                                <?php endif; ?>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <?php if (isset($receipt_success)): ?>
+                        <div class="message success"><?php echo htmlspecialchars($receipt_success); ?></div>
+                        <div class="receipt-actions">
+                            <button id="view-receipt" class="receipt-btn"><i class="fas fa-eye"></i> View Receipt</button>
+                            <button id="print-receipt-direct" class="receipt-btn"><i class="fas fa-print"></i> Print Receipt</button>
+                        </div>
+                    <?php endif; ?>
+                    <?php if (isset($receipt_error)): ?>
+                        <div class="message error"><?php echo htmlspecialchars($receipt_error); ?></div>
+                    <?php endif; ?>
                 <?php else: ?>
                     <div class="no-orders">
                         <p>You haven't placed any orders yet.</p>
@@ -1501,6 +1945,13 @@ CREATE TABLE IF NOT EXISTS order_items (
         <i class="fas fa-arrow-up"></i>
     </button>
 
+    <!-- Hidden receipt for printing -->
+    <div id="receipt-print" style="display: none;">
+        <?php if (isset($_SESSION['receipt_html'])): ?>
+            <?php echo $_SESSION['receipt_html']; ?>
+        <?php endif; ?>
+    </div>
+
     <script>
     document.addEventListener('DOMContentLoaded', function() {
         // ORDER DETAILS TOGGLE
@@ -1584,6 +2035,68 @@ CREATE TABLE IF NOT EXISTS order_items (
             });
         });
 
+        // RECEIPT FUNCTIONALITY
+        const viewReceiptBtn = document.getElementById('view-receipt');
+        const printReceiptDirectBtn = document.getElementById('print-receipt-direct');
+        const receiptModal = document.getElementById('receipt-modal');
+        const receiptModalClose = document.getElementById('receipt-modal-close');
+        const receiptContent = document.getElementById('receipt-content');
+        const printReceiptBtn = document.getElementById('print-receipt');
+        const emailReceiptBtn = document.getElementById('email-receipt');
+
+        if (viewReceiptBtn) {
+            viewReceiptBtn.addEventListener('click', () => {
+                receiptContent.innerHTML = document.getElementById('receipt-print').innerHTML;
+                receiptModal.style.display = 'flex';
+            });
+        }
+
+        if (printReceiptDirectBtn) {
+            printReceiptDirectBtn.addEventListener('click', () => {
+                const printContent = document.getElementById('receipt-print').innerHTML;
+                const originalContent = document.body.innerHTML;
+                
+                document.body.innerHTML = printContent;
+                window.print();
+                document.body.innerHTML = originalContent;
+                location.reload(); // Reload to restore functionality
+            });
+        }
+
+        if (receiptModalClose) {
+            receiptModalClose.addEventListener('click', () => {
+                receiptModal.style.display = 'none';
+            });
+        }
+
+        if (printReceiptBtn) {
+            printReceiptBtn.addEventListener('click', () => {
+                const printContent = document.getElementById('receipt-print').innerHTML;
+                const originalContent = document.body.innerHTML;
+                
+                document.body.innerHTML = printContent;
+                window.print();
+                document.body.innerHTML = originalContent;
+                location.reload(); // Reload to restore functionality
+            });
+        }
+
+        if (emailReceiptBtn) {
+            emailReceiptBtn.addEventListener('click', () => {
+                const orderId = <?= $_SESSION['receipt_order_id'] ?? 'null' ?>;
+                if (orderId) {
+                    alert('Receipt for order #' + orderId + ' would be emailed to your registered email address.');
+                    // In a real implementation, you would make an AJAX call to send the email
+                }
+            });
+        }
+
+        receiptModal.addEventListener('click', (e) => {
+            if (e.target === receiptModal) {
+                receiptModal.style.display = 'none';
+            }
+        });
+
         // CHATBOT
         const chatbotBtn = document.getElementById('chatbot-btn');
         const chatbotModal = document.getElementById('chatbot-modal');
@@ -1596,11 +2109,13 @@ CREATE TABLE IF NOT EXISTS order_items (
             'hello': 'Hi! How can I assist you today?',
             'delivery': 'We offer fast campus delivery within 24 hours to your dorm or a campus pickup point.',
             'discount': 'Bugema University students with valid ID enjoy exclusive discounts. Verify at checkout!',
-            'products': 'We offer textbooks, branded jumpers, pens, wall clocks, notebooks, T-shirts, and bottles.',
+            'products': 'We offer Bags, branded jumpers, pens, clocks, notebooks, T-shirts, and bottles.',
             'contact': 'Reach us at +256 7550 87665 (WhatsApp) or campusshop@bugemauniv.ac.ug',
             'return': 'Our 30-day return policy covers unused items. See Help Center for details!',
-            'help': 'Ask about delivery, discounts, products, returns, or contact info.',
-            'default': 'Sorry, I didn\'t understand. Try: delivery, discounts, products, or returns!'
+            'tracking': 'You can track your orders in the Order History section of your profile.',
+            'receipt': 'You can view and print receipts for your orders in the Order History section.',
+            'help': 'Ask about delivery, discounts, products, returns, tracking, receipts, or contact info.',
+            'default': 'Sorry, I didn\'t understand. Try: delivery, discounts, products, tracking, or returns!'
         };
 
         function addMessage(content, sender) {
@@ -1654,6 +2169,7 @@ CREATE TABLE IF NOT EXISTS order_items (
             if (e.key === 'Escape') {
                 feedbackModal.style.display = 'none';
                 chatbotModal.style.display = 'none';
+                receiptModal.style.display = 'none';
                 mobileMenu.classList.remove('active');
             }
         });

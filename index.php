@@ -1202,8 +1202,7 @@ nav {
 
 /* Newsletter Section */
 .newsletter-section {
-    background: var(--primary-green);
-    color: var(--white);
+    color: black;
     padding: 2rem 0;
     margin-top: 2rem;
 }
@@ -2165,7 +2164,7 @@ footer {
                 </div>
                 <button class="menu-icon">☰</button>
                 <div class="search-bar">
-                    <input type="text" class="search-input" placeholder="Search for Textbooks, Branded Jumpers, Pens...">
+                    <input type="text" class="search-input" placeholder="Search for Bags, Branded Jumpers, Pens...">
                     <button class="search-btn"><i class="fas fa-search"></i></button>
                     <div class="search-results"></div>
                 </div>
@@ -2221,10 +2220,10 @@ footer {
             <nav>
                 <ul class="nav-links">
                     <li><a href="index.php" class="active">Home</a></li>
-                    <li><a href="textbooks.php">Textbooks</a></li>
+                    <li><a href="Bags.php">Bags</a></li>
                     <li><a href="Branded Jumpers.php">Branded Jumpers</a></li>
                     <li><a href="Pens.php">Pens</a></li>
-                    <li><a href="Wall Clocks.php">Wall Clocks</a></li>
+                    <li><a href="Wall Clocks.php">Clocks</a></li>
                     <li><a href="Note Books.php">Note Books</a></li>
                     <li><a href="T-Shirts.php">T-Shirts</a></li>
                     <li><a href="Bottles.php">Bottles</a></li>
@@ -2242,16 +2241,16 @@ footer {
                     </div>
                 <?php endif; ?>
                 <div class="mobile-search-bar">
-                    <input type="text" class="search-input" placeholder="Search for Textbooks, Branded Jumpers, Pens...">
+                    <input type="text" class="search-input" placeholder="Search for Bags, Branded Jumpers, Pens...">
                     <button class="search-btn"><i class="fas fa-search"></i></button>
                     <div class="search-results"></div>
                 </div>
                 <div class="mobile-nav">
                     <a href="index.php" class="active"> Home</a>
-                    <a href="textbooks.php"> Textbooks</a>
+                    <a href="Bags.php"> Bags</a>
                     <a href="Branded Jumpers.php"> Branded Jumpers</a>
                     <a href="Pens.php"> Pens</a>
-                    <a href="Wall Clocks.php"> Wall Clocks</a>
+                    <a href="Wall Clocks.php"> Clocks</a>
                     <a href="Note Books.php"> Note Books</a>
                     <a href="T-Shirts.php"> T-Shirts</a>
                     <a href="Bottles.php"> Bottles</a>
@@ -2320,7 +2319,7 @@ footer {
             <h2>Browse Categories</h2>
             <div class="category-grid">
                 <?php
-                $categories = ['Textbooks', 'Bottles', 'Branded Jumpers', 'Wall Clocks', 'Note Books', 'T-Shirts', 'Pens'];
+                $categories = ['Bags', 'Bottles', 'Branded Jumpers', 'Wall Clocks', 'Note Books', 'T-Shirts', 'Pens'];
                 foreach ($categories as $category):
                     $category_link = str_replace(' ', '%20', $category) . '.php';
                     ?>
@@ -2480,7 +2479,7 @@ footer {
                 <div class="feature-card">
                     <div class="feature-icon"><i class="fas fa-book"></i></div>
                     <h3>Academic Resources</h3>
-                    <p>All your textbooks, Branded Jumpers, and study materials in one convenient place</p>
+                    <p>All your Bags, Branded Jumpers, and study materials in one convenient place</p>
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon"><i class="fas fa-graduation-cap"></i></div>
@@ -2588,7 +2587,7 @@ footer {
                         <i class="fas fa-chevron-down"></i>
                     </div>
                     <div class="faq-answer">
-                        Yes, we have a 7-day return policy for unused products in original packaging. Textbooks must be returned within 3 days of purchase.
+                        Yes, we have a 7-day return policy for unused products in original packaging. Bags must be returned within 3 days of purchase.
                     </div>
                 </div>
             </div>
@@ -2859,7 +2858,7 @@ footer {
             'hello': 'Hi! How can I assist you today?',
             'delivery': 'We offer fast campus delivery within 24 hours to your dorm or a campus pickup point. Would you like more details on delivery options?',
             'discount': 'Bugema University students with a valid student ID can enjoy exclusive discounts. Verify your ID at checkout to apply them!',
-            'products': 'We offer textbooks, branded jumpers, pens, wall clocks, notebooks, T-shirts, and bottles. Browse categories via the "Browse Categories" button!',
+            'products': 'We offer Bags, branded jumpers, pens, clocks, notebooks, T-shirts, and bottles. Browse categories via the "Browse Categories" button!',
             'contact': 'You can reach us at campusshop@bugemauniv.ac.ug or via WhatsApp at +256 7550 87665. Want to call now?',
             'help': 'I\'m here to assist! Ask about delivery, discounts, products, or anything else.',
             'default': 'Sorry, I didn\'t understand that. Try asking about delivery, discounts, products, or contact info!'

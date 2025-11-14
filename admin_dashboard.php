@@ -1,5 +1,5 @@
 <?php
-// admin_dashboard.php (single-file dashboard: Products, Categories, Deliveries, Reports, Notifications, Feedback)
+// admin_dashboard.php (single-file dashboard: Products, Categories, Deliveries, Reports, Notifications, Feedback, Product Movement)
 // Requires: db_connect.php (creates $conn mysqli connection)
 // Database: campusshop_db
 // Tables required:
@@ -7,6 +7,7 @@
 //  - pending_deliveries(id, username, amount, payment_method, status, created_at)
 //  - notifications(id, user_id, message, created_at)
 //  - feedback(id, user_id, name, email, message, created_at, status, admin_reply)
+//  - product_movements(id, product_id, movement_type, quantity, issued_by, received_by, remarks, created_at)
 
 session_start();
 include 'db_connect.php';
@@ -99,6 +100,56 @@ function createUserNotification($userId, $message) {
     return false;
 }
 
+// ==================== PRODUCT MOVEMENT FUNCTION ====================
+function logProductMovement($productId, $movementType, $quantity, $issuedBy, $receivedBy = '', $remarks = '') {
+    global $conn;
+    
+    $stmt = $conn->prepare("
+        INSERT INTO product_movements 
+        (product_id, movement_type, quantity, issued_by, received_by, remarks, created_at) 
+        VALUES (?, ?, ?, ?, ?, ?, NOW())
+    ");
+    
+    if (!$stmt) {
+        error_log("Prepare failed: " . $conn->error);
+        return false;
+    }
+
+    // CORRECTED: Proper parameter order - movement_type comes before quantity
+    $stmt->bind_param("isssss", $productId, $movementType, $quantity, $issuedBy, $receivedBy, $remarks);
+
+    if ($stmt->execute()) {
+        // Update stock based on movement type
+        $stockChange = 0;
+        switch ($movementType) {
+            case 'Sale': 
+            case 'Gift': 
+            case 'Damaged': 
+            case 'Promotion':
+                $stockChange = -$quantity; // Reduce stock
+                break;
+            case 'Return':
+            case 'Adjustment':
+                $stockChange = $quantity; // Increase stock
+                break;
+        }
+
+        if ($stockChange != 0) {
+            $update = $conn->prepare("UPDATE products SET stock = stock + ? WHERE id = ?");
+            $update->bind_param("ii", $stockChange, $productId);
+            $update->execute();
+            $update->close();
+        }
+
+        $stmt->close();
+        return true;
+    } else {
+        error_log("Movement log failed: " . $stmt->error);
+        $stmt->close();
+        return false;
+    }
+}
+
 // Lightweight JSON endpoint for product fetch (used by openEditProduct)
 if (isset($_GET['fetch_product'])) {
     $pid = intval($_GET['fetch_product']);
@@ -143,7 +194,10 @@ if (isset($_GET['fetch_product'])) {
 }
 
 // Global categories
-$valid_categories = ['Textbooks', 'Branded Jumpers', 'Bottles', 'Pens', 'Note Books', 'Wall Clocks', 'T-Shirts'];
+$valid_categories = ['Bags', 'Branded Jumpers', 'Bottles', 'Pens', 'Note Books', 'Wall Clocks', 'T-Shirts'];
+
+// Product movement types
+$movement_types = ['Sale', 'Gift', 'Return', 'Damaged', 'Promotion', 'Adjustment'];
 
 // Helper
 function post_val($k, $d='') { return isset($_POST[$k]) ? $_POST[$k] : $d; }
@@ -379,6 +433,55 @@ if (isset($_GET['delete_category'])) {
     }
 }
 
+// ==================== PRODUCT MOVEMENT MANAGEMENT ====================
+
+// Handle product movement transaction
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_movement'])) {
+    $product_id = intval(post_val('product_id', 0));
+    $movement_type = $conn->real_escape_string(post_val('movement_type', ''));
+    $quantity = intval(post_val('quantity', 0));
+    $received_by = $conn->real_escape_string(post_val('received_by', ''));
+    $remarks = $conn->real_escape_string(post_val('remarks', ''));
+    $issued_by = $_SESSION['username'];
+    
+    error_log("Movement form submitted: product_id=$product_id, type=$movement_type, quantity=$quantity");
+    
+    if ($product_id <= 0) {
+        $message = "Please select a valid product.";
+    } elseif (!in_array($movement_type, $movement_types)) {
+        $message = "Invalid movement type selected.";
+    } elseif ($quantity <= 0) {
+        $message = "Quantity must be greater than zero.";
+    } else {
+        // Check stock availability for outgoing movements
+        if (in_array($movement_type, ['Sale', 'Gift', 'Damaged', 'Promotion'])) {
+            $stock_check = $conn->prepare("SELECT stock, name FROM products WHERE id = ?");
+            $stock_check->bind_param("i", $product_id);
+            $stock_check->execute();
+            $stock_result = $stock_check->get_result();
+            
+            if ($stock_row = $stock_result->fetch_assoc()) {
+                if ($stock_row['stock'] < $quantity) {
+                    $message = "Insufficient stock for '{$stock_row['name']}'. Only " . $stock_row['stock'] . " items available.";
+                }
+            } else {
+                $message = "Product not found.";
+            }
+            $stock_check->close();
+        }
+        
+        if (!isset($message)) {
+            if (logProductMovement($product_id, $movement_type, $quantity, $issued_by, $received_by, $remarks)) {
+                $message = "Product movement recorded successfully.";
+                error_log("Movement recorded successfully: $movement_type for product $product_id, quantity $quantity");
+            } else {
+                $message = "Failed to record product movement.";
+                error_log("Product movement recording failed for product $product_id");
+            }
+        }
+    }
+}
+
 // ==================== DELIVERY COMPLETION WITH STOCK REDUCTION ====================
 if (isset($_GET['complete_delivery'])) {
     $id = intval($_GET['complete_delivery']);
@@ -388,7 +491,7 @@ if (isset($_GET['complete_delivery'])) {
         
         try {
             // Get delivery details including product_id and quantity
-            $stmt = $conn->prepare("SELECT product_id, quantity FROM pending_deliveries WHERE id = ?");
+            $stmt = $conn->prepare("SELECT product_id, quantity, username FROM pending_deliveries WHERE id = ?");
             $stmt->bind_param("i", $id);
             $stmt->execute();
             $result = $stmt->get_result();
@@ -397,19 +500,22 @@ if (isset($_GET['complete_delivery'])) {
                 $delivery = $result->fetch_assoc();
                 $product_id = $delivery['product_id'];
                 $quantity = $delivery['quantity'];
+                $username = $delivery['username'];
                 
                 // Update delivery status
                 $update_stmt = $conn->prepare("UPDATE pending_deliveries SET status = 'Completed' WHERE id = ?");
                 $update_stmt->bind_param("i", $id);
                 $update_stmt->execute();
                 
-                // Reduce product stock if product_id exists
+                // Reduce product stock if product_id exists and log as sale
                 if ($product_id && $product_id !== 'N/A') {
                     $stock_stmt = $conn->prepare("UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?");
                     $stock_stmt->bind_param("iii", $quantity, $product_id, $quantity);
                     
                     if ($stock_stmt->execute()) {
                         if ($stock_stmt->affected_rows > 0) {
+                            // Log this as a sale in product movements
+                            logProductMovement($product_id, 'Sale', $quantity, $_SESSION['username'], $username, 'Online order completed');
                             $message = "Delivery marked completed and stock reduced successfully.";
                         } else {
                             // If stock reduction failed (not enough stock), rollback
@@ -724,6 +830,44 @@ if ($res = $conn->query("SELECT COUNT(*) AS cnt FROM products WHERE stock <= 5 A
     $r = $res->fetch_assoc(); $lowStockCount = intval($r['cnt']); 
 }
 
+// ==================== PRODUCT MOVEMENT DATA ====================
+$totalSold = 0;
+if ($res = $conn->query("SELECT COALESCE(SUM(quantity), 0) AS total FROM product_movements WHERE movement_type = 'Sale'")) { 
+    $r = $res->fetch_assoc(); $totalSold = intval($r['total']); 
+}
+
+$totalGifts = 0;
+if ($res = $conn->query("SELECT COALESCE(SUM(quantity), 0) AS total FROM product_movements WHERE movement_type = 'Gift'")) { 
+    $r = $res->fetch_assoc(); $totalGifts = intval($r['total']); 
+}
+
+$totalDamaged = 0;
+if ($res = $conn->query("SELECT COALESCE(SUM(quantity), 0) AS total FROM product_movements WHERE movement_type = 'Damaged'")) { 
+    $r = $res->fetch_assoc(); $totalDamaged = intval($r['total']); 
+}
+
+$totalReturns = 0;
+if ($res = $conn->query("SELECT COALESCE(SUM(quantity), 0) AS total FROM product_movements WHERE movement_type = 'Return'")) { 
+    $r = $res->fetch_assoc(); $totalReturns = intval($r['total']); 
+}
+
+$totalPromotions = 0;
+if ($res = $conn->query("SELECT COALESCE(SUM(quantity), 0) AS total FROM product_movements WHERE movement_type = 'Promotion'")) { 
+    $r = $res->fetch_assoc(); $totalPromotions = intval($r['total']); 
+}
+
+$totalAdjustments = 0;
+if ($res = $conn->query("SELECT COALESCE(SUM(quantity), 0) AS total FROM product_movements WHERE movement_type = 'Adjustment'")) { 
+    $r = $res->fetch_assoc(); $totalAdjustments = intval($r['total']); 
+}
+
+// Total products moved (all types except returns)
+$totalProductsMoved = $totalSold + $totalGifts + $totalDamaged + $totalPromotions;
+
+// Movement distribution for chart
+$movementLabels = ['Sold', 'Gifts', 'Damaged', 'Promotions', 'Returns', 'Adjustments'];
+$movementData = [$totalSold, $totalGifts, $totalDamaged, $totalPromotions, $totalReturns, $totalAdjustments];
+
 // Sales by month (last 12 months) - FIXED with COALESCE
 $salesLabels = []; $salesData = [];
 $months_sql = "
@@ -812,11 +956,26 @@ if ($res = $conn->query("SELECT id, user_id, name, email, message, admin_reply, 
     }
 }
 
+// Fetch product movements for management
+$productMovements = [];
+if ($res = $conn->query("
+    SELECT pm.*, p.name as product_name 
+    FROM product_movements pm 
+    LEFT JOIN products p ON pm.product_id = p.id 
+    ORDER BY pm.created_at DESC LIMIT 200
+")) {
+    while ($r = $res->fetch_assoc()) {
+        $productMovements[] = $r;
+    }
+}
+
 // JSON for charts
 $salesLabelsJson = json_encode($salesLabels);
 $salesDataJson = json_encode($salesData);
 $catLabelsJson = json_encode($catLabels);
 $catDataJson = json_encode($catData);
+$movementLabelsJson = json_encode($movementLabels);
+$movementDataJson = json_encode($movementData);
 ?>
 
 <!doctype html>
@@ -989,6 +1148,14 @@ body.dark .modal {
 .stock-warning { color: var(--warning); font-weight: 600; }
 .stock-danger { color: var(--danger); font-weight: 600; }
 
+/* Movement type badges */
+.movement-sale { background: #e8f5e8; color: #388e3c; }
+.movement-gift { background: #fff3cd; color: #856404; }
+.movement-damaged { background: #f8d7da; color: #721c24; }
+.movement-return { background: #d1ecf1; color: #0c5460; }
+.movement-promotion { background: #d6d8db; color: #383d41; }
+.movement-adjustment { background: #e2e3e5; color: #383d41; }
+
 /* Print Styles */
 @media print {
     body * {
@@ -1055,6 +1222,8 @@ textarea { resize: vertical; min-height: 60px; }
             <a href="#" data-section="products"><i class="fa fa-box"></i> Products</a>
             <a href="#" data-section="categories"><i class="fa fa-tags"></i> Categories</a>
             <a href="#" data-section="deliveries"><i class="fa fa-truck"></i> Deliveries</a>
+            <a href="#" data-section="transactions"><i class="fa fa-exchange-alt"></i> Transactions</a>
+            <a href="#" data-section="movement-history"><i class="fa fa-history"></i> Movement History</a>
             <a href="#" data-section="reports"><i class="fa fa-chart-line"></i> Reports</a>
             <a href="#" data-section="notifications"><i class="fa fa-bell"></i> Notifications</a>
             <a href="#" data-section="feedback"><i class="fa fa-comments"></i> User Feedback 
@@ -1146,6 +1315,37 @@ textarea { resize: vertical; min-height: 60px; }
                     <div style="color:var(--muted); margin-top:8px; font-size:13px;">Awaiting completion</div>
                 </div>
             </div>
+            
+           <!-- Product Movement Stats -->
+            <div class="card-row">
+                <div class="stat-card">
+                    <div class="stat-label">Total Products Sold</div>
+                    <div class="stat-value"><?php echo number_format($totalSold); ?></div>
+                    <div style="color:var(--muted); margin-top:8px; font-size:13px;">Completed sales</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Gifts Given</div>
+                    <div class="stat-value"><?php echo number_format($totalGifts); ?></div>
+                    <div style="color:var(--muted); margin-top:8px; font-size:13px;">Promotional items</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Damaged Items</div>
+                    <div class="stat-value"><?php echo number_format($totalDamaged); ?></div>
+                    <div style="color:var(--muted); margin-top:8px; font-size:13px;">Lost to damage</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Returns</div>
+                    <div class="stat-value"><?php echo number_format($totalReturns); ?></div>
+                    <div style="color:var(--muted); margin-top:8px; font-size:13px;">Items returned</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Total Outflows</div>
+                    <div class="stat-value <?php echo $totalProductsMoved > 0 ? 'stat-warning' : ''; ?>">
+                        <?php echo number_format($totalProductsMoved); ?>
+                    </div>
+                    <div style="color:var(--muted); margin-top:8px; font-size:13px;">Sold + Gifts + Damaged</div>
+                </div>
+            </div>
 
             <div class="grid">
                 <div class="panel">
@@ -1183,8 +1383,8 @@ textarea { resize: vertical; min-height: 60px; }
                     </div>
 
                     <div class="panel">
-                        <h4 style="margin:0 0 10px 0;">Category Distribution</h4>
-                        <canvas id="catChart" height="180"></canvas>
+                        <h4 style="margin:0 0 10px 0;">Product Movement Distribution</h4>
+                        <canvas id="movementChart" height="180"></canvas>
                     </div>
 
                     <div class="panel">
@@ -1467,6 +1667,140 @@ textarea { resize: vertical; min-height: 60px; }
     </div>
 </section>
 
+        <!-- Transactions Section -->
+        <section id="transactionsSection" style="display:none;">
+            <div class="panel" style="margin-bottom:16px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h3 style="margin:0;">Record Product Movement</h3>
+                    <div>
+                        <button class="btn secondary small" id="addMovementBtn">Add New Transaction</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel" id="movement-form-section">
+                <h4 style="margin:0 0 8px 0;">Record Product Transaction</h4>
+                <form id="movementForm" method="POST" action="admin_dashboard.php">
+                    <input type="hidden" name="add_movement" value="1">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                        <div>
+                            <label for="product_id" style="display:block; margin-bottom:5px; font-weight:600;">Product</label>
+                            <select id="product_id" name="product_id" required style="width:100%; padding:10px; border-radius:8px; border:1px solid #e6eefc;">
+                                <option value="">Select Product</option>
+                                <?php foreach ($products as $product): ?>
+                                    <option value="<?php echo $product['id']; ?>" data-stock="<?php echo $product['stock']; ?>">
+                                        <?php echo htmlspecialchars($product['name']); ?> (Stock: <?php echo $product['stock']; ?>)
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label for="movement_type" style="display:block; margin-bottom:5px; font-weight:600;">Transaction Type</label>
+                            <select id="movement_type" name="movement_type" required style="width:100%; padding:10px; border-radius:8px; border:1px solid #e6eefc;">
+                                <option value="">Select Type</option>
+                                <?php foreach ($movement_types as $type): ?>
+                                    <option value="<?php echo $type; ?>"><?php echo $type; ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label for="quantity" style="display:block; margin-bottom:5px; font-weight:600;">Quantity</label>
+                            <input type="number" id="quantity" name="quantity" min="1" required 
+                                   style="width:100%; padding:10px; border-radius:8px; border:1px solid #e6eefc;">
+                        </div>
+                        
+                        <div>
+                            <label for="received_by" style="display:block; margin-bottom:5px; font-weight:600;">Recipient (if any)</label>
+                            <input type="text" id="received_by" name="received_by" 
+                                   placeholder="Name of recipient or department"
+                                   style="width:100%; padding:10px; border-radius:8px; border:1px solid #e6eefc;">
+                        </div>
+                        
+                        <div style="grid-column: span 2;">
+                            <label for="remarks" style="display:block; margin-bottom:5px; font-weight:600;">Remarks</label>
+                            <textarea id="remarks" name="remarks" rows="3" 
+                                      placeholder="Additional notes about this transaction"
+                                      style="width:100%; padding:10px; border-radius:8px; border:1px solid #e6eefc;"></textarea>
+                        </div>
+                        
+                        <div style="grid-column: span 2; display:flex; gap:10px;">
+                            <button class="btn" type="submit">Record Transaction</button>
+                            <button type="button" id="clearMovement" class="btn secondary">Clear Form</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <!-- Movement History Section -->
+        <section id="movementHistorySection" style="display:none;">
+            <div class="panel" style="margin-bottom:16px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h3 style="margin:0;">Product Movement History</h3>
+                    <div>
+                        <button class="btn secondary small" id="exportMovementsBtn">Export to Excel</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div style="margin-bottom:12px; display:flex; gap:10px; flex-wrap:wrap;">
+                    <input type="text" id="movementSearch" placeholder="Search by product, recipient, remarks..." 
+                           style="padding:8px 12px; border-radius:8px; border:1px solid #e6eefc; flex:1; min-width:200px;">
+                    <select id="movementTypeFilter" style="padding:8px 12px; border-radius:8px; border:1px solid #e6eefc;">
+                        <option value="">All Types</option>
+                        <?php foreach ($movement_types as $type): ?>
+                            <option value="<?php echo $type; ?>"><?php echo $type; ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <input type="date" id="movementDateFrom" style="padding:8px 12px; border-radius:8px; border:1px solid #e6eefc;">
+                    <input type="date" id="movementDateTo" style="padding:8px 12px; border-radius:8px; border:1px solid #e6eefc;">
+                    <button class="btn secondary small" id="applyFiltersBtn">Apply Filters</button>
+                    <button class="btn secondary small" id="clearFiltersBtn">Clear</button>
+                </div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Product</th>
+                            <th>Type</th>
+                            <th>Quantity</th>
+                            <th>Issued By</th>
+                            <th>Received By</th>
+                            <th>Remarks</th>
+                        </tr>
+                    </thead>
+                    <tbody id="movementTable">
+                        <?php if (count($productMovements) === 0): ?>
+                            <tr><td colspan="7">No product movement records found.</td></tr>
+                        <?php else: foreach ($productMovements as $movement): 
+                            $movement_class = 'movement-' . strtolower($movement['movement_type']);
+                            $created_date = date('M j, Y g:i A', strtotime($movement['created_at']));
+                        ?>
+                        <tr>
+                            <td style="font-size:12px; color:var(--muted);"><?php echo $created_date; ?></td>
+                            <td><?php echo htmlspecialchars($movement['product_name'] ?? 'Unknown Product'); ?></td>
+                            <td>
+                                <span class="movement-badge <?php echo $movement_class; ?>" style="padding:4px 8px; border-radius:12px; font-size:11px; font-weight:600; text-transform:uppercase;">
+                                    <?php echo htmlspecialchars($movement['movement_type']); ?>
+                                </span>
+                            </td>
+                            <td><?php echo htmlspecialchars($movement['quantity']); ?></td>
+                            <td><?php echo htmlspecialchars($movement['issued_by']); ?></td>
+                            <td><?php echo htmlspecialchars($movement['received_by'] ?: 'N/A'); ?></td>
+                            <td title="<?php echo htmlspecialchars($movement['remarks']); ?>">
+                                <?php echo strlen($movement['remarks']) > 50 ? substr($movement['remarks'], 0, 50) . '...' : $movement['remarks']; ?>
+                            </td>
+                        </tr>
+                        <?php endforeach; endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
         <!-- Reports Section -->
         <section id="reportsSection" style="display:none;">
             <div class="panel" style="margin-bottom:16px;">
@@ -1489,6 +1823,7 @@ textarea { resize: vertical; min-height: 60px; }
                                 <option value="sales_summary">Sales Summary</option>
                                 <option value="category_sales">Category Sales</option>
                                 <option value="stock_report">Stock Report</option>
+                                <option value="movement_report">Movement Report</option>
                             </select>
                         </div>
                         <div>
@@ -1950,6 +2285,8 @@ textarea { resize: vertical; min-height: 60px; }
         products: document.getElementById('productsSection'),
         categories: document.getElementById('categoriesSection'),
         deliveries: document.getElementById('deliveriesSection'),
+        transactions: document.getElementById('transactionsSection'),
+        'movement-history': document.getElementById('movementHistorySection'),
         reports: document.getElementById('reportsSection'),
         notifications: document.getElementById('notificationsSection'),
         feedback: document.getElementById('feedbackSection'),
@@ -1996,6 +2333,11 @@ textarea { resize: vertical; min-height: 60px; }
         document.querySelectorAll('.feedback-item').forEach(item => {
             const txt = item.innerText.toLowerCase();
             item.style.display = txt.includes(q) ? '' : 'none';
+        });
+        // Search in movement history
+        document.querySelectorAll('#movementTable tr').forEach(r => {
+            const txt = r.innerText.toLowerCase();
+            r.style.display = txt.includes(q) ? '' : 'none';
         });
     });
 
@@ -2192,11 +2534,106 @@ textarea { resize: vertical; min-height: 60px; }
     if (closeReplyModal) closeReplyModal.addEventListener('click', () => replyFeedbackModal.style.display = 'none');
     if (cancelReply) cancelReply.addEventListener('click', () => replyFeedbackModal.style.display = 'none');
 
+    // Product Movement Form Validation
+    const productSelect = document.getElementById('product_id');
+    const movementTypeSelect = document.getElementById('movement_type');
+    const quantityInput = document.getElementById('quantity');
+
+    // Update quantity validation based on movement type and product stock
+    function updateQuantityValidation() {
+        const selectedProduct = productSelect.options[productSelect.selectedIndex];
+        const movementType = movementTypeSelect.value;
+        const currentStock = selectedProduct ? parseInt(selectedProduct.getAttribute('data-stock')) : 0;
+        
+        if (movementType && ['Sale', 'Gift', 'Damaged', 'Promotion'].includes(movementType)) {
+            quantityInput.setAttribute('max', currentStock);
+            if (quantityInput.value > currentStock) {
+                quantityInput.value = currentStock;
+            }
+        } else {
+            quantityInput.removeAttribute('max');
+        }
+    }
+
+    productSelect.addEventListener('change', updateQuantityValidation);
+    movementTypeSelect.addEventListener('change', updateQuantityValidation);
+
+    // Clear movement form
+    document.getElementById('clearMovement').addEventListener('click', function() {
+        document.getElementById('movementForm').reset();
+    });
+
+    // Movement History Filtering
+    document.getElementById('applyFiltersBtn').addEventListener('click', function() {
+        const searchTerm = document.getElementById('movementSearch').value.toLowerCase();
+        const typeFilter = document.getElementById('movementTypeFilter').value;
+        const dateFrom = document.getElementById('movementDateFrom').value;
+        const dateTo = document.getElementById('movementDateTo').value;
+        
+        document.querySelectorAll('#movementTable tr').forEach(row => {
+            const cells = row.querySelectorAll('td');
+            if (cells.length === 0) return;
+            
+            const rowDate = cells[0].textContent;
+            const rowType = cells[2].querySelector('.movement-badge').textContent;
+            const rowText = row.textContent.toLowerCase();
+            
+            let showRow = true;
+            
+            // Search term filter
+            if (searchTerm && !rowText.includes(searchTerm)) {
+                showRow = false;
+            }
+            
+            // Type filter
+            if (typeFilter && rowType !== typeFilter) {
+                showRow = false;
+            }
+            
+            // Date filter (basic implementation)
+            if (dateFrom || dateTo) {
+                // This is a simplified date filter - you might want to implement more robust date parsing
+                const rowDateObj = new Date(rowDate);
+                if (dateFrom && new Date(dateFrom) > rowDateObj) {
+                    showRow = false;
+                }
+                if (dateTo && new Date(dateTo) < rowDateObj) {
+                    showRow = false;
+                }
+            }
+            
+            row.style.display = showRow ? '' : 'none';
+        });
+    });
+
+    // Clear movement filters
+    document.getElementById('clearFiltersBtn').addEventListener('click', function() {
+        document.getElementById('movementSearch').value = '';
+        document.getElementById('movementTypeFilter').value = '';
+        document.getElementById('movementDateFrom').value = '';
+        document.getElementById('movementDateTo').value = '';
+        
+        // Show all rows
+        document.querySelectorAll('#movementTable tr').forEach(row => {
+            row.style.display = '';
+        });
+    });
+
+    // Export movements to Excel (demo)
+    document.getElementById('exportMovementsBtn').addEventListener('click', function() {
+        alert('Export functionality would be implemented here. This would generate an Excel file with all movement data.');
+        // In a real implementation, you would:
+        // 1. Make an AJAX request to generate the Excel file
+        // 2. Or redirect to a PHP script that generates and downloads the file
+    });
+
     // Sales charts
     const salesLabels = <?php echo $salesLabelsJson; ?>;
     const salesData = <?php echo $salesDataJson; ?>;
     const catLabels = <?php echo $catLabelsJson; ?>;
     const catData = <?php echo $catDataJson; ?>;
+    const movementLabels = <?php echo $movementLabelsJson; ?>;
+    const movementData = <?php echo $movementDataJson; ?>;
 
     const salesCtx = document.getElementById('salesChart').getContext('2d');
     const salesChart = new Chart(salesCtx, {
@@ -2247,6 +2684,34 @@ textarea { resize: vertical; min-height: 60px; }
             options: { responsive: true, plugins: { legend: { position: 'bottom' } } } 
         }); 
     }
+
+    // Movement chart
+    const movementCtx = document.getElementById('movementChart').getContext('2d');
+    new Chart(movementCtx, {
+        type: 'pie',
+        data: {
+            labels: movementLabels,
+            datasets: [{
+                data: movementData,
+                backgroundColor: [
+                    '#34d399', // Sold - green
+                    '#fbbf24', // Gifts - yellow
+                    '#ef4444', // Damaged - red
+                    '#8b5cf6', // Promotions - purple
+                    '#60a5fa', // Returns - blue
+                    '#6b7280'  // Adjustments - gray
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        }
+    });
 </script>
 
 <?php

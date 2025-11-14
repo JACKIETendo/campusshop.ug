@@ -1706,7 +1706,7 @@ $user_email = '';
                 </div>
                 <button class="menu-icon">☰</button>
                 <div class="search-bar">
-                    <input type="text" class="search-input" placeholder="Search for Textbooks, Branded Jumpers, Pens...">
+                    <input type="text" class="search-input" placeholder="Search for Bags, Branded Jumpers, Pens...">
                     <button class="search-btn"><i class="fas fa-search"></i></button>
                     <div class="search-results"></div>
                 </div>
@@ -1744,10 +1744,10 @@ $user_email = '';
             <nav>
                 <ul class="nav-links">
                     <li><a href="index.php">Home</a></li>
-                    <li><a href="textbooks.php">Textbooks</a></li>
+                    <li><a href="Bags.php">Bags</a></li>
                     <li><a href="Branded Jumpers.php">Branded Jumpers</a></li>
                     <li><a href="Pens.php">Pens</a></li>
-                    <li><a href="Wall Clocks.php">Wall Clocks</a></li>
+                    <li><a href="Wall Clocks.php">Clocks</a></li>
                     <li><a href="Note Books.php">Note Books</a></li>
                     <li><a href="T-Shirts.php" class="active">T-Shirts</a></li>
                     <li><a href="Bottles.php">Bottles</a></li>
@@ -1760,16 +1760,16 @@ $user_email = '';
                     <span class="mobile-username"><a href="profile.php">Hi, <?php echo htmlspecialchars($_SESSION['username']); ?></a></span>
                 <?php endif; ?>
                 <div class="mobile-search-bar">
-                    <input type="text" class="search-input" placeholder="Search for Textbooks, Branded Jumpers, Pens...">
+                    <input type="text" class="search-input" placeholder="Search for Bags, Branded Jumpers, Pens...">
                     <button class="search-btn"><i class="fas fa-search"></i></button>
                     <div class="search-results"></div>
                 </div>
                 <div class="mobile-nav">
                     <a href="index.php">Home</a>
-                    <a href="textbooks.php">Textbooks</a>
+                    <a href="Bags.php">Bags</a>
                     <a href="Branded Jumpers.php">Branded Jumpers</a>
                     <a href="Pens.php">Pens</a>
-                    <a href="Wall Clocks.php">Wall Clocks</a>
+                    <a href="Wall Clocks.php">Clocks</a>
                     <a href="Note Books.php">Note Books</a>
                     <a href="T-Shirts.php" class="active">T-Shirts</a>
                     <a href="Bottles.php">Bottles</a>
@@ -2267,7 +2267,7 @@ $user_email = '';
                 'hello': 'Hi! How can I assist you today?',
                 'delivery': 'We offer fast campus delivery within 24 hours to your dorm or a campus pickup point. Would you like more details on delivery options?',
                 'discount': 'Bugema University students with a valid student ID can enjoy exclusive discounts. Verify your ID at checkout to apply them!',
-                'products': 'We offer textbooks, branded jumpers, pens, wall clocks, notebooks, T-shirts, and bottles. Browse categories via the "Browse Categories" button!',
+                'products': 'We offer Bags, branded jumpers, pens, clocks, notebooks, T-shirts, and bottles. Browse categories via the "Browse Categories" button!',
                 'contact': 'You can reach us at campusshop@bugemauniv.ac.ug or via WhatsApp at +256 7550 87665. Want to call now?',
                 'help': 'I\'m here to assist! Ask about delivery, discounts, products, or anything else.',
                 'default': 'Sorry, I didn\'t understand that. Try asking about delivery, discounts, products, or contact info!'

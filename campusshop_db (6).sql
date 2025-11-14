@@ -202,7 +202,7 @@ CREATE TABLE `products` (
   `price` decimal(10,2) NOT NULL,
   `image_path` varchar(255) DEFAULT NULL,
   `caption` varchar(255) DEFAULT NULL,
-  `category` enum('Textbooks','Branded Jumpers','Bottles','Pens','Note Books','Wall Clocks','T-Shirts') DEFAULT NULL,
+  `category` enum('Bags','Branded Jumpers','Bottles','Pens','Note Books','Wall Clocks','T-Shirts') DEFAULT NULL,
   `stock` int(11) NOT NULL DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -220,8 +220,8 @@ INSERT INTO `products` (`id`, `name`, `price`, `image_path`, `caption`, `categor
 (32, 'Water Bottle', 1000.00, 'images/1756883841_adnan-mistry-lALZb4UD9Es-unsplash.jpg', 'qwertyuio', 'Bottles', 10),
 (33, 'T-shirt 1', 15000.00, 'images/1757425198_campus T-shirt.jpeg', 'gooood', 'T-Shirts', 10),
 (34, 'T-shirt 2', 15000.00, 'images/1757425230_florencia-simonini-PDZAMYvduVk-unsplash.jpg', 'goooooooooo', 'T-Shirts', 10),
-(35, 'Introduction to Programming', 15000.00, 'images/1757425410_introduction to programming.jpeg', 'good book', 'Textbooks', 10),
-(36, 'calculus 1', 16000.00, 'images/1757425454_organic chemistry.jpeg', 'goood book', 'Textbooks', 10),
+(35, 'Introduction to Programming', 15000.00, 'images/1757425410_introduction to programming.jpeg', 'good book', 'Bags', 10),
+(36, 'calculus 1', 16000.00, 'images/1757425454_organic chemistry.jpeg', 'goood book', 'Bags', 10),
 (37, 'note book 1', 20000.00, 'images/1757425559_notebook A4.jpeg', 'goooooood', 'Note Books', 10),
 (38, 'note book 2', 15000.00, 'images/1757425589_asterisk-kwon-q_gjDWf9ths-unsplash.jpg', 'gooooooooooooooooooooo', 'Note Books', 10),
 (39, 'note book 3', 8000.00, 'images/1757425682_designecologist-gh1IgGFnhSk-unsplash.jpg', 'dooooooooooooooo', 'Note Books', 10),
@@ -238,10 +238,10 @@ INSERT INTO `products` (`id`, `name`, `price`, `image_path`, `caption`, `categor
 (50, 'wall clock 1', 50000.00, 'images/1757426309_isidro-lam--4sTc8gIh_U-unsplash.jpg', 'rooooooooooooooooooooooooo', 'Wall Clocks', 10),
 (51, 'wall clock 2', 85000.00, 'images/1757426343_1757426309_isidro-lam--4sTc8gIh_U-unsplash.jpg', 'wooooooooooooooooooo', 'Wall Clocks', 10),
 (52, 'Wall Clock 7', 50000.00, 'images/1758721235_karl-callwood-KQONyIFXNZU-unsplash.jpg', 'goooooooooooooooooooooooooooooooooooooooooooo', 'Wall Clocks', 10),
-(53, 'text book 7', 50000.00, 'images/1759934374_isidro-lam--4sTc8gIh_U-unsplash.jpg', 'the best boot', 'Textbooks', 0),
-(54, 'Introduction to E-commerce', 7000.00, 'images/1760449943_1757425682_designecologist-gh1IgGFnhSk-unsplash.jpg', '190 pages.\\\\\\\\\\\\\\\\r\\\\\\\\\\\\\\\\nIt is good for a student doing E-commerce and E-business', 'Textbooks', 3),
-(55, 'Introduction to UI design ', 6000.00, 'images/1760452004_1757425559_notebook_A4.jpeg', '190 pages. The book is good for UI designers.', 'Textbooks', 3),
-(56, 'text book 8', 11000.00, 'images/1762266026_1760449943_1757425682_designecologist-gh1IgGFnhSk-unsplash.jpg', 'the best book in Uganda', 'Textbooks', 2);
+(53, 'text book 7', 50000.00, 'images/1759934374_isidro-lam--4sTc8gIh_U-unsplash.jpg', 'the best boot', 'Bags', 0),
+(54, 'Introduction to E-commerce', 7000.00, 'images/1760449943_1757425682_designecologist-gh1IgGFnhSk-unsplash.jpg', '190 pages.\\\\\\\\\\\\\\\\r\\\\\\\\\\\\\\\\nIt is good for a student doing E-commerce and E-business', 'Bags', 3),
+(55, 'Introduction to UI design ', 6000.00, 'images/1760452004_1757425559_notebook_A4.jpeg', '190 pages. The book is good for UI designers.', 'Bags', 3),
+(56, 'text book 8', 11000.00, 'images/1762266026_1760449943_1757425682_designecologist-gh1IgGFnhSk-unsplash.jpg', 'the best book in Uganda', 'Bags', 2);
 
 -- --------------------------------------------------------
 

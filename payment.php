@@ -53,6 +53,30 @@ if ($is_single_item) {
     }
     $stmt->close();
 }
+// Coupon Logic
+$discount_amount = 0;
+$discount_code = '';
+$coupon_message = '';
+$applied_discount = 0;
+
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['apply_coupon'])) {
+    $coupon_code = strtoupper(trim($_POST['coupon_code']));
+    $stmt = $conn->prepare("SELECT * FROM coupons WHERE code = ? AND is_active = 1 AND (valid_until IS NULL OR valid_until >= CURDATE())");
+    $stmt->bind_param("s", $coupon_code);
+    $stmt->execute();
+    $coupon = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if ($coupon) {
+        $applied_discount = ($subtotal * $coupon['discount_percent']) / 100;
+        $discount_amount = $applied_discount;
+        $discount_code = $coupon_code;
+        $coupon_message = "<span style='color:green;'>Coupon applied! Save UGX " . number_format($applied_discount) . "</span>";
+    } else {
+        $coupon_message = "<span style='color:red;'>Invalid or expired coupon.</span>";
+    }
+}
+
 
 // Process feedback form submission
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_feedback'])) {
@@ -83,92 +107,129 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit_feedback'])) {
     echo json_encode($response);
     exit();
 }
-// Process payment form submission (Mobile Money and Pay on Delivery only)
-if ($_SERVER["REQUEST_METHOD"] == "POST" && !isset($_POST['submit_feedback'])) {
-    $payment_method = isset($_POST['payment_method']) ? $_POST['payment_method'] : '';
-    $network_provider = isset($_POST['network_provider']) ? $_POST['network_provider'] : '';
+// ================================================================
+//  PROCESS PAYMENT – Mobile Money & Pay on Delivery ONLY
+// ================================================================
+if ($_SERVER["REQUEST_METHOD"] == "POST" && !isset($_POST['submit_feedback']) && !isset($_POST['apply_coupon'])) {
 
-    if ($payment_method === 'Mobile Money' || $payment_method === 'Pay on Delivery') {
-        $phone = $conn->real_escape_string($_POST['phone']);
-        $location = $conn->real_escape_string($_POST['location']);
-        $username = $conn->real_escape_string($_SESSION['username']);
+    $payment_method   = $_POST['payment_method'] ?? '';
+    $phone            = $conn->real_escape_string($_POST['phone'] ?? '');
+    $location         = $conn->real_escape_string($_POST['location'] ?? '');
+    $network_provider = ($payment_method === 'Mobile Money') ? ($_POST['network_provider'] ?? '') : null;
+    $username         = $conn->real_escape_string($_SESSION['username']);
 
-        // Validate phone number (Ugandan format: 07X-XXX-XXXX or +256XXX-XXXX)
-        if (!preg_match("/^(07[0-9]{8}|\+256[0-9]{8})$/", $phone)) {
-            $message = "Invalid phone number. Use format 07X-XXX-XXXX or +256XXX-XXXX.";
-        } elseif (empty($location) || strlen($location) > 255) {
-            $message = "Location is required and must be 255 characters or less.";
-        } elseif ($payment_method === 'Mobile Money' && empty($network_provider)) {
-            $message = "Please select a network provider (Airtel or MTN).";
-        } else {
-            $amount = $payment_method === 'Mobile Money' ? floatval($_POST['amount']) : NULL;
-            $success_count = 0;
+    // ---------- VALIDATION ----------
+    $errors = [];
+    if (!preg_match("/^(07[0-9]{8}|\+256[0-9]{8})$/", $phone)) {
+        $errors[] = "Invalid phone number. Use 07XXXXXXXX or +256XXXXXXXX.";
+    }
+    if (empty($location)) {
+        $errors[] = "Delivery location is required.";
+    }
+    if ($payment_method === 'Mobile Money' && empty($network_provider)) {
+        $errors[] = "Please select a network provider.";
+    }
 
-            // Insert into pending_deliveries for each cart item WITH PRODUCT INFORMATION
+    if (!empty($errors)) {
+        $message = implode('<br>', $errors);
+    } else {
+        // ---------- TRANSACTION ----------
+        $conn->autocommit(false);
+        $order_id   = null;
+        $success    = false;
+        $msg        = '';
+
+        try {
+            // 1. INSERT ONE ORDER (your exact columns)
+            $order_date   = date('Y-m-d H:i:s');
+            $order_status = 'Pending';
+            $order_total  = $total;                     // $total already calculated above
+
+            $stmt = $conn->prepare("INSERT INTO orders 
+                (user_id, order_date, total_amount, status) 
+                VALUES (?, ?, ?, ?)");
+            $stmt->bind_param("isds", $user_id, $order_date, $order_total, $order_status);
+            $stmt->execute();
+            $order_id = $conn->insert_id;
+            $stmt->close();
+
+            if (!$order_id) {
+                throw new Exception("Failed to get order ID.");
+            }
+
+            // 2. INSERT EACH ITEM INTO order_items & pending_deliveries
             foreach ($cart_items as $item) {
-                $cart_id = $item['cart_id'];
-                
-                // Use individual parameters to avoid bind_param issues
-                $product_id = $item['id'];
+                $cart_id      = $item['cart_id'];
+                $product_id   = $item['id'];
                 $product_name = $item['name'];
-                $product_image = $item['image_path'];
-                $quantity = $item['quantity'];
-                
-                // Insert into pending_deliveries with product information
-                $sql = "INSERT INTO pending_deliveries 
-                        (user_id, username, phone, payment_method, amount, cart_id, location, network_provider,
-                        product_id, product_name, product_image, quantity) 
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                $product_img  = $item['image_path'] ?? null;
+                $quantity     = $item['quantity'];
+                $price        = $item['price'];
+                $item_total   = $price * $quantity;
 
-                    $stmt = $conn->prepare($sql);
+                // ---- order_items ----
+                $stmt = $conn->prepare("INSERT INTO order_items 
+                    (order_id, product_id, product_name, quantity, price) 
+                    VALUES (?, ?, ?, ?, ?)");
+                $stmt->bind_param("iisid", $order_id, $product_id, $product_name, $quantity, $price);
+                $stmt->execute();
+                $stmt->close();
 
-                    if ($stmt) {
-                        $stmt->bind_param("isssdississi", 
-                            $user_id, 
-                            $username, 
-                            $phone, 
-                            $payment_method, 
-                            $amount, 
-                            $cart_id, 
-                            $location, 
-                            $network_provider, 
-                            $product_id, 
-                            $product_name, 
-                            $product_image, 
-                            $quantity
-                        );
+                // ---- pending_deliveries (one row per product) ----
+                $amount_for_row = ($payment_method === 'Mobile Money') ? $item_total : null;
 
-                        if ($stmt->execute()) {
-                            $success_count++;
-                            // Delete from cart
-                            $delete_stmt = $conn->prepare("DELETE FROM cart WHERE id = ? AND user_id = ?");
-                            $delete_stmt->bind_param("ii", $cart_id, $user_id);
-                            $delete_stmt->execute();
-                            $delete_stmt->close();
-                        }
-                        $stmt->close();
-                    } else {
-                    error_log("Failed to prepare statement: " . $conn->error);
-                }
+                $stmt = $conn->prepare("INSERT INTO pending_deliveries 
+                    (user_id, username, phone, payment_method, amount, cart_id, location, network_provider,
+                     product_id, product_name, product_image, quantity) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $stmt->bind_param("isssdississi",
+                    $user_id, $username, $phone, $payment_method, $amount_for_row,
+                    $cart_id, $location, $network_provider,
+                    $product_id, $product_name, $product_img, $quantity);
+                $stmt->execute();
+                $stmt->close();
             }
 
-            if ($success_count > 0) {
-                if ($payment_method === 'Mobile Money') {
-                    $message = "Payment of UGX " . number_format($amount) . " initiated via " . htmlspecialchars($network_provider) . " Mobile Money to " . htmlspecialchars($phone) . ". Please confirm on your phone.";
-                } else {
-                    $message = "Pay on Delivery requested to " . htmlspecialchars($phone) . " at " . htmlspecialchars($location) . ". We will contact you to confirm delivery details.";
-                }
-                
-                // Redirect to success page after successful payment
-                $_SESSION['payment_success'] = $message;
-                header("Location: payment_success.php");
-                exit();
+            // 3. CLEAR CART
+            $cart_ids = array_column($cart_items, 'cart_id');
+            if (!empty($cart_ids)) {
+                $placeholders = str_repeat('?,', count($cart_ids) - 1) . '?';
+                $types        = str_repeat('i', count($cart_ids));
+                $stmt = $conn->prepare("DELETE FROM cart WHERE id IN ($placeholders) AND user_id = ?");
+                $params = array_merge($cart_ids, [$user_id]);
+                $ref = [];
+                foreach ($params as $k => $v) $ref[$k] = &$params[$k];
+                call_user_func_array([$stmt, 'bind_param'], array_merge([$types . 'i'], $ref));
+                $stmt->execute();
+                $stmt->close();
+            }
+
+            $conn->commit();
+            $success = true;
+        } catch (Exception $e) {
+            $conn->rollback();
+            error_log("Payment error: " . $e->getMessage());
+            $message = "Order failed – please try again.";
+        }
+
+        $conn->autocommit(true);
+
+        // ---------- SUCCESS ----------
+        if ($success && $order_id) {
+            if ($payment_method === 'Mobile Money') {
+                $msg = "Payment of UGX " . number_format($order_total) .
+                       " initiated via $network_provider. Order #$order_id is Pending.";
             } else {
-                $message = "Failed to process your order. Please try again.";
+                $msg = "Pay on Delivery confirmed. Order #$order_id will be delivered to: " .
+                       htmlspecialchars($location) . ".";
             }
+
+            $_SESSION['payment_success'] = $msg;
+            $_SESSION['order_id']        = $order_id;
+            header("Location: payment_success.php");
+            exit();
         }
     }
-    // Stripe and PayPal processing is disabled for UI-only focus
 }
 
 // Set user_email to empty string (no email column in users table)
