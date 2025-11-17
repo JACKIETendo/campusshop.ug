@@ -8,6 +8,10 @@
 //  - notifications(id, user_id, message, created_at)
 //  - feedback(id, user_id, name, email, message, created_at, status, admin_reply)
 //  - product_movements(id, product_id, movement_type, quantity, issued_by, received_by, remarks, created_at)
+//  - users(id, username, email, role, created_at)
+//  - orders(id, user_id, total_amount, status, payment_method, shipping_address, created_at)
+//  - order_items(id, order_id, product_id, quantity, price)
+//  - returns(id, order_id, product_id, reason, status, created_at, quantity, refund_amount)
 
 session_start();
 include 'db_connect.php';
@@ -198,6 +202,15 @@ $valid_categories = ['Bags', 'Branded Jumpers', 'Bottles', 'Pens', 'Note Books',
 
 // Product movement types
 $movement_types = ['Sale', 'Gift', 'Return', 'Damaged', 'Promotion', 'Adjustment'];
+
+// Order statuses
+$order_statuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled', 'Refunded'];
+
+// Return statuses
+$return_statuses = ['Pending', 'Approved', 'Rejected', 'Completed'];
+
+// User roles
+$user_roles = ['admin', 'manager', 'staff', 'customer'];
 
 // Helper
 function post_val($k, $d='') { return isset($_POST[$k]) ? $_POST[$k] : $d; }
@@ -697,6 +710,205 @@ if (isset($_GET['delete_feedback'])) {
     }
 }
 
+// ==================== ORDER MANAGEMENT ====================
+
+// Update order status
+if (isset($_GET['update_order_status'])) {
+    $order_id = intval($_GET['order_id']);
+    $new_status = $conn->real_escape_string($_GET['status']);
+    
+    if ($order_id > 0 && in_array($new_status, $order_statuses)) {
+        $stmt = $conn->prepare("UPDATE orders SET status = ? WHERE id = ?");
+        $stmt->bind_param("si", $new_status, $order_id);
+        if ($stmt->execute()) {
+            $message = "Order #$order_id status updated to $new_status successfully.";
+            
+            // Create notification for user if order is delivered
+            if ($new_status === 'Delivered') {
+                $user_stmt = $conn->prepare("SELECT user_id FROM orders WHERE id = ?");
+                $user_stmt->bind_param("i", $order_id);
+                $user_stmt->execute();
+                $user_result = $user_stmt->get_result();
+                if ($user_row = $user_result->fetch_assoc()) {
+                    $notification_msg = "Your order #$order_id has been delivered successfully!";
+                    createUserNotification($user_row['user_id'], $notification_msg);
+                }
+                $user_stmt->close();
+            }
+        } else {
+            $message = "Failed to update order status: " . $stmt->error;
+            error_log("Update order status failed: " . $stmt->error);
+        }
+        $stmt->close();
+    }
+}
+
+// Delete order
+if (isset($_GET['delete_order'])) {
+    $order_id = intval($_GET['delete_order']);
+    if ($order_id > 0) {
+        // Start transaction
+        $conn->begin_transaction();
+        
+        try {
+            // Delete order items first
+            $delete_items = $conn->prepare("DELETE FROM order_items WHERE order_id = ?");
+            $delete_items->bind_param("i", $order_id);
+            $delete_items->execute();
+            $delete_items->close();
+            
+            // Delete order
+            $delete_order = $conn->prepare("DELETE FROM orders WHERE id = ?");
+            $delete_order->bind_param("i", $order_id);
+            if ($delete_order->execute()) {
+                $message = "Order deleted successfully.";
+            } else {
+                throw new Exception("Failed to delete order: " . $delete_order->error);
+            }
+            $delete_order->close();
+            
+            $conn->commit();
+        } catch (Exception $e) {
+            $conn->rollback();
+            $message = "Failed to delete order: " . $e->getMessage();
+            error_log("Delete order failed: " . $e->getMessage());
+        }
+    }
+}
+
+// Generate invoice
+if (isset($_GET['generate_invoice'])) {
+    $order_id = intval($_GET['generate_invoice']);
+    if ($order_id > 0) {
+        // This would typically generate a PDF invoice
+        // For now, we'll just show a success message
+        $message = "Invoice generated for order #$order_id (PDF generation would be implemented here).";
+    }
+}
+
+// ==================== USER MANAGEMENT ====================
+
+// Update user role
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_user_role'])) {
+    $user_id = intval(post_val('user_id', 0));
+    $new_role = $conn->real_escape_string(post_val('role', ''));
+    
+    if ($user_id > 0 && in_array($new_role, $user_roles)) {
+        $stmt = $conn->prepare("UPDATE users SET role = ? WHERE id = ?");
+        $stmt->bind_param("si", $new_role, $user_id);
+        if ($stmt->execute()) {
+            $message = "User role updated successfully.";
+        } else {
+            $message = "Failed to update user role: " . $stmt->error;
+            error_log("Update user role failed: " . $stmt->error);
+        }
+        $stmt->close();
+    }
+}
+
+// Delete user
+if (isset($_GET['delete_user'])) {
+    $user_id = intval($_GET['delete_user']);
+    if ($user_id > 0 && $user_id != $_SESSION['user_id']) { // Prevent self-deletion
+        $stmt = $conn->prepare("DELETE FROM users WHERE id = ?");
+        $stmt->bind_param("i", $user_id);
+        if ($stmt->execute()) {
+            $message = "User deleted successfully.";
+        } else {
+            $message = "Failed to delete user: " . $stmt->error;
+            error_log("Delete user failed: " . $stmt->error);
+        }
+        $stmt->close();
+    } elseif ($user_id == $_SESSION['user_id']) {
+        $message = "You cannot delete your own account.";
+    }
+}
+
+// ==================== RETURNS MANAGEMENT ====================
+
+// Process return
+if (isset($_GET['process_return'])) {
+    $return_id = intval($_GET['return_id']);
+    $action = $conn->real_escape_string($_GET['action']);
+    
+    if ($return_id > 0 && in_array($action, ['approve', 'reject', 'complete'])) {
+        $new_status = '';
+        switch ($action) {
+            case 'approve': $new_status = 'Approved'; break;
+            case 'reject': $new_status = 'Rejected'; break;
+            case 'complete': $new_status = 'Completed'; break;
+        }
+        
+        $stmt = $conn->prepare("UPDATE returns SET status = ? WHERE id = ?");
+        $stmt->bind_param("si", $new_status, $return_id);
+        if ($stmt->execute()) {
+            $message = "Return request $new_status successfully.";
+            
+            // If approved, process refund and restock
+            if ($action === 'approve') {
+                // Get return details
+                $return_stmt = $conn->prepare("SELECT r.order_id, r.product_id, r.quantity, oi.price FROM returns r JOIN order_items oi ON r.order_id = oi.order_id AND r.product_id = oi.product_id WHERE r.id = ?");
+                $return_stmt->bind_param("i", $return_id);
+                $return_stmt->execute();
+                $return_result = $return_stmt->get_result();
+                
+                if ($return_row = $return_result->fetch_assoc()) {
+                    // Restock product
+                    $restock_stmt = $conn->prepare("UPDATE products SET stock = stock + ? WHERE id = ?");
+                    $restock_stmt->bind_param("ii", $return_row['quantity'], $return_row['product_id']);
+                    $restock_stmt->execute();
+                    $restock_stmt->close();
+                    
+                    // Log the return in product movements
+                    logProductMovement($return_row['product_id'], 'Return', $return_row['quantity'], $_SESSION['username'], 'System', 'Return from order #' . $return_row['order_id']);
+                    
+                    // Update order status to refunded if all items are returned
+                    $check_order_stmt = $conn->prepare("
+                        SELECT COUNT(*) as total_items, 
+                               SUM(CASE WHEN r.status = 'Approved' THEN 1 ELSE 0 END) as returned_items 
+                        FROM order_items oi 
+                        LEFT JOIN returns r ON oi.order_id = r.order_id AND oi.product_id = r.product_id 
+                        WHERE oi.order_id = ?
+                    ");
+                    $check_order_stmt->bind_param("i", $return_row['order_id']);
+                    $check_order_stmt->execute();
+                    $check_result = $check_order_stmt->get_result();
+                    $check_data = $check_result->fetch_assoc();
+                    $check_order_stmt->close();
+                    
+                    if ($check_data['total_items'] == $check_data['returned_items']) {
+                        $update_order_stmt = $conn->prepare("UPDATE orders SET status = 'Refunded' WHERE id = ?");
+                        $update_order_stmt->bind_param("i", $return_row['order_id']);
+                        $update_order_stmt->execute();
+                        $update_order_stmt->close();
+                    }
+                }
+                $return_stmt->close();
+            }
+        } else {
+            $message = "Failed to process return: " . $stmt->error;
+            error_log("Process return failed: " . $stmt->error);
+        }
+        $stmt->close();
+    }
+}
+
+// Delete return
+if (isset($_GET['delete_return'])) {
+    $return_id = intval($_GET['delete_return']);
+    if ($return_id > 0) {
+        $stmt = $conn->prepare("DELETE FROM returns WHERE id = ?");
+        $stmt->bind_param("i", $return_id);
+        if ($stmt->execute()) {
+            $message = "Return request deleted successfully.";
+        } else {
+            $message = "Failed to delete return request: " . $stmt->error;
+            error_log("Delete return failed: " . $stmt->error);
+        }
+        $stmt->close();
+    }
+}
+
         // --------------------
         // PRINT SALES REPORT
         // --------------------
@@ -969,7 +1181,109 @@ if ($res = $conn->query("
     }
 }
 
-// JSON for charts
+// ==================== NEW DATA FETCHES ====================
+
+// Fetch orders for order management
+$orders = [];
+// Check if created_at column exists, otherwise use id for ordering
+$check_column = $conn->query("SHOW COLUMNS FROM orders LIKE 'created_at'");
+if ($check_column->num_rows > 0) {
+    // created_at exists
+    $order_query = "
+        SELECT o.*, u.username, u.email 
+        FROM orders o 
+        LEFT JOIN users u ON o.user_id = u.id 
+        ORDER BY o.created_at DESC LIMIT 200
+    ";
+} else {
+    // created_at doesn't exist, use id for ordering
+    $order_query = "
+        SELECT o.*, u.username, u.email 
+        FROM orders o 
+        LEFT JOIN users u ON o.user_id = u.id 
+        ORDER BY o.id DESC LIMIT 200
+    ";
+}
+$check_column->close();
+
+if ($res = $conn->query($order_query)) {
+    while ($r = $res->fetch_assoc()) {
+        $orders[] = $r;
+    }
+}
+
+// Fetch order items for specific orders
+function getOrderItems($order_id) {
+    global $conn;
+    $items = [];
+    $stmt = $conn->prepare("
+        SELECT oi.*, p.name as product_name, p.image_path 
+        FROM order_items oi 
+        LEFT JOIN products p ON oi.product_id = p.id 
+        WHERE oi.order_id = ?
+    ");
+    $stmt->bind_param("i", $order_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    while ($row = $result->fetch_assoc()) {
+        $items[] = $row;
+    }
+    $stmt->close();
+    return $items;
+}
+
+// Fetch users for user management
+$users = [];
+if ($res = $conn->query("SELECT id, username, email, role, created_at FROM users ORDER BY created_at DESC LIMIT 200")) {
+    while ($r = $res->fetch_assoc()) {
+        $users[] = $r;
+    }
+}
+
+// Fetch returns for returns management
+$returns = [];
+if ($res = $conn->query("
+    SELECT r.*, o.id as order_id, u.username, p.name as product_name 
+    FROM returns r 
+    LEFT JOIN orders o ON r.order_id = o.id 
+    LEFT JOIN users u ON o.user_id = u.id 
+    LEFT JOIN products p ON r.product_id = p.id 
+    ORDER BY r.created_at DESC LIMIT 200
+")) {
+    while ($r = $res->fetch_assoc()) {
+        $returns[] = $r;
+    }
+}
+
+// Calculate additional metrics
+$totalOrders = 0;
+if ($res = $conn->query("SELECT COUNT(*) AS cnt FROM orders")) { 
+    $r = $res->fetch_assoc(); $totalOrders = intval($r['cnt']); 
+}
+
+$avgOrderValue = 0;
+if ($totalOrders > 0) {
+    $avgOrderValue = $totalSales / $totalOrders;
+}
+
+// Top selling products
+$topProducts = [];
+if ($res = $conn->query("
+    SELECT p.name, SUM(oi.quantity) as total_sold, SUM(oi.quantity * oi.price) as total_revenue
+    FROM order_items oi
+    JOIN products p ON oi.product_id = p.id
+    JOIN orders o ON oi.order_id = o.id
+    WHERE o.status = 'Delivered'
+    GROUP BY p.id, p.name
+    ORDER BY total_revenue DESC
+    LIMIT 5
+")) {
+    while ($r = $res->fetch_assoc()) {
+        $topProducts[] = $r;
+    }
+}
+
+// JSON for charts - FIXED: Ensure proper data formatting
 $salesLabelsJson = json_encode($salesLabels);
 $salesDataJson = json_encode($salesData);
 $catLabelsJson = json_encode($catLabels);
@@ -1156,6 +1470,20 @@ body.dark .modal {
 .movement-promotion { background: #d6d8db; color: #383d41; }
 .movement-adjustment { background: #e2e3e5; color: #383d41; }
 
+/* Order status badges */
+.status-pending { background: #fff3cd; color: #856404; }
+.status-processing { background: #d1ecf1; color: #0c5460; }
+.status-shipped { background: #d4edda; color: #155724; }
+.status-delivered { background: #e8f5e8; color: #388e3c; }
+.status-cancelled { background: #f8d7da; color: #721c24; }
+.status-refunded { background: #e2e3e5; color: #383d41; }
+
+/* Return status badges */
+.return-pending { background: #fff3cd; color: #856404; }
+.return-approved { background: #d4edda; color: #155724; }
+.return-rejected { background: #f8d7da; color: #721c24; }
+.return-completed { background: #e8f5e8; color: #388e3c; }
+
 /* Print Styles */
 @media print {
     body * {
@@ -1204,6 +1532,29 @@ body.dark .feedback-reply { background: #0a2a4a; }
 .warning{ background: rgba(245,158,11,0.08); color:var(--warning); border:1px solid rgba(245,158,11,0.2) }
 
 textarea { resize: vertical; min-height: 60px; }
+
+/* Tab styles */
+.tabs { display: flex; border-bottom: 1px solid #e6eefc; margin-bottom: 16px; }
+.tab { padding: 10px 16px; cursor: pointer; border-bottom: 2px solid transparent; }
+.tab.active { border-bottom-color: var(--primary); font-weight: 600; color: var(--primary); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* User role badges */
+.role-admin { background: #dc2626; color: white; }
+.role-manager { background: #f59e0b; color: white; }
+.role-staff { background: #10b981; color: white; }
+.role-customer { background: #6b7280; color: white; }
+
+/* Dropdown styles */
+.dropdown { position: relative; display: inline-block; }
+.dropdown-content { display: none; position: absolute; background-color: white; min-width: 160px; box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2); z-index: 1; border-radius: 8px; overflow: hidden; }
+.dropdown-content a { color: black; padding: 12px 16px; text-decoration: none; display: block; border-bottom: 1px solid #f1f5f9; }
+.dropdown-content a:hover { background-color: #f1f5f9; }
+.dropdown:hover .dropdown-content { display: block; }
+
+/* Chart containers */
+.chart-container { position: relative; height: 300px; width: 100%; }
 </style>
 </head>
 <body>
@@ -1221,9 +1572,12 @@ textarea { resize: vertical; min-height: 60px; }
             <a href="#" data-section="overview" class="active"><i class="fa fa-home"></i> Dashboard</a>
             <a href="#" data-section="products"><i class="fa fa-box"></i> Products</a>
             <a href="#" data-section="categories"><i class="fa fa-tags"></i> Categories</a>
+            <a href="#" data-section="orders"><i class="fa fa-shopping-cart"></i> Order Management</a>
             <a href="#" data-section="deliveries"><i class="fa fa-truck"></i> Deliveries</a>
             <a href="#" data-section="transactions"><i class="fa fa-exchange-alt"></i> Transactions</a>
             <a href="#" data-section="movement-history"><i class="fa fa-history"></i> Movement History</a>
+            <a href="#" data-section="users"><i class="fa fa-users"></i> User Management</a>
+            <a href="#" data-section="returns"><i class="fa fa-undo"></i> Returns & Refunds</a>
             <a href="#" data-section="reports"><i class="fa fa-chart-line"></i> Reports</a>
             <a href="#" data-section="notifications"><i class="fa fa-bell"></i> Notifications</a>
             <a href="#" data-section="feedback"><i class="fa fa-comments"></i> User Feedback 
@@ -1284,15 +1638,34 @@ textarea { resize: vertical; min-height: 60px; }
         <section id="overviewSection">
             <div class="card-row">
                 <div class="stat-card">
-                    <div class="stat-label">Total Sales</div>
+                    <div class="stat-label">Total Revenue</div>
                     <div class="stat-value">UGX <?php echo number_format($totalSales); ?></div>
-                    <div style="color:var(--muted); margin-top:8px; font-size:13px;">Completed sales</div>
+                    <div style="color:var(--muted); margin-top:8px; font-size:13px;">Gross sales for the period</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Total Orders</div>
+                    <div class="stat-value"><?php echo $totalOrders; ?></div>
+                    <div style="color:var(--muted); margin-top:8px; font-size:13px;">Number of successful transactions</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Average Order Value</div>
+                    <div class="stat-value">UGX <?php echo number_format($avgOrderValue, 2); ?></div>
+                    <div style="color:var(--muted); margin-top:8px; font-size:13px;">Total Revenue / Total Orders</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-label">Products</div>
                     <div class="stat-value"><?php echo $totalProducts; ?></div>
                     <div style="color:var(--muted); margin-top:8px; font-size:13px;">Items in catalog</div>
                 </div>
+                <div class="stat-card">
+                    <div class="stat-label">Pending Deliveries</div>
+                    <div class="stat-value"><?php echo $pendingCount; ?></div>
+                    <div style="color:var(--muted); margin-top:8px; font-size:13px;">Awaiting completion</div>
+                </div>
+            </div>
+            
+            <!-- Inventory Alerts -->
+            <div class="card-row">
                 <div class="stat-card">
                     <div class="stat-label">Stock Value</div>
                     <div class="stat-value">UGX <?php echo number_format($totalStockValue); ?></div>
@@ -1310,15 +1683,6 @@ textarea { resize: vertical; min-height: 60px; }
                     </div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-label">Pending Deliveries</div>
-                    <div class="stat-value"><?php echo $pendingCount; ?></div>
-                    <div style="color:var(--muted); margin-top:8px; font-size:13px;">Awaiting completion</div>
-                </div>
-            </div>
-            
-           <!-- Product Movement Stats -->
-            <div class="card-row">
-                <div class="stat-card">
                     <div class="stat-label">Total Products Sold</div>
                     <div class="stat-value"><?php echo number_format($totalSold); ?></div>
                     <div style="color:var(--muted); margin-top:8px; font-size:13px;">Completed sales</div>
@@ -1327,16 +1691,6 @@ textarea { resize: vertical; min-height: 60px; }
                     <div class="stat-label">Gifts Given</div>
                     <div class="stat-value"><?php echo number_format($totalGifts); ?></div>
                     <div style="color:var(--muted); margin-top:8px; font-size:13px;">Promotional items</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Damaged Items</div>
-                    <div class="stat-value"><?php echo number_format($totalDamaged); ?></div>
-                    <div style="color:var(--muted); margin-top:8px; font-size:13px;">Lost to damage</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Returns</div>
-                    <div class="stat-value"><?php echo number_format($totalReturns); ?></div>
-                    <div style="color:var(--muted); margin-top:8px; font-size:13px;">Items returned</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-label">Total Outflows</div>
@@ -1350,7 +1704,7 @@ textarea { resize: vertical; min-height: 60px; }
             <div class="grid">
                 <div class="panel">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                        <h2 style="margin:0; font-size:18px;">Summary Sales</h2>
+                        <h2 style="margin:0; font-size:18px;">Sales Performance</h2>
                         <div>
                             <select id="rangeSelect" style="padding:8px; border-radius:8px;">
                                 <option selected>Last 12 months</option>
@@ -1359,32 +1713,38 @@ textarea { resize: vertical; min-height: 60px; }
                             </select>
                         </div>
                     </div>
-                    <canvas id="salesChart" height="140" aria-label="Sales chart"></canvas>
+                    <div class="chart-container">
+                        <canvas id="salesChart" aria-label="Sales chart"></canvas>
+                    </div>
                 </div>
 
                 <div style="display:flex; flex-direction:column; gap:12px;">
                     <div class="panel">
-                        <h4 style="margin:0 0 10px 0;">Active Balance</h4>
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <div>
-                                <div style="font-size:20px; font-weight:800;">UGX <?php echo number_format($totalSales * 0.12, 2); ?></div>
-                                <div style="color:var(--muted); font-size:13px;">Estimated available balance</div>
-                            </div>
-                            <div>
-                                <button id="addCardBtn" class="btn">Add Virtual Card</button>
-                            </div>
-                        </div>
-                        <hr style="margin:12px 0;">
-                        <div style="color:var(--muted); font-size:13px;">
-                            <div>Incomes: UGX <?php echo number_format($totalSales); ?></div>
-                            <div>Expenses: UGX <?php echo number_format($totalSales * 0.2); ?></div>
-                            <div>Taxes: UGX <?php echo number_format($totalSales * 0.05); ?></div>
-                        </div>
+                        <h4 style="margin:0 0 10px 0;">Top 5 Selling Products</h4>
+                        <?php if (count($topProducts) > 0): ?>
+                            <ul style="padding:0; list-style:none; margin:0;">
+                                <?php foreach ($topProducts as $product): ?>
+                                    <li style="padding:8px 0; border-bottom:1px dashed #f1f5f9;">
+                                        <span style="font-weight:600;"><?php echo htmlspecialchars($product['name']); ?></span>
+                                        <span style="float:right; font-weight:600;">
+                                            UGX <?php echo number_format($product['total_revenue']); ?>
+                                        </span>
+                                        <div style="font-size:12px; color:var(--muted);">
+                                            Sold: <?php echo $product['total_sold']; ?> units
+                                        </div>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        <?php else: ?>
+                            <p style="color:var(--muted); margin:0;">No sales data available.</p>
+                        <?php endif; ?>
                     </div>
 
                     <div class="panel">
                         <h4 style="margin:0 0 10px 0;">Product Movement Distribution</h4>
-                        <canvas id="movementChart" height="180"></canvas>
+                        <div class="chart-container">
+                            <canvas id="movementChart"></canvas>
+                        </div>
                     </div>
 
                     <div class="panel">
@@ -1564,108 +1924,192 @@ textarea { resize: vertical; min-height: 60px; }
             </div>
         </section>
 
-       <!-- Deliveries Section -->
-<section id="deliveriesSection" style="display:none;">
-    <div class="panel" style="margin-bottom:16px;">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <h3 style="margin:0;">Pending Deliveries</h3>
-            <div><a href="#deliveries" class="btn secondary small" onclick="document.querySelector('#deliveriesSection').scrollIntoView({behavior:'smooth'})">View All</a></div>
-        </div>
-    </div>
+        <!-- Order Management Section -->
+        <section id="ordersSection" style="display:none;">
+            <div class="panel" style="margin-bottom:16px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h3 style="margin:0;">Order Management</h3>
+                    <div>
+                        <button class="btn secondary small" id="refreshOrdersBtn">Refresh</button>
+                    </div>
+                </div>
+            </div>
 
-    <div class="panel">
-        <table>
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Product</th>
-                    <th>Quantity</th>
-                    <th>User</th>
-                    <th>Phone</th>
-                    <th>Location</th>
-                    <th>Payment</th>
-                    <th>Amount</th>
-                    <th>Status</th>
-                    <th>Date</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody id="pendingTable">
-                <?php if (count($pendingDeliveries) === 0): ?>
-                    <tr><td colspan="11">No pending deliveries.</td></tr>
-                <?php else: foreach ($pendingDeliveries as $p): 
-                    $product_image = !empty($p['product_image']) ? htmlspecialchars($p['product_image']) : '';
-                    $product_name = !empty($p['product_name']) ? htmlspecialchars($p['product_name']) : 'Unknown Product';
-                    $quantity = isset($p['quantity']) ? intval($p['quantity']) : 1;
-                    $created_date = date('M j, Y g:i A', strtotime($p['created_at']));
-                    
-                    // Check stock availability for pending deliveries
-                    $stock_available = true;
-                    if ($p['status'] === 'Pending' && $p['product_id'] && $p['product_id'] !== 'N/A') {
-                        $stock_check = $conn->prepare("SELECT stock FROM products WHERE id = ?");
-                        $stock_check->bind_param("i", $p['product_id']);
-                        $stock_check->execute();
-                        $stock_result = $stock_check->get_result();
-                        if ($stock_row = $stock_result->fetch_assoc()) {
-                            $stock_available = ($stock_row['stock'] >= $quantity);
-                        }
-                        $stock_check->close();
-                    }
-                ?>
-                    <tr>
-                        <td><?php echo htmlspecialchars($p['id']); ?></td>
-                        <td>
-                            <div style="display:flex; align-items:center; gap:8px; min-width:200px;">
-                                <?php if($product_image && file_exists($product_image)): ?>
-                                    <img src="<?php echo $product_image; ?>" alt="Product image" style="width:40px; height:40px; object-fit:cover; border-radius:6px;">
-                                <?php else: ?>
-                                    <div style="width:40px;height:40px;background:#eef3ff;border-radius:6px; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:10px;">No img</div>
-                                <?php endif; ?>
-                                <div>
-                                    <div style="font-weight:600; font-size:13px;"><?php echo $product_name; ?></div>
-                                    <div style="font-size:11px; color:var(--muted);">ID: <?php echo htmlspecialchars($p['product_id'] ?? 'N/A'); ?></div>
-                                </div>
-                            </div>
-                        </td>
-                        <td style="text-align:center;"><?php echo $quantity; ?></td>
-                        <td><?php echo htmlspecialchars($p['username']); ?></td>
-                        <td><?php echo htmlspecialchars($p['phone'] ?? 'N/A'); ?></td>
-                        <td><?php echo htmlspecialchars($p['location'] ?? 'N/A'); ?></td>
-                        <td><?php echo htmlspecialchars($p['payment_method'] ?? 'N/A'); ?></td>
-                        <td><?php echo $p['amount'] ? 'UGX '.number_format($p['amount']):'N/A'; ?></td>
-                        <td>
-                            <span style="padding:4px 8px; border-radius:12px; font-size:11px; font-weight:600; text-transform:uppercase; 
-                                <?php if($p['status'] === 'Completed'): ?>
-                                    background:#e8f5e8; color:#388e3c;
-                                <?php elseif($p['status'] === 'Pending'): ?>
-                                    background:#fff3cd; color:#856404;
-                                <?php else: ?>
-                                    background:#f8d7da; color:#721c24;
-                                <?php endif; ?>
-                            ">
-                                <?php echo htmlspecialchars($p['status']); ?>
-                            </span>
-                            <?php if ($p['status'] === 'Pending' && !$stock_available): ?>
-                                <br><small style="color:var(--danger); font-size:10px;">Insufficient stock</small>
-                            <?php endif; ?>
-                        </td>
-                        <td style="font-size:12px; color:var(--muted);"><?php echo $created_date; ?></td>
-                        <td>
-                            <?php if ($p['status'] === 'Pending'): ?>
-                                <?php if ($stock_available): ?>
-                                    <a class="small btn secondary" href="?complete_delivery=<?php echo $p['id'];?>" onclick="return confirm('Mark this delivery as completed? This will reduce the product stock.')">Complete</a>
-                                <?php else: ?>
-                                    <button class="small btn secondary" disabled title="Insufficient stock to complete delivery">Complete</button>
-                                <?php endif; ?>
-                            <?php endif; ?>
-                            <a class="small btn" style="background:#ff5b5b" href="?delete_delivery=<?php echo $p['id'];?>" onclick="return confirm('Delete this delivery?')">Delete</a>
-                        </td>
-                    </tr>
-                <?php endforeach; endif; ?>
-            </tbody>
-        </table>
-    </div>
-</section>
+            <div class="panel">
+                <div class="tabs">
+                    <div class="tab active" data-tab="all">All Orders (<?php echo count($orders); ?>)</div>
+                    <div class="tab" data-tab="pending">Pending (<?php echo count(array_filter($orders, fn($o) => $o['status'] === 'Pending')); ?>)</div>
+                    <div class="tab" data-tab="processing">Processing (<?php echo count(array_filter($orders, fn($o) => $o['status'] === 'Processing')); ?>)</div>
+                    <div class="tab" data-tab="shipped">Shipped (<?php echo count(array_filter($orders, fn($o) => $o['status'] === 'Shipped')); ?>)</div>
+                    <div class="tab" data-tab="delivered">Delivered (<?php echo count(array_filter($orders, fn($o) => $o['status'] === 'Delivered')); ?>)</div>
+                </div>
+
+                <div class="tab-content active" id="tab-all">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Order ID</th>
+                                <th>Customer</th>
+                                <th>Items</th>
+                                <th>Amount</th>
+                                <th>Status</th>
+                                <th>Payment</th>
+                                <th>Date</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if (count($orders) === 0): ?>
+                                <tr><td colspan="8" style="text-align:center; padding:20px;">No orders found.</td></tr>
+                            <?php else: foreach ($orders as $order): 
+                                $status_class = 'status-' . strtolower(str_replace(' ', '-', $order['status']));
+                                $order_items = getOrderItems($order['id']);
+                                $item_count = count($order_items);
+                            ?>
+                            <tr>
+                                <td><strong>#<?php echo htmlspecialchars($order['id']); ?></strong></td>
+                                <td>
+                                    <div style="font-weight:600;"><?php echo htmlspecialchars($order['username'] ?? 'Guest'); ?></div>
+                                    <div style="font-size:12px; color:var(--muted);"><?php echo htmlspecialchars($order['email'] ?? 'N/A'); ?></div>
+                                </td>
+                                <td>
+                                    <span class="btn secondary small"><?php echo $item_count; ?> items</span>
+                                </td>
+                                <td><strong>UGX <?php echo number_format($order['total_amount']); ?></strong></td>
+                                <td>
+                                    <span class="status-badge <?php echo $status_class; ?>" style="padding:4px 8px; border-radius:12px; font-size:11px; font-weight:600; text-transform:uppercase;">
+                                        <?php echo htmlspecialchars($order['status']); ?>
+                                    </span>
+                                </td>
+                                <td><?php echo htmlspecialchars($order['payment_method'] ?? 'Cash'); ?></td>
+                                <td style="font-size:12px;"><?php echo htmlspecialchars(date('M j, Y', strtotime($order['created_at']))); ?></td>
+                                <td>
+                                    <button class="small btn secondary" onclick="viewOrderDetails(<?php echo $order['id']; ?>)">View</button>
+                                    <div class="dropdown" style="display:inline-block;">
+                                        <button class="small btn">Update</button>
+                                        <div class="dropdown-content">
+                                            <?php foreach ($order_statuses as $status): 
+                                                if ($status !== $order['status']): ?>
+                                                    <a href="?update_order_status=1&order_id=<?php echo $order['id']; ?>&status=<?php echo urlencode($status); ?>" 
+                                                       onclick="return confirm('Change order #<?php echo $order['id']; ?> status to <?php echo $status; ?>?')">
+                                                        <?php echo $status; ?>
+                                                    </a>
+                                                <?php endif;
+                                            endforeach; ?>
+                                        </div>
+                                    </div>
+                                    <a class="small btn" style="background:#ff5b5b" href="?delete_order=<?php echo $order['id']; ?>" onclick="return confirm('Delete order #<?php echo $order['id']; ?>? This action cannot be undone.')">Delete</a>
+                                </td>
+                            </tr>
+                            <?php endforeach; endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Deliveries Section -->
+        <section id="deliveriesSection" style="display:none;">
+            <div class="panel" style="margin-bottom:16px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h3 style="margin:0;">Pending Deliveries</h3>
+                    <div><a href="#deliveries" class="btn secondary small" onclick="document.querySelector('#deliveriesSection').scrollIntoView({behavior:'smooth'})">View All</a></div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Product</th>
+                            <th>Quantity</th>
+                            <th>User</th>
+                            <th>Phone</th>
+                            <th>Location</th>
+                            <th>Payment</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                            <th>Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pendingTable">
+                        <?php if (count($pendingDeliveries) === 0): ?>
+                            <tr><td colspan="11">No pending deliveries.</td></tr>
+                        <?php else: foreach ($pendingDeliveries as $p): 
+                            $product_image = !empty($p['product_image']) ? htmlspecialchars($p['product_image']) : '';
+                            $product_name = !empty($p['product_name']) ? htmlspecialchars($p['product_name']) : 'Unknown Product';
+                            $quantity = isset($p['quantity']) ? intval($p['quantity']) : 1;
+                            $created_date = date('M j, Y g:i A', strtotime($p['created_at']));
+                            
+                            // Check stock availability for pending deliveries
+                            $stock_available = true;
+                            if ($p['status'] === 'Pending' && $p['product_id'] && $p['product_id'] !== 'N/A') {
+                                $stock_check = $conn->prepare("SELECT stock FROM products WHERE id = ?");
+                                $stock_check->bind_param("i", $p['product_id']);
+                                $stock_check->execute();
+                                $stock_result = $stock_check->get_result();
+                                if ($stock_row = $stock_result->fetch_assoc()) {
+                                    $stock_available = ($stock_row['stock'] >= $quantity);
+                                }
+                                $stock_check->close();
+                            }
+                        ?>
+                            <tr>
+                                <td><?php echo htmlspecialchars($p['id']); ?></td>
+                                <td>
+                                    <div style="display:flex; align-items:center; gap:8px; min-width:200px;">
+                                        <?php if($product_image && file_exists($product_image)): ?>
+                                            <img src="<?php echo $product_image; ?>" alt="Product image" style="width:40px; height:40px; object-fit:cover; border-radius:6px;">
+                                        <?php else: ?>
+                                            <div style="width:40px;height:40px;background:#eef3ff;border-radius:6px; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:10px;">No img</div>
+                                        <?php endif; ?>
+                                        <div>
+                                            <div style="font-weight:600; font-size:13px;"><?php echo $product_name; ?></div>
+                                            <div style="font-size:11px; color:var(--muted);">ID: <?php echo htmlspecialchars($p['product_id'] ?? 'N/A'); ?></div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td style="text-align:center;"><?php echo $quantity; ?></td>
+                                <td><?php echo htmlspecialchars($p['username']); ?></td>
+                                <td><?php echo htmlspecialchars($p['phone'] ?? 'N/A'); ?></td>
+                                <td><?php echo htmlspecialchars($p['location'] ?? 'N/A'); ?></td>
+                                <td><?php echo htmlspecialchars($p['payment_method'] ?? 'N/A'); ?></td>
+                                <td><?php echo $p['amount'] ? 'UGX '.number_format($p['amount']):'N/A'; ?></td>
+                                <td>
+                                    <span style="padding:4px 8px; border-radius:12px; font-size:11px; font-weight:600; text-transform:uppercase; 
+                                        <?php if($p['status'] === 'Completed'): ?>
+                                            background:#e8f5e8; color:#388e3c;
+                                        <?php elseif($p['status'] === 'Pending'): ?>
+                                            background:#fff3cd; color:#856404;
+                                        <?php else: ?>
+                                            background:#f8d7da; color:#721c24;
+                                        <?php endif; ?>
+                                    ">
+                                        <?php echo htmlspecialchars($p['status']); ?>
+                                    </span>
+                                    <?php if ($p['status'] === 'Pending' && !$stock_available): ?>
+                                        <br><small style="color:var(--danger); font-size:10px;">Insufficient stock</small>
+                                    <?php endif; ?>
+                                </td>
+                                <td style="font-size:12px; color:var(--muted);"><?php echo $created_date; ?></td>
+                                <td>
+                                    <?php if ($p['status'] === 'Pending'): ?>
+                                        <?php if ($stock_available): ?>
+                                            <a class="small btn secondary" href="?complete_delivery=<?php echo $p['id'];?>" onclick="return confirm('Mark this delivery as completed? This will reduce the product stock.')">Complete</a>
+                                        <?php else: ?>
+                                            <button class="small btn secondary" disabled title="Insufficient stock to complete delivery">Complete</button>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
+                                    <a class="small btn" style="background:#ff5b5b" href="?delete_delivery=<?php echo $p['id'];?>" onclick="return confirm('Delete this delivery?')">Delete</a>
+                                </td>
+                            </tr>
+                        <?php endforeach; endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </section>
 
         <!-- Transactions Section -->
         <section id="transactionsSection" style="display:none;">
@@ -1801,6 +2245,136 @@ textarea { resize: vertical; min-height: 60px; }
             </div>
         </section>
 
+        <!-- User Management Section -->
+        <section id="usersSection" style="display:none;">
+            <div class="panel" style="margin-bottom:16px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h3 style="margin:0;">User Management</h3>
+                    <div>
+                        <button class="btn secondary small" id="addUserBtn">Add New User</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Username</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>Joined</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (count($users) === 0): ?>
+                            <tr><td colspan="6">No users found.</td></tr>
+                        <?php else: foreach ($users as $user): 
+                            $role_class = 'role-' . $user['role'];
+                        ?>
+                        <tr>
+                            <td><?php echo htmlspecialchars($user['id']); ?></td>
+                            <td><?php echo htmlspecialchars($user['username']); ?></td>
+                            <td><?php echo htmlspecialchars($user['email']); ?></td>
+                            <td>
+                                <span class="role-badge <?php echo $role_class; ?>" style="padding:4px 8px; border-radius:12px; font-size:11px; font-weight:600; text-transform:uppercase;">
+                                    <?php echo htmlspecialchars($user['role']); ?>
+                                </span>
+                            </td>
+                            <td><?php echo htmlspecialchars(date('M j, Y', strtotime($user['created_at']))); ?></td>
+                            <td>
+                                <button class="small btn secondary" onclick="editUserRole(<?php echo $user['id']; ?>, '<?php echo $user['role']; ?>')">Edit Role</button>
+                                <?php if ($user['id'] != $_SESSION['user_id'] ?? 0): ?>
+                                    <a class="small btn" style="background:#ff5b5b" href="?delete_user=<?php echo $user['id']; ?>" onclick="return confirm('Delete user <?php echo htmlspecialchars($user['username']); ?>? This action cannot be undone.')">Delete</a>
+                                <?php else: ?>
+                                    <button class="small btn" style="background:#6b7280" disabled>Current User</button>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                        <?php endforeach; endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Returns & Refunds Section -->
+        <section id="returnsSection" style="display:none;">
+            <div class="panel" style="margin-bottom:16px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h3 style="margin:0;">Returns & Refunds Management</h3>
+                    <div>
+                        <span class="btn secondary small">
+                            Total: <?php echo count($returns); ?> | 
+                            Pending: <?php echo count(array_filter($returns, fn($r) => $r['status'] === 'Pending')); ?>
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="tabs">
+                    <div class="tab active" data-tab="returns-all">All Returns</div>
+                    <div class="tab" data-tab="returns-pending">Pending</div>
+                    <div class="tab" data-tab="returns-approved">Approved</div>
+                    <div class="tab" data-tab="returns-completed">Completed</div>
+                </div>
+
+                <div class="tab-content active" id="tab-returns-all">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Return ID</th>
+                                <th>Order ID</th>
+                                <th>Customer</th>
+                                <th>Product</th>
+                                <th>Quantity</th>
+                                <th>Reason</th>
+                                <th>Status</th>
+                                <th>Date</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if (count($returns) === 0): ?>
+                                <tr><td colspan="9" style="text-align:center; padding:20px;">No return requests found.</td></tr>
+                            <?php else: foreach ($returns as $return): 
+                                $status_class = 'return-' . strtolower($return['status']);
+                            ?>
+                            <tr>
+                                <td><strong>#<?php echo htmlspecialchars($return['id']); ?></strong></td>
+                                <td>#<?php echo htmlspecialchars($return['order_id']); ?></td>
+                                <td><?php echo htmlspecialchars($return['username']); ?></td>
+                                <td><?php echo htmlspecialchars($return['product_name']); ?></td>
+                                <td><?php echo htmlspecialchars($return['quantity'] ?? 1); ?></td>
+                                <td title="<?php echo htmlspecialchars($return['reason']); ?>">
+                                    <?php echo strlen($return['reason']) > 50 ? substr($return['reason'], 0, 50) . '...' : $return['reason']; ?>
+                                </td>
+                                <td>
+                                    <span class="status-badge <?php echo $status_class; ?>" style="padding:4px 8px; border-radius:12px; font-size:11px; font-weight:600; text-transform:uppercase;">
+                                        <?php echo htmlspecialchars($return['status']); ?>
+                                    </span>
+                                </td>
+                                <td style="font-size:12px;"><?php echo htmlspecialchars(date('M j, Y', strtotime($return['created_at']))); ?></td>
+                                <td>
+                                    <?php if ($return['status'] === 'Pending'): ?>
+                                        <a class="small btn secondary" href="?process_return=1&return_id=<?php echo $return['id']; ?>&action=approve" onclick="return confirm('Approve this return request? This will restock the product.')">Approve</a>
+                                        <a class="small btn warning" href="?process_return=1&return_id=<?php echo $return['id']; ?>&action=reject" onclick="return confirm('Reject this return request?')">Reject</a>
+                                    <?php elseif ($return['status'] === 'Approved'): ?>
+                                        <a class="small btn" href="?process_return=1&return_id=<?php echo $return['id']; ?>&action=complete" onclick="return confirm('Mark this return as completed?')">Complete</a>
+                                    <?php endif; ?>
+                                    <button class="small btn secondary" onclick="viewReturnDetails(<?php echo $return['id']; ?>)">Details</button>
+                                    <a class="small btn" style="background:#ff5b5b" href="?delete_return=<?php echo $return['id']; ?>" onclick="return confirm('Delete this return request?')">Delete</a>
+                                </td>
+                            </tr>
+                            <?php endforeach; endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
         <!-- Reports Section -->
         <section id="reportsSection" style="display:none;">
             <div class="panel" style="margin-bottom:16px;">
@@ -1824,6 +2398,8 @@ textarea { resize: vertical; min-height: 60px; }
                                 <option value="category_sales">Category Sales</option>
                                 <option value="stock_report">Stock Report</option>
                                 <option value="movement_report">Movement Report</option>
+                                <option value="customer_behavior">Customer Behavior</option>
+                                <option value="financial">Financial Report</option>
                             </select>
                         </div>
                         <div>
@@ -2027,10 +2603,14 @@ textarea { resize: vertical; min-height: 60px; }
                 <p style="color:var(--muted)">Sales summary and category distribution.</p>
                 <div style="display:flex; gap:16px; margin-top:12px; flex-wrap:wrap;">
                     <div style="flex:1; min-width:350px; background:var(--card); padding:12px; border-radius:8px;">
-                        <canvas id="salesChart2" height="140"></canvas>
+                        <div class="chart-container">
+                            <canvas id="salesChart2"></canvas>
+                        </div>
                     </div>
                     <div style="width:320px; background:var(--card); padding:12px; border-radius:8px;">
-                        <canvas id="catChart2" height="140"></canvas>
+                        <div class="chart-container">
+                            <canvas id="catChart2"></canvas>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2251,23 +2831,62 @@ textarea { resize: vertical; min-height: 60px; }
             </div>
         </div>
 
-        <!-- Virtual Card Modal (client demo) -->
-        <div id="cardModal" style="display:none;">
-            <div class="modal-overlay" id="cardOverlay">
-                <div class="modal" role="dialog" aria-modal="true" aria-label="Add virtual card">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <h3>Create Virtual Card</h3>
-                        <button class="btn secondary" id="closeCardModal">Close</button>
+        <!-- Order Details Modal -->
+        <div id="orderDetailsModal" style="display:none;">
+            <div class="modal-overlay" id="orderOverlay">
+                <div class="modal" role="dialog" aria-modal="true" aria-label="Order details" style="max-width: 700px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                        <h3>Order Details</h3>
+                        <button class="btn secondary" id="closeOrderModal">Close</button>
                     </div>
-                    <form id="virtualCardForm" style="margin-top:10px;">
-                        <div style="display:flex; flex-direction:column; gap:10px;">
-                            <input name="card_name" placeholder="Card name" required style="padding:10px;border-radius:8px;border:1px solid #e6eefc;">
-                            <input name="limit" type="number" placeholder="Limit (UGX)" required style="padding:10px;border-radius:8px;border:1px solid #e6eefc;">
-                            <div style="text-align:right;">
-                                <button class="btn" type="submit">Create</button>
-                            </div>
+                    <div id="orderDetailsContent">
+                        <!-- Order details will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit User Role Modal -->
+        <div id="editUserRoleModal" style="display:none;">
+            <div class="modal-overlay" id="userOverlay">
+                <div class="modal" role="dialog" aria-modal="true" aria-label="Edit user role">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                        <h3>Edit User Role</h3>
+                        <button class="btn secondary" id="closeUserModal">Close</button>
+                    </div>
+                    <form id="editUserRoleForm" method="POST" action="admin_dashboard.php">
+                        <input type="hidden" name="update_user_role" value="1">
+                        <input type="hidden" id="user_id" name="user_id">
+                        
+                        <div style="margin-bottom:15px;">
+                            <label for="user_role">Select Role:</label>
+                            <select id="user_role" name="role" required style="width:100%; padding:10px; border-radius:8px; border:1px solid #e6eefc; margin-top:8px;">
+                                <?php foreach ($user_roles as $role): ?>
+                                    <option value="<?php echo $role; ?>"><?php echo ucfirst($role); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        
+                        <div style="text-align:right; margin-top:15px;">
+                            <button type="submit" class="btn">Update Role</button>
+                            <button type="button" class="btn secondary" id="cancelUserEdit">Cancel</button>
                         </div>
                     </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Return Details Modal -->
+        <div id="returnDetailsModal" style="display:none;">
+            <div class="modal-overlay" id="returnOverlay">
+                <div class="modal" role="dialog" aria-modal="true" aria-label="Return details" style="max-width: 600px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                        <h3>Return Request Details</h3>
+                        <button class="btn secondary" id="closeReturnModal">Close</button>
+                    </div>
+                    <div id="returnDetailsContent">
+                        <!-- Return details will be loaded here -->
+                    </div>
                 </div>
             </div>
         </div>
@@ -2284,9 +2903,12 @@ textarea { resize: vertical; min-height: 60px; }
         overview: document.getElementById('overviewSection'),
         products: document.getElementById('productsSection'),
         categories: document.getElementById('categoriesSection'),
+        orders: document.getElementById('ordersSection'),
         deliveries: document.getElementById('deliveriesSection'),
         transactions: document.getElementById('transactionsSection'),
         'movement-history': document.getElementById('movementHistorySection'),
+        users: document.getElementById('usersSection'),
+        returns: document.getElementById('returnsSection'),
         reports: document.getElementById('reportsSection'),
         notifications: document.getElementById('notificationsSection'),
         feedback: document.getElementById('feedbackSection'),
@@ -2313,29 +2935,57 @@ textarea { resize: vertical; min-height: 60px; }
     // Search functionality
     document.getElementById('searchInput').addEventListener('input', function(e) {
         const q = e.target.value.toLowerCase().trim();
+        
+        // Search in products
         document.querySelectorAll('#productTable tr').forEach(r => {
             const txt = r.innerText.toLowerCase();
             r.style.display = txt.includes(q) ? '' : 'none';
         });
+        
+        // Search in pending deliveries
         document.querySelectorAll('#pendingTable tr').forEach(r => {
             const txt = r.innerText.toLowerCase();
             r.style.display = txt.includes(q) ? '' : 'none';
         });
+        
+        // Search in categories
         document.querySelectorAll('#categoriesTable tr').forEach(r => {
             const txt = r.innerText.toLowerCase();
             r.style.display = txt.includes(q) ? '' : 'none';
         });
+        
+        // Search in notifications
         document.querySelectorAll('#notificationsSection table tbody tr').forEach(r => {
             const txt = r.innerText.toLowerCase();
             r.style.display = txt.includes(q) ? '' : 'none';
         });
-        // Search in feedback section
+        
+        // Search in feedback
         document.querySelectorAll('.feedback-item').forEach(item => {
             const txt = item.innerText.toLowerCase();
             item.style.display = txt.includes(q) ? '' : 'none';
         });
+        
         // Search in movement history
         document.querySelectorAll('#movementTable tr').forEach(r => {
+            const txt = r.innerText.toLowerCase();
+            r.style.display = txt.includes(q) ? '' : 'none';
+        });
+        
+        // Search in orders
+        document.querySelectorAll('#ordersSection table tbody tr').forEach(r => {
+            const txt = r.innerText.toLowerCase();
+            r.style.display = txt.includes(q) ? '' : 'none';
+        });
+        
+        // Search in users
+        document.querySelectorAll('#usersSection table tbody tr').forEach(r => {
+            const txt = r.innerText.toLowerCase();
+            r.style.display = txt.includes(q) ? '' : 'none';
+        });
+        
+        // Search in returns
+        document.querySelectorAll('#returnsSection table tbody tr').forEach(r => {
             const txt = r.innerText.toLowerCase();
             r.style.display = txt.includes(q) ? '' : 'none';
         });
@@ -2373,19 +3023,6 @@ textarea { resize: vertical; min-height: 60px; }
         });
     });
 
-    // Add virtual card modal (demo)
-    document.getElementById('addCardBtn').addEventListener('click', function() {
-        document.getElementById('cardModal').style.display = 'block';
-    });
-    document.getElementById('closeCardModal').addEventListener('click', function() {
-        document.getElementById('cardModal').style.display = 'none';
-    });
-    document.getElementById('virtualCardForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        alert('Virtual card created (demo). Implement backend to persist cards.');
-        document.getElementById('cardModal').style.display = 'none';
-    });
-
     // Add New scrolls
     document.getElementById('addNewBtn').addEventListener('click', function() {
         document.getElementById('add-section').scrollIntoView({behavior:'smooth', block:'center'});
@@ -2402,7 +3039,7 @@ textarea { resize: vertical; min-height: 60px; }
         fetch('admin_dashboard.php?fetch_product=' + encodeURIComponent(id))
             .then(response => {
                 if (!response.ok) {
-                    throw new Error('Network response was not ok: ' . response.status + ' ' . response.statusText);
+                    throw new Error('Network response was not ok: ' + response.status + ' ' + response.statusText);
                 }
                 return response.json();
             })
@@ -2555,16 +3192,16 @@ textarea { resize: vertical; min-height: 60px; }
         }
     }
 
-    productSelect.addEventListener('change', updateQuantityValidation);
-    movementTypeSelect.addEventListener('change', updateQuantityValidation);
+    if (productSelect) productSelect.addEventListener('change', updateQuantityValidation);
+    if (movementTypeSelect) movementTypeSelect.addEventListener('change', updateQuantityValidation);
 
     // Clear movement form
-    document.getElementById('clearMovement').addEventListener('click', function() {
+    document.getElementById('clearMovement')?.addEventListener('click', function() {
         document.getElementById('movementForm').reset();
     });
 
     // Movement History Filtering
-    document.getElementById('applyFiltersBtn').addEventListener('click', function() {
+    document.getElementById('applyFiltersBtn')?.addEventListener('click', function() {
         const searchTerm = document.getElementById('movementSearch').value.toLowerCase();
         const typeFilter = document.getElementById('movementTypeFilter').value;
         const dateFrom = document.getElementById('movementDateFrom').value;
@@ -2607,7 +3244,7 @@ textarea { resize: vertical; min-height: 60px; }
     });
 
     // Clear movement filters
-    document.getElementById('clearFiltersBtn').addEventListener('click', function() {
+    document.getElementById('clearFiltersBtn')?.addEventListener('click', function() {
         document.getElementById('movementSearch').value = '';
         document.getElementById('movementTypeFilter').value = '';
         document.getElementById('movementDateFrom').value = '';
@@ -2620,98 +3257,363 @@ textarea { resize: vertical; min-height: 60px; }
     });
 
     // Export movements to Excel (demo)
-    document.getElementById('exportMovementsBtn').addEventListener('click', function() {
+    document.getElementById('exportMovementsBtn')?.addEventListener('click', function() {
         alert('Export functionality would be implemented here. This would generate an Excel file with all movement data.');
-        // In a real implementation, you would:
-        // 1. Make an AJAX request to generate the Excel file
-        // 2. Or redirect to a PHP script that generates and downloads the file
     });
 
-    // Sales charts
-    const salesLabels = <?php echo $salesLabelsJson; ?>;
-    const salesData = <?php echo $salesDataJson; ?>;
-    const catLabels = <?php echo $catLabelsJson; ?>;
-    const catData = <?php echo $catDataJson; ?>;
-    const movementLabels = <?php echo $movementLabelsJson; ?>;
-    const movementData = <?php echo $movementDataJson; ?>;
-
-    const salesCtx = document.getElementById('salesChart').getContext('2d');
-    const salesChart = new Chart(salesCtx, {
-        type: 'line', 
-        data: { 
-            labels: salesLabels, 
-            datasets: [{ 
-                label: 'Revenue (UGX)', 
-                data: salesData, 
-                borderColor: '#0b63ff', 
-                backgroundColor: 'rgba(11,99,255,0.08)', 
-                tension: 0.25, 
-                fill: true, 
-                pointRadius: 3 
-            }] 
-        },
-        options: { 
-            responsive: true, 
-            plugins: { legend: { display: false } }, 
-            scales: { y: { beginAtZero: true, ticks: { callback: v => Number(v).toLocaleString() } } } 
-        }
+    // Order Management Tabs
+    const orderTabs = document.querySelectorAll('#ordersSection .tab');
+    const orderTabContents = document.querySelectorAll('#ordersSection .tab-content');
+    
+    orderTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const tabName = tab.getAttribute('data-tab');
+            
+            // Remove active class from all tabs and contents
+            orderTabs.forEach(t => t.classList.remove('active'));
+            orderTabContents.forEach(c => c.classList.remove('active'));
+            
+            // Add active class to clicked tab and corresponding content
+            tab.classList.add('active');
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+            
+            // Filter orders based on tab
+            filterOrdersByStatus(tabName);
+        });
     });
 
-    const salesCtx2 = document.getElementById('salesChart2') ? document.getElementById('salesChart2').getContext('2d') : null;
-    if (salesCtx2) {
-        new Chart(salesCtx2, {
-            type: 'bar', 
-            data: { labels: salesLabels, datasets: [{ label: 'Revenue (UGX)', data: salesData, backgroundColor: '#0b63ff' }] },
-            options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: v => Number(v).toLocaleString() } } } }
+    function filterOrdersByStatus(status) {
+        const rows = document.querySelectorAll('#ordersSection table tbody tr');
+        rows.forEach(row => {
+            if (status === 'all') {
+                row.style.display = '';
+            } else {
+                const statusCell = row.querySelector('.status-badge');
+                if (statusCell) {
+                    const rowStatus = statusCell.textContent.toLowerCase();
+                    row.style.display = rowStatus === status ? '' : 'none';
+                }
+            }
         });
     }
 
-    const catCtx = document.getElementById('catChart').getContext('2d');
-    new Chart(catCtx, { 
-        type: 'doughnut', 
-        data: { 
-            labels: catLabels, 
-            datasets: [{ data: catData, backgroundColor: ['#60a5fa', '#93c5fd', '#fca5a5', '#fbbf24', '#34d399', '#c084fc'] }] 
-        }, 
-        options: { responsive: true, plugins: { legend: { position: 'bottom' } } } 
+    // Returns Management Tabs
+    const returnTabs = document.querySelectorAll('#returnsSection .tab');
+    const returnTabContents = document.querySelectorAll('#returnsSection .tab-content');
+    
+    returnTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const tabName = tab.getAttribute('data-tab');
+            
+            // Remove active class from all tabs and contents
+            returnTabs.forEach(t => t.classList.remove('active'));
+            returnTabContents.forEach(c => c.classList.remove('active'));
+            
+            // Add active class to clicked tab and corresponding content
+            tab.classList.add('active');
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+            
+            // Filter returns based on tab
+            filterReturnsByStatus(tabName);
+        });
     });
 
-    const catCtx2 = document.getElementById('catChart2') ? document.getElementById('catChart2').getContext('2d') : null;
-    if (catCtx2) { 
-        new Chart(catCtx2, { 
-            type: 'doughnut', 
-            data: { labels: catLabels, datasets: [{ data: catData, backgroundColor: ['#60a5fa', '#93c5fd', '#fca5a5', '#fbbf24', '#34d399', '#c084fc'] }] }, 
-            options: { responsive: true, plugins: { legend: { position: 'bottom' } } } 
-        }); 
-    }
-
-    // Movement chart
-    const movementCtx = document.getElementById('movementChart').getContext('2d');
-    new Chart(movementCtx, {
-        type: 'pie',
-        data: {
-            labels: movementLabels,
-            datasets: [{
-                data: movementData,
-                backgroundColor: [
-                    '#34d399', // Sold - green
-                    '#fbbf24', // Gifts - yellow
-                    '#ef4444', // Damaged - red
-                    '#8b5cf6', // Promotions - purple
-                    '#60a5fa', // Returns - blue
-                    '#6b7280'  // Adjustments - gray
-                ]
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: {
-                    position: 'bottom'
+    function filterReturnsByStatus(status) {
+        const rows = document.querySelectorAll('#returnsSection table tbody tr');
+        rows.forEach(row => {
+            if (status === 'returns-all') {
+                row.style.display = '';
+            } else {
+                const statusType = status.replace('returns-', '');
+                const statusCell = row.querySelector('.status-badge');
+                if (statusCell) {
+                    const rowStatus = statusCell.textContent.toLowerCase();
+                    row.style.display = rowStatus === statusType ? '' : 'none';
                 }
             }
-        }
+        });
+    }
+
+    // View Order Details
+    function viewOrderDetails(orderId) {
+        // In a real implementation, you would fetch order details via AJAX
+        // For now, we'll show a placeholder with enhanced information
+        document.getElementById('orderDetailsContent').innerHTML = `
+            <div style="padding: 20px;">
+                <h4 style="margin-bottom: 15px; color: var(--primary);">Order #${orderId} Details</h4>
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                    <h5 style="margin: 0 0 10px 0;">Order Information</h5>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <div><strong>Order Date:</strong> ${new Date().toLocaleDateString()}</div>
+                        <div><strong>Status:</strong> <span class="status-badge status-pending">Pending</span></div>
+                        <div><strong>Total Amount:</strong> UGX 0</div>
+                        <div><strong>Payment Method:</strong> Cash on Delivery</div>
+                    </div>
+                </div>
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                    <h5 style="margin: 0 0 10px 0;">Customer Information</h5>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <div><strong>Name:</strong> Customer Name</div>
+                        <div><strong>Email:</strong> customer@example.com</div>
+                        <div><strong>Phone:</strong> +256 700 000 000</div>
+                        <div><strong>Location:</strong> Bugema University</div>
+                    </div>
+                </div>
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+                    <h5 style="margin: 0 0 10px 0;">Order Items</h5>
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="background: var(--primary); color: white;">
+                                <th style="padding: 8px; text-align: left;">Product</th>
+                                <th style="padding: 8px; text-align: center;">Quantity</th>
+                                <th style="padding: 8px; text-align: right;">Price</th>
+                                <th style="padding: 8px; text-align: right;">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td style="padding: 8px; border-bottom: 1px solid #dee2e6;">Sample Product</td>
+                                <td style="padding: 8px; text-align: center; border-bottom: 1px solid #dee2e6;">1</td>
+                                <td style="padding: 8px; text-align: right; border-bottom: 1px solid #dee2e6;">UGX 10,000</td>
+                                <td style="padding: 8px; text-align: right; border-bottom: 1px solid #dee2e6;">UGX 10,000</td>
+                            </tr>
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="3" style="padding: 8px; text-align: right; font-weight: bold;">Total:</td>
+                                <td style="padding: 8px; text-align: right; font-weight: bold;">UGX 10,000</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+                <div style="margin-top: 15px; text-align: center;">
+                    <button class="btn" onclick="window.print()">Print Invoice</button>
+                    <button class="btn secondary" onclick="document.getElementById('orderDetailsModal').style.display = 'none'">Close</button>
+                </div>
+            </div>
+        `;
+        document.getElementById('orderDetailsModal').style.display = 'block';
+    }
+
+    // Close order modal
+    document.getElementById('closeOrderModal')?.addEventListener('click', function() {
+        document.getElementById('orderDetailsModal').style.display = 'none';
     });
+
+    // Edit User Role
+    function editUserRole(userId, currentRole) {
+        document.getElementById('user_id').value = userId;
+        document.getElementById('user_role').value = currentRole;
+        document.getElementById('editUserRoleModal').style.display = 'block';
+    }
+
+    // Close user modal
+    document.getElementById('closeUserModal')?.addEventListener('click', function() {
+        document.getElementById('editUserRoleModal').style.display = 'none';
+    });
+    document.getElementById('cancelUserEdit')?.addEventListener('click', function() {
+        document.getElementById('editUserRoleModal').style.display = 'none';
+    });
+
+    // View Return Details
+    function viewReturnDetails(returnId) {
+        document.getElementById('returnDetailsContent').innerHTML = `
+            <div style="padding: 20px;">
+                <h4 style="margin-bottom: 15px; color: var(--primary);">Return Request #${returnId}</h4>
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                    <h5 style="margin: 0 0 10px 0;">Return Information</h5>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <div><strong>Return Date:</strong> ${new Date().toLocaleDateString()}</div>
+                        <div><strong>Status:</strong> <span class="status-badge return-pending">Pending</span></div>
+                        <div><strong>Order ID:</strong> #${returnId}</div>
+                        <div><strong>Product:</strong> Sample Product</div>
+                        <div><strong>Quantity:</strong> 1</div>
+                        <div><strong>Refund Amount:</strong> UGX 10,000</div>
+                    </div>
+                </div>
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                    <h5 style="margin: 0 0 10px 0;">Customer Information</h5>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <div><strong>Name:</strong> Customer Name</div>
+                        <div><strong>Email:</strong> customer@example.com</div>
+                        <div><strong>Phone:</strong> +256 700 000 000</div>
+                    </div>
+                </div>
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+                    <h5 style="margin: 0 0 10px 0;">Return Reason</h5>
+                    <p style="margin: 0; padding: 10px; background: white; border-radius: 5px; border-left: 3px solid var(--primary);">
+                        The product did not meet my expectations. The quality was not as described and the size was incorrect.
+                    </p>
+                </div>
+                <div style="margin-top: 15px; text-align: center;">
+                    <button class="btn secondary" onclick="document.getElementById('returnDetailsModal').style.display = 'none'">Close</button>
+                </div>
+            </div>
+        `;
+        document.getElementById('returnDetailsModal').style.display = 'block';
+    }
+
+    // Close return modal
+    document.getElementById('closeReturnModal')?.addEventListener('click', function() {
+        document.getElementById('returnDetailsModal').style.display = 'none';
+    });
+
+    // Refresh orders button
+    document.getElementById('refreshOrdersBtn')?.addEventListener('click', function() {
+        location.reload();
+    });
+
+    // Chart initialization - FIXED: Wait for DOM to be fully loaded
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeCharts();
+    });
+
+    function initializeCharts() {
+        // Sales charts
+        const salesLabels = <?php echo $salesLabelsJson; ?>;
+        const salesData = <?php echo $salesDataJson; ?>;
+        const catLabels = <?php echo $catLabelsJson; ?>;
+        const catData = <?php echo $catDataJson; ?>;
+        const movementLabels = <?php echo $movementLabelsJson; ?>;
+        const movementData = <?php echo $movementDataJson; ?>;
+
+        // Main Sales Chart
+        const salesCtx = document.getElementById('salesChart');
+        if (salesCtx) {
+            new Chart(salesCtx, {
+                type: 'line', 
+                data: { 
+                    labels: salesLabels, 
+                    datasets: [{ 
+                        label: 'Revenue (UGX)', 
+                        data: salesData, 
+                        borderColor: '#0b63ff', 
+                        backgroundColor: 'rgba(11,99,255,0.08)', 
+                        tension: 0.25, 
+                        fill: true, 
+                        pointRadius: 3 
+                    }] 
+                },
+                options: { 
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } }, 
+                    scales: { 
+                        y: { 
+                            beginAtZero: true, 
+                            ticks: { 
+                                callback: function(value) {
+                                    return 'UGX ' + Number(value).toLocaleString();
+                                }
+                            } 
+                        } 
+                    } 
+                }
+            });
+        }
+
+        // Sales Chart 2 (in reports section)
+        const salesCtx2 = document.getElementById('salesChart2');
+        if (salesCtx2) {
+            new Chart(salesCtx2, {
+                type: 'bar', 
+                data: { 
+                    labels: salesLabels, 
+                    datasets: [{ 
+                        label: 'Revenue (UGX)', 
+                        data: salesData, 
+                        backgroundColor: '#0b63ff' 
+                    }] 
+                },
+                options: { 
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } }, 
+                    scales: { 
+                        y: { 
+                            beginAtZero: true, 
+                            ticks: { 
+                                callback: function(value) {
+                                    return 'UGX ' + Number(value).toLocaleString();
+                                }
+                            } 
+                        } 
+                    } 
+                }
+            });
+        }
+
+        // Category Chart
+        const catCtx = document.getElementById('catChart');
+        if (catCtx) {
+            new Chart(catCtx, { 
+                type: 'doughnut', 
+                data: { 
+                    labels: catLabels, 
+                    datasets: [{ 
+                        data: catData, 
+                        backgroundColor: ['#60a5fa', '#93c5fd', '#fca5a5', '#fbbf24', '#34d399', '#c084fc'] 
+                    }] 
+                }, 
+                options: { 
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } } 
+                } 
+            });
+        }
+
+        // Category Chart 2 (in reports section)
+        const catCtx2 = document.getElementById('catChart2');
+        if (catCtx2) { 
+            new Chart(catCtx2, { 
+                type: 'doughnut', 
+                data: { 
+                    labels: catLabels, 
+                    datasets: [{ 
+                        data: catData, 
+                        backgroundColor: ['#60a5fa', '#93c5fd', '#fca5a5', '#fbbf24', '#34d399', '#c084fc'] 
+                    }] 
+                }, 
+                options: { 
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } } 
+                } 
+            }); 
+        }
+
+        // Movement chart
+        const movementCtx = document.getElementById('movementChart');
+        if (movementCtx) {
+            new Chart(movementCtx, {
+                type: 'pie',
+                data: {
+                    labels: movementLabels,
+                    datasets: [{
+                        data: movementData,
+                        backgroundColor: [
+                            '#34d399', // Sold - green
+                            '#fbbf24', // Gifts - yellow
+                            '#ef4444', // Damaged - red
+                            '#8b5cf6', // Promotions - purple
+                            '#60a5fa', // Returns - blue
+                            '#6b7280'  // Adjustments - gray
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+    }
 </script>
 
 <?php
