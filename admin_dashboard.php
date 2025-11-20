@@ -1183,24 +1183,34 @@ if ($res = $conn->query("
 
 // ==================== NEW DATA FETCHES ====================
 
-// Fetch orders for order management
+// Fetch orders for order management - UPDATED TO INCLUDE PRODUCT INFO
 $orders = [];
 // Check if created_at column exists, otherwise use id for ordering
 $check_column = $conn->query("SHOW COLUMNS FROM orders LIKE 'created_at'");
 if ($check_column->num_rows > 0) {
     // created_at exists
     $order_query = "
-        SELECT o.*, u.username, u.email 
+        SELECT o.*, u.username, u.email,
+               GROUP_CONCAT(DISTINCT p.name SEPARATOR ', ') as product_names,
+               COUNT(oi.id) as item_count
         FROM orders o 
         LEFT JOIN users u ON o.user_id = u.id 
+        LEFT JOIN order_items oi ON o.id = oi.order_id
+        LEFT JOIN products p ON oi.product_id = p.id
+        GROUP BY o.id
         ORDER BY o.created_at DESC LIMIT 200
     ";
 } else {
     // created_at doesn't exist, use id for ordering
     $order_query = "
-        SELECT o.*, u.username, u.email 
+        SELECT o.*, u.username, u.email,
+               GROUP_CONCAT(DISTINCT p.name SEPARATOR ', ') as product_names,
+               COUNT(oi.id) as item_count
         FROM orders o 
         LEFT JOIN users u ON o.user_id = u.id 
+        LEFT JOIN order_items oi ON o.id = oi.order_id
+        LEFT JOIN products p ON oi.product_id = p.id
+        GROUP BY o.id
         ORDER BY o.id DESC LIMIT 200
     ";
 }
@@ -1555,6 +1565,14 @@ textarea { resize: vertical; min-height: 60px; }
 
 /* Chart containers */
 .chart-container { position: relative; height: 300px; width: 100%; }
+
+/* Product names in orders table */
+.product-names {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 </style>
 </head>
 <body>
@@ -1951,6 +1969,7 @@ textarea { resize: vertical; min-height: 60px; }
                                 <th>Order ID</th>
                                 <th>Customer</th>
                                 <th>Items</th>
+                                <th>Products Ordered</th>
                                 <th>Amount</th>
                                 <th>Status</th>
                                 <th>Payment</th>
@@ -1960,11 +1979,12 @@ textarea { resize: vertical; min-height: 60px; }
                         </thead>
                         <tbody>
                             <?php if (count($orders) === 0): ?>
-                                <tr><td colspan="8" style="text-align:center; padding:20px;">No orders found.</td></tr>
+                                <tr><td colspan="9" style="text-align:center; padding:20px;">No orders found.</td></tr>
                             <?php else: foreach ($orders as $order): 
                                 $status_class = 'status-' . strtolower(str_replace(' ', '-', $order['status']));
                                 $order_items = getOrderItems($order['id']);
                                 $item_count = count($order_items);
+                                $product_names = $order['product_names'] ?? 'No products';
                             ?>
                             <tr>
                                 <td><strong>#<?php echo htmlspecialchars($order['id']); ?></strong></td>
@@ -1974,6 +1994,9 @@ textarea { resize: vertical; min-height: 60px; }
                                 </td>
                                 <td>
                                     <span class="btn secondary small"><?php echo $item_count; ?> items</span>
+                                </td>
+                                <td class="product-names" title="<?php echo htmlspecialchars($product_names); ?>">
+                                    <?php echo htmlspecialchars($product_names); ?>
                                 </td>
                                 <td><strong>UGX <?php echo number_format($order['total_amount']); ?></strong></td>
                                 <td>
